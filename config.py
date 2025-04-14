@@ -1,3 +1,4 @@
+
 # General bot settings
 
 # browser you want the bot to run ex: ["Firefox"], ["Chrome"] choose one only
