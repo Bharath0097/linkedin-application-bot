@@ -1,4 +1,25 @@
-# LinkedIn Application Bot 🤖
+# StratEdge IT Consulting: website, portals and job tools
+
+This repository holds two things:
+
+| Folder | What it is |
+| --- | --- |
+| `website/` | The StratEdge IT Consulting website and its portals (PHP backend, React front end, SQLite or MySQL). Consultants, bench sales recruiters, employees, clients, HR, accounting and admins each have their own login. Job matching, the Job grabber and one-click apply are built in (`website/api/jobs.php`); see `website/README.txt` for hosting and setup. |
+| `linkedin.py`, `config.py`, `utils.py`, `globalLogic.py` | The original LinkedIn Easy Apply bot (unchanged; documented below). |
+
+## Website: what is in this version
+
+- **Separate logins**: `#/login?as=consultant`, `?as=employee`, `?as=bench` (bench sales recruiters), `?as=client`; staff sign in from any of them. The server refuses an account on the wrong login and points to the right one.
+- **Bench sales portal**: a bench sales recruiter gets the Job grabber (search every job source by keyword, publish roles to Careers), consultant matches, the recruiting workspace (consultants, RTRs and submissions, daily report) and one-click **Submit consultant**: pick the consultant and the resume, the posting's contact address is pre-filled, and one click emails the resume, logs the submission and opens the posting. Sources, schedules and cron settings stay admin-only.
+- **Multiple resumes**: consultants keep up to 10 resumes (for example one per skill set), name them, pick which one is used for job matching, download or delete any of them, and choose which one to apply with.
+- **One-click apply**: on any matched job, *Apply now* opens the posting on the job board in a new tab, records the application under **Applications** (status: applied, interview, offer, placed, rejected, withdrawn) and, when the posting lists a contact address, emails the chosen resume with an editable cover note. Admins and bench sales recruiters can see every consultant's applications.
+- **Cross-browser fixes**: fallbacks for newer CSS (dynamic viewport units, `inset`, `:has()`, `color-mix()`), consistent button rendering between Chrome, Firefox and Safari, no decorative layers over clickable controls, and a Services menu that works on touch screens.
+
+Edit the front end in `website/_source/src` and run `python3 website/_source/build.py` to regenerate `website/js/app.js` and `website/css/styles.css`. Upload everything in `website/` except `_source` to the web host (see `website/README.txt`).
+
+---
+
+# Original LinkedIn Application Bot 🤖
 
 ![linkedineasyapplygif](https://user-images.githubusercontent.com/34207598/128695728-6efcb457-0f75-42e2-987a-f7a0c239a235.gif)
 
