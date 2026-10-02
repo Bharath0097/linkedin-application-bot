@@ -387,6 +387,32 @@ anthropic-version: 2023-06-01
       case 'run': ok(jobsCall('POST', '/runs', ['portals' => array_values(array_filter((array) ($b['portals'] ?? []), 'is_string')), 'uids' => [], 'trigger' => 'portal:' . $me['name']]));
       case 'jobs': ok(jobsCall('GET', '/jobs?' . http_build_query(['q' => str($_GET, 'q', 120), 'portal' => str($_GET, 'portal', 20), 'limit' => 100, 'offset' => max(0, (int) ($_GET['offset'] ?? 0))])));
       case 'consultants': ok(jobsCall('GET', '/consultants'));
+      /* Job grabber: log in through a portal from the admin page (with a verification code when the site asks), grab jobs by keyword, publish to Careers */
+      case 'status': ok(jobsCall('GET', '/portals/status'));
+      case 'login_start': ok(jobsCall('POST', '/portals/accounts/' . (int) ($b['id'] ?? 0) . '/login'));
+      case 'login_status': ok(jobsCall('GET', '/portals/accounts/' . (int) ($_GET['id'] ?? 0) . '/login'));
+      case 'login_code': ok(jobsCall('POST', '/portals/accounts/' . (int) ($b['id'] ?? 0) . '/login/code', ['code' => str($b, 'code', 20)]));
+      case 'logout': ok(jobsCall('POST', '/portals/accounts/' . (int) ($b['id'] ?? 0) . '/logout'));
+      case 'grab': {
+        $kws = array_values(array_filter(array_map(fn($x) => is_scalar($x) ? mb_substr(trim((string) $x), 0, 80) : '', (array) ($b['keywords'] ?? [])), fn($x) => $x !== ''));
+        ok(jobsCall('POST', '/grab', ['keywords' => $kws, 'location' => str($b, 'location', 80), 'remote' => str($b, 'remote', 10), 'posted_days' => (int) ($b['posted_days'] ?? 7),
+          'portals' => array_values(array_filter((array) ($b['portals'] ?? []), 'is_string')), 'trigger' => 'grab:' . $me['name']]));
+      }
+      case 'run_jobs': ok(jobsCall('GET', '/runs/' . (int) ($_GET['id'] ?? 0) . '/jobs'));
+      case 'publish': {
+        $jid = (int) ($b['job_id'] ?? 0); $j = jobsCall('GET', "/jobs/$jid")['job'] ?? null; if (!$j) fail(404, 'not_found', 'No such job.');
+        $id = 'g' . $jid; $cur = docGet("org/site/jobs/$id");
+        $remote = strtolower((string) ($j['remote'] ?? '')); $md = str_contains($remote, 'remote') ? 'Remote' : (str_contains($remote, 'hybrid') ? 'Hybrid' : 'Onsite');
+        $ty = ''; foreach (['C2C', 'W2', '1099', 'Contract-to-hire', 'Contract', 'Full-time', 'Part-time'] as $t) if (stripos((string) ($j['job_type'] ?? ''), $t) !== false) { $ty = $t; break; }
+        $desc = trim((string) ($j['description'] ?? '')); if ($desc === '') $desc = trim((string) ($j['summary'] ?? ''));
+        $doc = (object) ['ti' => mb_substr((string) $j['title'], 0, 160), 'loc' => mb_substr((string) ($j['location'] ?? ''), 0, 120), 'ty' => $ty !== '' ? ($ty === 'Contract' ? 'C2C' : $ty) : 'C2C', 'md' => $md,
+          'sk' => implode(', ', array_slice((array) ($j['skills'] ?? []), 0, 8)), 'd' => mb_substr($desc, 0, 4000), 'open' => true, 'at' => $cur->at ?? now(), 'by' => $me['id'],
+          'src' => (object) ['portal' => $j['portal'], 'url' => $j['url'], 'company' => $j['company'] ?? '', 'job_id' => $jid]];
+        if ($cur) foreach (['ti', 'loc', 'ty', 'md', 'sk', 'd', 'open'] as $k) if (isset($cur->$k) && ($b['overwrite'] ?? false) !== true) $doc->$k = $cur->$k;
+        docSet("org/site/jobs/$id", $doc); jobsCall('PATCH', "/jobs/$jid", ['published' => true]);
+        ok(['id' => $id, 'job' => $doc]);
+      }
+      case 'unpublish': { $jid = (int) ($b['job_id'] ?? 0); if (docGet("org/site/jobs/g$jid")) docDelete("org/site/jobs/g$jid"); jobsCall('PATCH', "/jobs/$jid", ['published' => false]); ok(['ok' => true]); }
       case 'matches': ok(jobsCall('GET', '/consultants/' . rawurlencode(str($_GET, 'uid', 40)) . '/matches'));
       default: fail(400, 'invalid_argument', 'Unknown job-portal action.');
     }

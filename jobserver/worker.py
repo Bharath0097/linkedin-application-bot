@@ -11,7 +11,7 @@ from typing import Any
 from . import db, portals
 from .browser import BrowserError, clear_cookies, load_cookies, make_driver, save_cookies
 from .matcher import score_job
-from .resume import search_queries
+from .resume import find_skills, search_queries
 from .security import decrypt
 from .settings import settings
 
@@ -26,6 +26,7 @@ class Runner:
         self.scheduler: threading.Thread | None = None
         self.next_run_at: int | None = None
         self.stop_event = threading.Event()
+        self.logins = LoginSessions(self)
 
     # ---------- scheduling ----------
     def start_scheduler(self) -> None:
@@ -54,22 +55,26 @@ class Runner:
     def is_busy(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
 
-    def start_run(self, trigger: str, portal_keys: list[str] | None = None, uids: list[str] | None = None) -> int:
+    def start_run(self, trigger: str, portal_keys: list[str] | None = None, uids: list[str] | None = None, queries: list[portals.SearchQuery] | None = None) -> int:
+        """Start a run. With explicit queries (the Job grabber) those are searched instead of the consultants' profiles."""
         with self.lock:
             if self.is_busy():
                 raise RuntimeError("A scrape run is already in progress.")
-            rid = db.run("INSERT INTO runs (started_at, status, trigger_by, portals_json) VALUES (?,?,?,?)", (db.now_ms(), "running", trigger, json.dumps(portal_keys or [])))
+            if self.logins.active():
+                raise RuntimeError("A portal login is in progress. Finish it (or wait a minute) before collecting jobs.")
+            rid = db.run("INSERT INTO runs (started_at, status, trigger_by, portals_json, queries_json) VALUES (?,?,?,?,?)",
+                         (db.now_ms(), "running", trigger, json.dumps(portal_keys or []), json.dumps([q.__dict__ for q in queries] if queries else [])))
             self.current_run = rid
-            self.thread = threading.Thread(target=self._execute, args=(rid, portal_keys, uids), name=f"jobserver-run-{rid}", daemon=True)
+            self.thread = threading.Thread(target=self._execute, args=(rid, portal_keys, uids, queries), name=f"jobserver-run-{rid}", daemon=True)
             self.thread.start()
             return rid
 
-    def run_now_blocking(self, trigger: str = "test", portal_keys: list[str] | None = None, uids: list[str] | None = None) -> dict:
-        rid = self.start_run(trigger, portal_keys, uids)
+    def run_now_blocking(self, trigger: str = "test", portal_keys: list[str] | None = None, uids: list[str] | None = None, queries: list[portals.SearchQuery] | None = None) -> dict:
+        rid = self.start_run(trigger, portal_keys, uids, queries)
         self.thread.join()
         return db.run_row(db.one("SELECT * FROM runs WHERE id = ?", (rid,)))
 
-    def _execute(self, rid: int, portal_keys: list[str] | None, uids: list[str] | None) -> None:
+    def _execute(self, rid: int, portal_keys: list[str] | None, uids: list[str] | None, explicit: list[portals.SearchQuery] | None = None) -> None:
         lines: list[str] = []
         errors: list[dict] = []
         found = new = nq = 0
@@ -80,7 +85,7 @@ class Runner:
             db.run("UPDATE runs SET log = ? WHERE id = ?", ("\n".join(lines[-400:]), rid))
 
         try:
-            queries = self.build_queries(uids)
+            queries = explicit if explicit else self.build_queries(uids)
             nq = len(queries)
             if not queries:
                 say("No consultant has a resume or preferences yet, so there is nothing to search for.")
@@ -174,15 +179,15 @@ class Runner:
                 for job in new_jobs[:40]:
                     d = portal.fetch_description_requests(job)
                     if d:
-                        db.run("UPDATE jobs SET description = ? WHERE portal = ? AND external_id = ?", (d, job.portal, job.external_id))
+                        self._set_description(job, d)
                     time.sleep(0.8)
             return found, new
         try:
-            driver = make_driver()
+            driver = portal.open_browser()
         except BrowserError as e:
             raise portals.PortalError(str(e))
         except Exception as e:
-            raise portals.PortalError(f"The browser could not start on the server ({e}). Install Firefox or Chrome and its driver.")
+            raise portals.PortalError(f"The browser could not start on the server ({str(e)[:200]}).")
         try:
             if acct:
                 self._ensure_login(portal, acct, driver, say)
@@ -200,13 +205,17 @@ class Runner:
                     continue
                 d = portal.fetch_description(driver, job)
                 if d:
-                    db.run("UPDATE jobs SET description = ? WHERE portal = ? AND external_id = ?", (d, job.portal, job.external_id))
+                    self._set_description(job, d)
         finally:
             try:
                 driver.quit()
             except Exception:
                 pass
         return found, new
+
+    def _set_description(self, job: portals.Job, text: str) -> None:
+        skills = self._skills({"title": job.title, "description": text})
+        db.run("UPDATE jobs SET description = ?, skills_json = ? WHERE portal = ? AND external_id = ?", (text, json.dumps(skills), job.portal, job.external_id))
 
     def _ensure_login(self, portal: portals.Portal, acct: dict, driver: Any, say) -> None:
         key = f"{portal.key}-{acct['id']}"
@@ -222,11 +231,17 @@ class Runner:
             save_cookies(driver, key)
         db.run("UPDATE portal_accounts SET status = 'ok', last_login_at = ?, last_error = '', updated_at = ? WHERE id = ?", (db.now_ms(), db.now_ms(), acct["id"]))
 
+    @staticmethod
+    def _skills(job: dict) -> list[str]:
+        return [s for s, _ in find_skills(f"{job.get('title', '')}\n{job.get('description', '')}")][:15]
+
     def _store(self, jobs: list[portals.Job], rid: int) -> tuple[int, int, list[portals.Job]]:
         new = 0
         new_jobs = []
         for job in jobs:
-            if db.upsert_job(job.as_dict(), rid):
+            d = job.as_dict()
+            d["skills"] = self._skills(d)
+            if db.upsert_job(d, rid):
                 new += 1
                 new_jobs.append(job)
         return len(jobs), new, new_jobs
@@ -240,9 +255,9 @@ class Runner:
         if self.is_busy():
             raise RuntimeError("Wait for the current scrape run to finish before testing a login.")
         try:
-            driver = make_driver()
+            driver = portal.open_browser()
         except Exception as e:
-            msg = f"The browser could not start on the server ({e})."
+            msg = str(e) if isinstance(e, BrowserError) else f"The browser could not start on the server ({str(e)[:200]})."
             db.run("UPDATE portal_accounts SET status='error', last_error=?, updated_at=? WHERE id=?", (msg[:500], db.now_ms(), aid))
             return {"ok": False, "error": msg}
         try:
@@ -298,6 +313,117 @@ class Runner:
                     c.execute("UPDATE matches SET score = ?, reasons_json = ? WHERE uid = ? AND job_id = ?", (score, json.dumps(reasons), uid, job["id"]))
                 kept += 1
         return kept
+
+
+class LoginSessions:
+    """Interactive portal logins started from the Job grabber page.
+
+    The browser runs on the server; when the site asks for a verification code the
+    session waits (up to five minutes) for the code typed in the StratEdge portal.
+    """
+
+    CODE_WAIT = 300
+
+    def __init__(self, runner: "Runner") -> None:
+        self.runner = runner
+        self.lock = threading.Lock()
+        self.sessions: dict[int, dict] = {}
+
+    def active(self) -> bool:
+        with self.lock:
+            return any(s["state"] in ("running", "needs_code") for s in self.sessions.values())
+
+    def status(self, aid: int) -> dict:
+        with self.lock:
+            s = self.sessions.get(aid)
+            return {k: v for k, v in s.items() if k not in ("event", "code")} if s else {"state": "idle", "message": ""}
+
+    def start(self, aid: int) -> dict:
+        a = db.get_account(aid)
+        if not a:
+            raise LookupError("No such account.")
+        if self.runner.is_busy():
+            raise RuntimeError("Wait for the current job collection to finish before logging in.")
+        with self.lock:
+            cur = self.sessions.get(aid)
+            if cur and cur["state"] in ("running", "needs_code"):
+                raise RuntimeError("A login for this account is already in progress.")
+            s = {"state": "running", "message": "Opening the browser on the server…", "started_at": db.now_ms(), "updated_at": db.now_ms(), "event": threading.Event(), "code": ""}
+            self.sessions[aid] = s
+        t = threading.Thread(target=self._run, args=(aid, dict(a), s), name=f"jobserver-login-{aid}", daemon=True)
+        t.start()
+        return self.status(aid)
+
+    def submit_code(self, aid: int, code: str) -> dict:
+        with self.lock:
+            s = self.sessions.get(aid)
+            if not s or s["state"] != "needs_code":
+                raise RuntimeError("This login is not waiting for a code.")
+            s["code"] = code.strip()
+            s["state"] = "running"
+            s["message"] = "Checking the code…"
+            s["updated_at"] = db.now_ms()
+            s["event"].set()
+        return self.status(aid)
+
+    def cancel(self, aid: int) -> None:
+        with self.lock:
+            s = self.sessions.get(aid)
+            if s and s["state"] in ("running", "needs_code"):
+                s["code"] = ""
+                s["state"] = "cancelled"
+                s["event"].set()
+
+    def _set(self, s: dict, state: str, message: str) -> None:
+        with self.lock:
+            s["state"] = state
+            s["message"] = message
+            s["updated_at"] = db.now_ms()
+
+    def _run(self, aid: int, a: dict, s: dict) -> None:
+        portal = portals.get(a["portal"])
+        key = f"{portal.key}-{aid}"
+
+        def ask_code() -> str:
+            self._set(s, "needs_code", f"{portal.name} sent a verification code. Type it below.")
+            s["event"].clear()
+            s["event"].wait(self.CODE_WAIT)
+            with self.lock:
+                return s["code"] if s["state"] == "running" else ""
+
+        try:
+            driver = portal.open_browser()
+        except Exception as e:
+            self._set(s, "error", str(e) if isinstance(e, BrowserError) else f"The browser could not start on the server ({str(e)[:200]}).")
+            db.run("UPDATE portal_accounts SET status='error', last_error=?, updated_at=? WHERE id=?", (s["message"][:500], db.now_ms(), aid))
+            return
+        try:
+            clear_cookies(key)
+            pw = decrypt(a["password_enc"]) if a["password_enc"] else ""
+            self._set(s, "running", f"Signing in to {portal.name} as {a['username']}…")
+            portal.login(driver, a["username"], pw, ask_code)
+            save_cookies(driver, key)
+            db.run("UPDATE portal_accounts SET status='ok', last_login_at=?, last_error='', updated_at=? WHERE id=?", (db.now_ms(), db.now_ms(), aid))
+            self._set(s, "ok", f"Signed in to {portal.name}. The session is saved for job collection.")
+        except Exception as e:
+            msg = str(e)
+            db.run("UPDATE portal_accounts SET status='error', last_error=?, updated_at=? WHERE id=?", (msg[:500], db.now_ms(), aid))
+            self._set(s, "error", msg)
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+    def logout(self, aid: int) -> None:
+        a = db.get_account(aid)
+        if not a:
+            raise LookupError("No such account.")
+        self.cancel(aid)
+        clear_cookies(f"{a['portal']}-{aid}")
+        db.run("UPDATE portal_accounts SET status='untested', last_error='', updated_at=? WHERE id=?", (db.now_ms(), aid))
+        with self.lock:
+            self.sessions.pop(aid, None)
 
 
 runner = Runner()

@@ -927,3 +927,10 @@ html:has(.site),body:has(.site){overflow-x:hidden}
 .seg.logins a{flex:1;text-align:center;padding:8px 10px;border-radius:9px;font-weight:600;font-size:14px;color:var(--ink-2);text-decoration:none}
 .seg.logins a.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(16,27,53,.12)}
 @media (max-width:720px){.match{grid-template-columns:1fr}.match .stack{align-items:flex-start!important}}
+
+/* Job grabber portal cards and share menu */
+.portals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.portal-card .ph{margin:0}
+.share-row{display:flex;gap:8px;flex-wrap:wrap}
+.job h3 a{color:inherit;text-decoration:none}
+.job h3 a:hover{text-decoration:underline}

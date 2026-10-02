@@ -57,7 +57,7 @@ class Monster(Portal):
         except Exception:
             return False
 
-    def login(self, driver: Any, username: str, password: str) -> None:
+    def login(self, driver: Any, username: str, password: str, ask_code: Any = None) -> None:
         driver.get(self.login_url)
         try:
             e = wait_for(driver, 'input[type="email"], input[name="email"]', 20)
@@ -80,8 +80,8 @@ class Monster(Portal):
         if btn:
             btn.click()
         time.sleep(4)
-        if "code" in page_text(driver).lower() and "verify" in page_text(driver).lower():
-            raise LoginError("Monster is asking for a verification code. Complete it once in a browser on the server, then test again.")
+        if self.needs_code(driver):
+            self.handle_code(driver, ask_code)
         if not self.is_logged_in(driver):
             raise LoginError("Monster rejected the login.")
 

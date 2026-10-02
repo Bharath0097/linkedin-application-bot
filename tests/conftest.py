@@ -37,6 +37,30 @@ class FakePortal(Portal):
         self.calls.append(query)
         return [Job(portal="fake", query=query.q, **j) for j in self.jobs]
 
+    # interactive login without a real browser
+    wants_code = False
+    good_password = "pw"
+    logins: list[tuple] = []
+
+    def open_browser(self):
+        return type("DummyDriver", (), {"quit": lambda self: None})()
+
+    def login(self, driver, username, password, ask_code=None):
+        from jobserver.portals.base import LoginError
+
+        if password != self.good_password:
+            raise LoginError("Fake board rejected the password.")
+        if self.wants_code:
+            if ask_code is None:
+                raise LoginError("Fake board wants a code.")
+            code = ask_code()
+            if code != "123456":
+                raise LoginError("Fake board: wrong code.")
+        self.logins.append((username, password))
+
+    def is_logged_in(self, driver):
+        return True
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _register_fake():

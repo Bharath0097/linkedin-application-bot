@@ -19,6 +19,22 @@ for _p in (Dice(), LinkedIn(), Indeed(), Monster()):
     register(_p)
 
 
+def _load_extra() -> None:
+    """JOBSERVER_EXTRA_PORTALS=package.module:ClassName,other.module:Other adds adapters without editing this file."""
+    import importlib
+    import os
+
+    for spec in os.environ.get("JOBSERVER_EXTRA_PORTALS", "").split(","):
+        spec = spec.strip()
+        if not spec:
+            continue
+        mod, _, cls = spec.partition(":")
+        register(getattr(importlib.import_module(mod), cls or "Portal")())
+
+
+_load_extra()
+
+
 def get(key: str) -> Portal:
     try:
         return REGISTRY[key]

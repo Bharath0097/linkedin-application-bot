@@ -27,6 +27,17 @@ This repository now holds two things that work together:
 3. Jobs are scored against the resume and the consultant's preferences and shown under **Matched jobs** (save, mark applied, dismiss).
 4. Staff manage the portal logins, start runs, read logs and see every consultant's matches under **Admin › Job portals** (also in the HR portal).
 
+### Job grabber (Admin › Job portals › Job grabber)
+
+- **Log in through each portal from the admin page.** Each portal card has a *Log in to Dice / LinkedIn / Indeed / Monster* button. The browser runs on the server; if the site emails a verification code, the card asks for it and you type it right there. The session is saved and reused by every later collection. *Log out* clears it.
+- **Grab jobs by keyword.** Type job titles or keywords, a location, how recent, work mode and which portals, then *Grab jobs*. Results appear on the page as the portals answer, are stored, and are matched to every consultant's resume.
+- **Publish to Careers.** Any grabbed or collected job can be posted to the website's Careers page with one click (and removed again). Published jobs show their source in Admin › Website › Job openings.
+- Extra boards can be added without editing the registry: `JOBSERVER_EXTRA_PORTALS=package.module:ClassName` (see `tests/fakeboard.py` for the minimal shape).
+
+### Careers page: share a particular job
+
+Every open role on `#/careers` has its own page (`#/careers/<id>`) and a **Share** button: copy the link, share to LinkedIn, WhatsApp, X, Facebook or email, or use the device's share sheet on phones. The shared link opens the job with its Apply button. Staff get the same Share button in Admin › Website › Job openings.
+
 ### Separate logins
 
 The Log in page has three tabs: Consultant, Employee and Client (`#/login?as=consultant`, `?as=employee`, `?as=client`). The server enforces it: an account that belongs to the consultant portal is refused on the employee login (HTTP 403, `wrong_portal`) and pointed to the right one. StratEdge staff (admin, HR, accounting) can sign in from any tab.
@@ -57,6 +68,8 @@ All routes need the `X-Api-Key` header (requests from the same machine are allow
 | --- | --- |
 | `GET /health`, `GET /overview` | status, counts, last and next run |
 | `GET /portals`, `POST /portals/accounts`, `PATCH /portals/accounts/{id}`, `DELETE …`, `POST /portals/accounts/{id}/test` | portal logins (passwords encrypted at rest, never returned) and a live login test |
+| `GET /portals/status`, `POST /portals/accounts/{id}/login`, `GET …/login`, `POST …/login/code`, `POST …/logout` | interactive login from the Job grabber, with the verification-code step |
+| `POST /grab`, `GET /runs/{id}/jobs`, `PATCH /jobs/{id}` | grab jobs by keyword now, list what a run found, mark a job as published |
 | `GET /runs`, `POST /runs`, `GET /runs/{id}` | scrape runs and their logs |
 | `GET /jobs`, `GET /jobs/{id}` | every job collected |
 | `PUT /consultants/{uid}`, `POST /consultants/{uid}/resume`, `GET /consultants/{uid}`, `POST /consultants/{uid}/rematch` | a consultant's preferences, resume and parsed profile |

@@ -136,7 +136,7 @@ class LinkedIn(Portal):
         except Exception:
             return False
 
-    def login(self, driver: Any, username: str, password: str) -> None:
+    def login(self, driver: Any, username: str, password: str, ask_code: Any = None) -> None:
         driver.get(self.login_url)
         try:
             u = wait_for(driver, "#username", 20)
@@ -153,10 +153,13 @@ class LinkedIn(Portal):
         if btn:
             btn.click()
         time.sleep(4)
+        if self.needs_code(driver):
+            self.handle_code(driver, ask_code)
+            time.sleep(3)
         url = driver.current_url
         body = page_text(driver).lower()
-        if "checkpoint" in url or "challenge" in url or "verification" in body or "verify" in body and "code" in body:
-            raise LoginError("LinkedIn wants a security check (code or captcha) for this server. Sign in once from a browser on the server, then test again.")
+        if "checkpoint" in url or "challenge" in url:
+            raise LoginError("LinkedIn wants a security check (captcha or identity check) for this server. Sign in once from a browser on the server, then try again.")
         if "/login" in url or "wrong" in body or "couldn't find" in body:
             raise LoginError("LinkedIn rejected the email or password.")
         if not self.is_logged_in(driver):

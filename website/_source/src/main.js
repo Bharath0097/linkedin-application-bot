@@ -1,5 +1,6 @@
 /* ================= App & routing ================= */
 const TITLES = { '/': 'IT staffing and solutions', '/about': 'About us', '/services': 'Services', '/blog': 'Blog', '/careers': 'Careers', '/contact': 'Contact us', '/login': 'Log in', '/terms': 'Terms of use', '/privacy': 'Privacy policy', '/faq': 'FAQ', '/request-talent': 'Request talent' };
+const titleFor = path => path.startsWith('/careers/') ? 'Careers' : TITLES[path];
 function App() {
   const { path, q } = useHashRoute();
   useEffect(() => { window.scrollTo(0, 0); }, [path]);
@@ -7,7 +8,7 @@ function App() {
   useEffect(() => {
     const svc = path.startsWith('/services/') && SERVICES.find(s => '/services/' + s.s === path);
     const post = path.startsWith('/blog/') && POSTS.find(p => '/blog/' + p.s === path);
-    document.title = `${path.startsWith('/portal') ? 'Portal' : path.startsWith('/sign/') ? 'Sign document' : path.startsWith('/invoice/') ? 'Invoice' : svc ? svc.n : post ? post.t : (TITLES[path] || 'StratEdge')} | StratEdge IT Consulting`;
+    document.title = `${path.startsWith('/portal') ? 'Portal' : path.startsWith('/sign/') ? 'Sign document' : path.startsWith('/invoice/') ? 'Invoice' : svc ? svc.n : post ? post.t : (titleFor(path) || 'StratEdge')} | StratEdge IT Consulting`;
   }, [path]);
   if (path.startsWith('/portal') || path.startsWith('/client')) return html`<${Portal} path=${path} q=${q} />`;
   let page;
@@ -22,6 +23,7 @@ function App() {
   else if (path === '/terms') page = html`<${TermsPage} />`;
   else if (path === '/privacy') page = html`<${PrivacyPage} />`;
   else if (path === '/careers') page = html`<${Careers} />`;
+  else if (path.startsWith('/careers/')) page = html`<${CareerJob} id=${path.split('/')[2] || ''} />`;
   else if (path === '/contact') page = html`<${ContactPage} />`;
   else if (path === '/login') page = html`<${LoginPage} q=${q} />`;
   else if (path.startsWith('/sign/')) { const [, , sid, stok] = path.split('/'); page = html`<${SignPublic} id=${sid || ''} tok=${stok || ''} />`; }

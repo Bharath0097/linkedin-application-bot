@@ -52,7 +52,8 @@ def stack(tmp_path_factory):
     cfg = cfg.replace("'jobs_url' => 'http://127.0.0.1:8765'", f"'jobs_url' => 'http://127.0.0.1:{jport}'").replace("'jobs_key' => ''", "'jobs_key' => 'integration-key'")
     (site / "api" / "config.php").write_text(cfg)
     env = dict(os.environ, JOBSERVER_DATA=str(tmp / "jobdata"), JOBSERVER_DB=str(tmp / "jobdata" / "db.sqlite"), JOBSERVER_API_KEY="integration-key",
-               JOBSERVER_PORT=str(jport), JOBSERVER_NO_SCHEDULER="1", JOBSERVER_MIN_SCORE="10")
+               JOBSERVER_PORT=str(jport), JOBSERVER_NO_SCHEDULER="1", JOBSERVER_MIN_SCORE="10", JOBSERVER_PAGE_DELAY="0",
+               JOBSERVER_EXTRA_PORTALS="tests.fakeboard:FakeBoard", PYTHONPATH=str(ROOT))
     js = subprocess.Popen([sys.executable, "-m", "jobserver"], cwd=str(ROOT), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     ph = subprocess.Popen([PHP, "-S", f"127.0.0.1:{pport}", "-t", str(site)], cwd=str(site), stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     try:
@@ -161,3 +162,62 @@ def test_separate_logins_and_resume_matching(stack):
     assert admin.get("jobs_admin&op=consultants").json()["consultants"][0]["uid"] == c["id"]
     assert admin.get("jobs_admin&op=runs").json()["runs"] == []
     del jdb
+
+
+def test_job_grabber_login_grab_and_publish_to_careers(stack):
+    base = stack["php"]
+    admin = Portal(base)
+    if admin.post("login", {"email": "admin@stratedge.test", "password": "password123"}).status_code != 200:
+        register(admin, "Ada Admin", "admin@stratedge.test")  # first account becomes the administrator
+    st = admin.get("jobs_admin&op=status").json()
+    fb = [p for p in st["portals"] if p["key"] == "fakeboard"][0]
+    assert fb["accounts"] == [] and fb["logged_in"] is False
+    # log in through the portal from the admin page, with a verification code
+    a = admin.post("jobs_admin", {"op": "account_add", "portal": "fakeboard", "username": "jobs@stratedge.test", "password": "pw"}).json()["account"]
+    assert admin.post("jobs_admin", {"op": "login_start", "id": a["id"]}).status_code == 200
+    for _ in range(100):
+        s = admin.get(f"jobs_admin&op=login_status&id={a['id']}").json()["login"]
+        if s["state"] == "needs_code":
+            break
+        time.sleep(0.05)
+    assert s["state"] == "needs_code", s
+    assert admin.post("jobs_admin", {"op": "login_code", "id": a["id"], "code": "123456"}).status_code == 200
+    for _ in range(100):
+        s = admin.get(f"jobs_admin&op=login_status&id={a['id']}").json()
+        if s["login"]["state"] in ("ok", "error"):
+            break
+        time.sleep(0.05)
+    assert s["login"]["state"] == "ok" and s["account"]["status"] == "ok", s
+    assert [p for p in admin.get("jobs_admin&op=status").json()["portals"] if p["key"] == "fakeboard"][0]["logged_in"] is True
+    # grab jobs by keyword
+    r = admin.post("jobs_admin", {"op": "grab", "keywords": ["SAP FICO Consultant", "ServiceNow Developer"], "location": "Edison, NJ", "remote": "any", "posted_days": 7, "portals": ["fakeboard"]})
+    assert r.status_code == 200, r.text
+    rid = r.json()["run"]["id"]
+    for _ in range(200):
+        run = [x for x in admin.get("jobs_admin&op=runs&limit=5").json()["runs"] if x["id"] == rid][0]
+        if run["status"] != "running":
+            break
+        time.sleep(0.1)
+    assert run["status"] == "done" and run["jobs_new"] == 2 and run["trigger_by"].startswith("grab:"), run
+    jobs = admin.get(f"jobs_admin&op=run_jobs&id={rid}").json()["jobs"]
+    assert {j["title"] for j in jobs} == {"SAP FICO Consultant (Contract)", "ServiceNow Developer (Contract)"}
+    # the consultant from the earlier test now has a match from the grabbed jobs
+    cons = Portal(base)
+    if cons.post("login", {"email": "priya@stratedge.test", "password": "password123", "as": "consultant"}).status_code == 200:
+        m = cons.get("jobs_matches&state=new").json()["matches"]
+        assert any(j["title"].startswith("SAP FICO") for j in m), m
+    else:
+        cons = None
+    # publish one to the Careers page, which anyone can read, then take it down
+    sap = [j for j in jobs if j["title"].startswith("SAP")][0]
+    r = admin.post("jobs_admin", {"op": "publish", "job_id": sap["id"]})
+    assert r.status_code == 200, r.text
+    pid = r.json()["id"]
+    pub = requests.get(base + "doc&path=" + f"org/site/jobs/{pid}", timeout=10).json()
+    assert pub["e"] and pub["d"]["ti"] == "SAP FICO Consultant (Contract)" and pub["d"]["md"] == "Hybrid" and pub["d"]["ty"] == "C2C" and "SAP S/4HANA" in pub["d"]["sk"] and pub["d"]["src"]["portal"] == "fakeboard"
+    assert admin.get(f"jobs_admin&op=run_jobs&id={rid}").json()["jobs"][[j["id"] for j in jobs].index(sap["id"])]["published"] is True
+    if cons:
+        assert cons.post("jobs_admin", {"op": "publish", "job_id": sap["id"]}).status_code == 403
+    assert admin.post("jobs_admin", {"op": "unpublish", "job_id": sap["id"]}).json()["ok"]
+    assert requests.get(base + "doc&path=" + f"org/site/jobs/{pid}", timeout=10).json()["e"] is False
+    assert admin.post("jobs_admin", {"op": "logout", "id": a["id"]}).json()["ok"]

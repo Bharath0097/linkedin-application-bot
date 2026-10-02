@@ -514,9 +514,9 @@ function Careers() {
     <section className="sec"><div className="wrap">
       <div className="head-row"><h2 style=${{ fontSize: 30 }}>Open roles</h2><button className="btn ghost" onClick=${() => setApply(null)}>Send a general application</button></div>
       ${!caps || jobs.loading ? html`<${Spinner} label="Loading open roles…" />` : open.length ? html`<div className="jobs">${open.map(j => html`<div key=${j.id} className="job">
-          <div><h3>${j.ti}</h3>${j.d && html`<p className="muted" style=${{ marginTop: 6, fontSize: 15.5, whiteSpace: 'pre-wrap' }}>${j.d}</p>`}
+          <div><h3><a href=${'#/careers/' + j.id}>${j.ti}</a></h3>${j.d && html`<p className="muted" style=${{ marginTop: 6, fontSize: 15.5, whiteSpace: 'pre-wrap' }}>${j.d.length > 320 ? j.d.slice(0, 320).replace(/\s+\S*$/, '') + '…' : j.d}</p>`}
             <div className="meta">${[j.loc, j.ty, j.md, j.sk].filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div></div>
-          <button className="btn" onClick=${() => setApply(j)}>Apply</button></div>`)}</div>`
+          <div className="actions" style=${{ flexWrap: 'nowrap' }}><${ShareButton} job=${j} /><button className="btn" onClick=${() => setApply(j)}>Apply</button></div></div>`)}</div>`
         : html`<div className="panel"><${Empty} title="No roles are posted right now">Send your resume and we'll match you with new positions as they open, or email it to ${CO.email}.<//></div>`}
     </div></section>
     <section className="sec alt"><div className="wrap"><h2 style=${{ fontSize: 30 }}>Working with StratEdge</h2>
@@ -524,6 +524,54 @@ function Careers() {
     </div></section>
     <${PortalBand} />
     ${apply !== undefined && html`<${ApplyModal} job=${apply} onClose=${() => setApply(undefined)} />`}
+  <//>`;
+}
+/* ---- share a particular job (link to its own page) ---- */
+const jobLink = id => location.origin + location.pathname + '#/careers/' + id;
+function ShareButton({ job, primary, small }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const url = jobLink(job.id); const title = `${job.ti} at ${CO.name}`;
+  const text = `${job.ti}${job.loc ? ' in ' + job.loc : ''}${job.ty ? ' (' + job.ty + ')' : ''} at StratEdge IT Consulting`;
+  const copy = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch (e) { prompt('Copy this link', url); } };
+  const native = async () => { try { await navigator.share({ title, text, url }); setOpen(false); } catch (e) { /* cancelled */ } };
+  const links = [
+    ['LinkedIn', 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(url)],
+    ['WhatsApp', 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url)],
+    ['X', 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url)],
+    ['Facebook', 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url)],
+    ['Email', 'mailto:?subject=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(text + '\n\n' + url)],
+  ];
+  return html`<${Fragment}>
+    <button type="button" className=${'btn ' + (primary ? '' : 'ghost') + (small ? ' sm' : '')} onClick=${() => setOpen(true)} aria-haspopup="dialog"><${Icon} n="send" />Share</button>
+    ${open && html`<${Modal} title=${'Share: ' + job.ti} onClose=${() => setOpen(false)}>
+      <div className="stack" style=${{ gap: 14 }}>
+        <p className="muted small" style=${{ margin: 0 }}>Send this role to someone who fits it. The link opens the job with its own Apply button.</p>
+        <div style=${{ display: 'flex', gap: 8 }}><input readOnly value=${url} onFocus=${e => e.target.select()} aria-label="Job link" /><button type="button" className="btn" onClick=${copy}>Copy link</button></div>
+        <div className="share-row">${typeof navigator.share === 'function' && html`<button type="button" className="btn ghost sm" onClick=${native}>Share…</button>`}${links.map(([n, h]) => html`<a key=${n} className="btn ghost sm" href=${h} target="_blank" rel="noopener noreferrer">${n}</a>`)}</div>
+      </div><//>`}
+  <//>`;
+}
+function CareerJob({ id }) {
+  const caps = useCaps();
+  const job = useDoc(caps && caps.db ? `org/site/jobs/${id}` : null);
+  const [apply, setApply] = useState(false);
+  useEffect(() => { if (job.data) document.title = `${job.data.ti} | Careers | StratEdge IT Consulting`; }, [job.data]);
+  if (!caps || job.loading) return html`<${PageHead} title="Careers" intro=${html`<${Spinner} label="Loading the role…" />`} />`;
+  const j = job.data;
+  if (!j || j.open === false) return html`<${Fragment}><${PageHead} crumb=${html`<a href="#/careers">Careers</a> / Role`} title="This role is no longer open" intro=${html`It may have been filled. <a href="#/careers">See the open roles</a> or send a general application.`} /><section className="sec"><div className="wrap"><a className="btn" href="#/careers">All open roles</a></div></section><//>`;
+  return html`<${Fragment}>
+    <${PageHead} crumb=${html`<a href="#/careers">Careers</a> / ${j.ti}`} title=${j.ti} intro=${[j.loc, j.ty, j.md].filter(Boolean).join(' · ')} />
+    <section className="sec"><div className="wrap"><div className="g2" style=${{ gap: 48, alignItems: 'start' }}>
+      <div className="prose">${j.d ? html`<p style=${{ whiteSpace: 'pre-wrap', fontSize: 17 }}>${j.d}</p>` : html`<p className="muted">Contact us for the full description.</p>`}
+        ${j.sk && html`<div className="meta" style=${{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 20 }}>${j.sk.split(/,\s*/).filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div>`}
+        <div className="actions" style=${{ marginTop: 32 }}><button className="btn lg" onClick=${() => setApply(true)}>Apply for this role</button><${ShareButton} job=${j} /></div></div>
+      <aside className="panel"><h3 style=${{ fontSize: 20, marginBottom: 12 }}>At a glance</h3>
+        <dl className="kv">${j.loc && html`<dt>Location</dt><dd>${j.loc}</dd>`}${j.ty && html`<dt>Engagement</dt><dd>${j.ty}</dd>`}${j.md && html`<dt>Work mode</dt><dd>${j.md}</dd>`}<dt>Posted</dt><dd>${j.at ? fmtDay(j.at) : '—'}</dd><dt>Questions</dt><dd><a href=${'mailto:' + CO.email}>${CO.email}</a><br /><a href=${'tel:' + CO.tel}>${CO.phone}</a></dd></dl>
+        <p className="muted small" style=${{ marginTop: 14 }}>Know someone who fits? Share the link; it opens this page with the Apply button.</p></aside>
+    </div></div></section>
+    <${PortalBand} />
+    ${apply && html`<${ApplyModal} job=${{ ...j, id }} onClose=${() => setApply(false)} />`}
   <//>`;
 }
 const ContactPage = () => html`<${Fragment}><${PageHead} title="Contact us" intro="Hiring, a new project, or a question about an existing engagement? We're here Monday to Friday, 9 AM to 7 PM Eastern." /><${ContactSec} /><//>`;

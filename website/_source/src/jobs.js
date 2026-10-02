@@ -26,7 +26,7 @@ function JobsOffline({ error }) {
 
 const ScoreMeter = ({ n }) => html`<span className="score" title=${'Match score ' + n + ' of 100'}><i style=${{ '--w': Math.max(4, n) + '%' }} /><b>${n}</b></span>`;
 
-function JobRow({ j, onState, busy }) {
+function JobRow({ j, onState, onPublish, busy }) {
   const [open, setOpen] = useState(false);
   const chips = [j.portal && portalName(j.portal), j.remote, j.job_type, j.salary].filter(Boolean);
   return html`<div className="match">
@@ -42,6 +42,7 @@ function JobRow({ j, onState, busy }) {
       <div className="actions" style=${{ justifyContent: 'flex-end' }}>
         <button className="btn ghost sm" type="button" onClick=${() => setOpen(o => !o)}>${open ? 'Hide' : 'Details'}</button>
         <a className="btn ghost sm" href=${j.url} target="_blank" rel="noopener noreferrer">Open on ${portalName(j.portal)}</a>
+        ${onPublish && (j.published ? html`<a className="btn ghost sm" href=${'#/careers/g' + j.id} target="_blank" rel="noopener"><${Icon} n="check" />On Careers</a><button className="btn ghost sm" type="button" disabled=${busy} onClick=${() => onPublish(j, false)}>Remove</button>` : html`<button className="btn sm" type="button" disabled=${busy} onClick=${() => onPublish(j, true)}><${Icon} n="mega" />Publish to Careers</button>`)}
         ${onState && html`<${Fragment}>
           ${j.state !== 'saved' && j.state !== 'applied' && html`<button className="btn sm" type="button" disabled=${busy} onClick=${() => onState(j, 'saved')}><${Icon} n="star" />Save</button>`}
           ${j.state !== 'applied' && html`<button className="btn ghost sm" type="button" disabled=${busy} onClick=${() => onState(j, 'applied')}><${Icon} n="check" />Applied</button>`}
@@ -70,7 +71,7 @@ function JobsPage() {
   const m = useJobsApi('jobs_matches&state=' + tab);
   if (!P.prof) return html`<${NeedProfile} />`;
   if (me.error) return html`<${JobsOffline} error=${me.error} />`;
-  if (me.loading || !me.data) return html`<${Spinner} label="Checking your matches…" />`;
+  if (!me.data) return html`<${Spinner} label="Checking your matches…" />`;
   const c = me.data.consultant;
   if (!c || !c.has_resume) return html`<div className="panel"><${Empty} title="Upload your resume to see matched jobs" action=${html`<a className="btn" href="#/portal/resume">Upload resume</a>`}>
     Jobs from Dice, LinkedIn, Indeed and Monster are collected every few hours and ranked against the skills, titles and location in your resume.<//></div>`;
@@ -120,7 +121,7 @@ function ResumePage() {
   useEffect(() => { if (c && !f) { const p = c.prefs || {}; setF({ titles: listStr(p.titles), locations: listStr(p.locations), remote: p.remote || 'any', job_types: p.job_types || [], skills: listStr(p.skills), keywords: listStr(p.keywords), exclude: listStr(p.exclude) }); } if (me.data && !c && !f) setF({ titles: '', locations: '', remote: 'any', job_types: [], skills: '', keywords: '', exclude: '' }); }, [me.data]);
   if (!P.prof) return html`<${NeedProfile} />`;
   if (me.error) return html`<${JobsOffline} error=${me.error} />`;
-  if (me.loading || !f) return html`<${Spinner} label="Loading your resume profile…" />`;
+  if (!f) return html`<${Spinner} label="Loading your resume profile…" />`;
   const up = k => e => setF({ ...f, [k]: e.target.value });
   const onFiles = async fs => {
     const file = fs[0]; const ext = extOf(file.name);
@@ -174,10 +175,10 @@ function ResumePage() {
 /* ---------- staff: job portals, accounts, runs, jobs, consultants ---------- */
 function JobPortalsAdmin() {
   const toast = useToast();
-  const [tab, setTab] = useState('accounts');
+  const [tab, setTab] = useState('grab');
   const ov = useJobsApi('jobs_admin&op=overview');
   if (ov.error) return html`<div className="stack"><${JobsOffline} error=${ov.error} /><${JobServerHelp} /></div>`;
-  if (ov.loading || !ov.data) return html`<${Spinner} label="Connecting to the job server…" />`;
+  if (!ov.data) return html`<${Spinner} label="Connecting to the job server…" />`;
   const o = ov.data; const last = o.last_run;
   return html`<div className="stack">
     <div className="kpis">
@@ -187,7 +188,8 @@ function JobPortalsAdmin() {
       <a href="#/portal/admin/jobs" onClick=${e => { e.preventDefault(); setTab('runs'); }}><b>${o.running ? 'Running' : last ? ({ done: 'OK', done_with_errors: 'Errors', failed: 'Failed' }[last.status] || last.status) : '—'}</b><span>${last ? 'Last run ' + fmtTs(last.finished_at || last.started_at) : 'No run yet'}</span></a>
       <a href="#/portal/admin/jobs" onClick=${e => { e.preventDefault(); setTab('runs'); }}><b>${o.schedule_minutes ? 'Every ' + (o.schedule_minutes >= 60 ? Math.round(o.schedule_minutes / 60) + 'h' : o.schedule_minutes + 'm') : 'Manual'}</b><span>${o.next_run_at ? 'Next ' + fmtTs(o.next_run_at) : 'Schedule'}</span></a>
     </div>
-    <div className="tabs" role="tablist">${[['accounts', 'Portal logins'], ['runs', 'Scrape runs'], ['jobs', 'Collected jobs'], ['consultants', 'Consultant matches']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+    <div className="tabs" role="tablist">${[['grab', 'Job grabber'], ['accounts', 'Portal logins'], ['runs', 'Scrape runs'], ['jobs', 'Collected jobs'], ['consultants', 'Consultant matches']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+    ${tab === 'grab' && html`<${JobGrabber} o=${o} reload=${ov.reload} />`}
     ${tab === 'accounts' && html`<${PortalAccounts} o=${o} reload=${ov.reload} />`}
     ${tab === 'runs' && html`<${ScrapeRuns} o=${o} reload=${ov.reload} />`}
     ${tab === 'jobs' && html`<${CollectedJobs} o=${o} />`}
@@ -281,15 +283,28 @@ function ScrapeRuns({ o, reload }) {
   <//>`;
 }
 
+function usePublish(reload) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const publish = async (j, on) => {
+    setBusy(true);
+    try { await api('jobs_admin', on ? { op: 'publish', job_id: j.id } : { op: 'unpublish', job_id: j.id }); toast(on ? 'Posted on the Careers page. Share it from there.' : 'Removed from the Careers page.'); reload && reload(); }
+    catch (e) { toast(errText(e), true); }
+    setBusy(false);
+  };
+  return { publish, busy };
+}
+
 function CollectedJobs({ o }) {
   const [q, setQ] = useState(''); const [portal, setPortal] = useState(''); const [qq, setQq] = useState('');
   useEffect(() => { const t = setTimeout(() => setQq(q.trim()), 350); return () => clearTimeout(t); }, [q]);
   const r = useJobsApi('jobs_admin&op=jobs&q=' + encodeURIComponent(qq) + '&portal=' + encodeURIComponent(portal));
+  const pub = usePublish(r.reload);
   return html`<${Fragment}>
     <div className="toolbar"><input style=${{ maxWidth: 340 }} type="search" placeholder="Search title, company, location or text" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search jobs" />
       <select value=${portal} onChange=${e => setPortal(e.target.value)} aria-label="Portal" style=${{ maxWidth: 180 }}><option value="">All portals</option>${(o.portals || []).map(p => html`<option key=${p.key} value=${p.key}>${p.name}</option>`)}</select>
       <span className="muted small">${r.data ? `${r.data.total} job${r.data.total === 1 ? '' : 's'}` : ''}</span></div>
-    ${r.error ? html`<${JobsOffline} error=${r.error} />` : r.loading && !r.data ? html`<${Spinner} />` : r.data.jobs.length ? html`<div className="matches">${r.data.jobs.map(j => html`<${JobRow} key=${j.id} j=${j} />`)}</div>`
+    ${r.error ? html`<${JobsOffline} error=${r.error} />` : r.loading && !r.data ? html`<${Spinner} />` : r.data.jobs.length ? html`<div className="matches">${r.data.jobs.map(j => html`<${JobRow} key=${j.id} j=${j} onPublish=${pub.publish} busy=${pub.busy} />`)}</div>`
       : html`<div className="panel"><${Empty} title="No jobs collected yet">Run a collection from the Scrape runs tab once a consultant has uploaded a resume.<//></div>`}
   <//>`;
 }
@@ -318,4 +333,97 @@ function ConsultantMatches() {
     ${open && html`<${Modal} wide title=${'Matches for ' + nameOfC(open)} onClose=${() => setOpen(null)}>
       ${m.loading ? html`<${Spinner} />` : m.error ? html`<${JobsOffline} error=${m.error} />` : (m.data.matches || []).length ? html`<div className="matches">${m.data.matches.map(j => html`<${JobRow} key=${j.id} j=${j} />`)}</div>` : html`<${Empty} title="No matches yet" />`}<//>`}
   <//>`;
+}
+
+/* ---------- staff: Job grabber (log in through each portal, grab jobs by keyword, publish to Careers) ---------- */
+const GRAB_DAYS = [[1, 'Past 24 hours'], [3, 'Past 3 days'], [7, 'Past week'], [14, 'Past 2 weeks'], [30, 'Past month']];
+function JobGrabber({ o, reload }) {
+  const toast = useToast();
+  const st = useJobsApi('jobs_admin&op=status');
+  const portals = (st.data && st.data.portals) || [];
+  const [f, setF] = useState({ keywords: '', location: '', remote: 'any', posted_days: 7, portals: null });
+  const [runId, setRunId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = useJobsApi(runId ? 'jobs_admin&op=runs&limit=8' : 'jobs_admin&op=overview');
+  const cur = runId && run.data && run.data.runs ? run.data.runs.find(x => x.id === runId) : null;
+  const running = (st.data && st.data.running) || (cur && cur.status === 'running');
+  const jobs = useJobsApi(cur && cur.status !== 'running' ? 'jobs_admin&op=run_jobs&id=' + runId : 'jobs_admin&op=overview');
+  const pub = usePublish(jobs.reload);
+  const loginBusy = portals.some(p => p.accounts.some(a => ['running', 'needs_code'].includes(a.login.state)));
+  useEffect(() => { if (!running && !loginBusy) return; const t = setInterval(() => { st.reload(); if (runId) run.reload(); }, 3000); return () => clearInterval(t); }, [running, loginBusy, runId]);
+  useEffect(() => { if (cur && cur.status !== 'running') { jobs.reload(); reload(); } }, [cur && cur.status]);
+  const sel = f.portals || Object.fromEntries(portals.map(p => [p.key, true]));
+  const up = k => e => setF({ ...f, [k]: e.target.value });
+  const grab = async e => {
+    e.preventDefault();
+    const kws = f.keywords.split(/[,\n;]/).map(x => x.trim()).filter(Boolean);
+    if (!kws.length) { toast('Type at least one job title or keyword.', true); return; }
+    const chosen = portals.filter(p => sel[p.key]).map(p => p.key);
+    if (!chosen.length) { toast('Pick at least one portal.', true); return; }
+    setBusy(true);
+    try { const r = await api('jobs_admin', { op: 'grab', keywords: kws, location: f.location, remote: f.remote, posted_days: +f.posted_days, portals: chosen }); setRunId(r.run.id); toast('Grabbing jobs… results appear below as each portal answers.'); st.reload(); }
+    catch (x) { toast(errText(x), true); }
+    setBusy(false);
+  };
+  if (st.error) return html`<${JobsOffline} error=${st.error} />`;
+  if (st.loading && !st.data) return html`<${Spinner} label="Checking portal logins…" />`;
+  return html`<${Fragment}>
+    <p className="muted small">Log in through each portal with the StratEdge account (the browser runs on the server; if the site emails a verification code you type it here), then grab jobs by title or keyword. Grabbed jobs are matched to every consultant's resume and can be published to the Careers page with one click.</p>
+    <div className="portals-grid">${portals.map(p => html`<${PortalLoginCard} key=${p.key} p=${p} reload=${st.reload} />`)}</div>
+    <form className="panel form" onSubmit=${grab}>
+      <h2 className="ph">Grab jobs</h2>
+      <${Field} label="Job titles or keywords" hint="Comma-separated. Each one is searched on every selected portal."><input value=${f.keywords} onInput=${up('keywords')} placeholder="e.g. SAP FICO Consultant, ServiceNow Developer, Epic Analyst" /><//>
+      <div className="row3"><${Field} label="Location"><input value=${f.location} onInput=${up('location')} placeholder="City, state (empty = United States)" /><//>
+        <${Field} label="Posted"><select value=${f.posted_days} onChange=${up('posted_days')}>${GRAB_DAYS.map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//>
+        <${Field} label="Work mode"><select value=${f.remote} onChange=${up('remote')}>${REMOTE_OPTS.map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//></div>
+      <div className="fld"><span>Portals</span><div className="meta" style=${{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>${portals.map(p => html`<label key=${p.key} className=${'pillbtn' + (sel[p.key] ? ' on' : '')}><input type="checkbox" hidden checked=${!!sel[p.key]} onChange=${() => setF({ ...f, portals: { ...sel, [p.key]: !sel[p.key] } })} />${p.name}${p.logged_in ? ' (logged in)' : p.needs_account ? '' : ' (public search)'}</label>`)}</div></div>
+      <div className="actions"><button className="btn" disabled=${busy || running || loginBusy}><${Icon} n="search" />${running ? 'Grabbing…' : 'Grab jobs'}</button>${loginBusy && html`<span className="muted small">Finish the portal login first.</span>`}</div>
+    </form>
+    ${cur && html`<section className="panel stack" style=${{ gap: 10 }}>
+      <div className="ph-row"><h2 className="ph">${cur.status === 'running' ? 'Grabbing jobs…' : `Grabbed ${cur.jobs_found} job${cur.jobs_found === 1 ? '' : 's'}, ${cur.jobs_new} new`}</h2><span className="muted small">${(cur.search || []).map(q => q.q).join(', ')}${cur.search && cur.search[0] ? ' in ' + cur.search[0].location : ''}</span></div>
+      ${cur.status === 'running' && html`<${Spinner} label="Searching the portals. This takes a minute or two per portal." />`}
+      ${cur.errors.length ? html`<div className="note amber"><span>${cur.errors.map((e, i) => html`<div key=${i}><b>${portalName(e.portal) || 'Run'}:</b> ${e.error}</div>`)}</span></div>` : ''}
+      <details><summary className="muted small">Run log</summary><pre className="small" style=${{ whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto' }}>${cur.log || '…'}</pre></details>
+      ${cur.status !== 'running' && (jobs.data && jobs.data.jobs ? (jobs.data.jobs.length ? html`<div className="matches">${jobs.data.jobs.map(j => html`<${JobRow} key=${j.id} j=${j} onPublish=${pub.publish} busy=${pub.busy} />`)}</div>` : html`<${Empty} title="Nothing new from this grab">Every job found was already collected earlier. Look under Collected jobs.<//>`) : html`<${Spinner} />`)}
+    </section>`}
+  <//>`;
+}
+
+function PortalLoginCard({ p, reload }) {
+  const toast = useToast();
+  const acct = p.accounts[0] || null;
+  const login = acct ? acct.login : { state: 'idle', message: '' };
+  const [form, setForm] = useState(false);
+  const [f, setF] = useState({ username: '', password: '' });
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const call = async (body, okMsg) => { setBusy(true); try { const r = await api('jobs_admin', body); okMsg && toast(okMsg); reload(); return r; } catch (e) { toast(errText(e), true); } finally { setBusy(false); } };
+  const start = async () => {
+    if (!acct) {
+      if (!f.username.trim() || !f.password) { toast('Enter the email and password for the ' + p.name + ' account.', true); return; }
+      const r = await call({ op: 'account_add', portal: p.key, label: '', username: f.username, password: f.password, enabled: true });
+      if (!r) return;
+      setForm(false); setF({ username: '', password: '' });
+      await call({ op: 'login_start', id: r.account.id }, 'Signing in to ' + p.name + ' on the server…');
+    } else await call({ op: 'login_start', id: acct.id }, 'Signing in to ' + p.name + ' on the server…');
+  };
+  const sendCode = async e => { e.preventDefault(); if (!code.trim()) return; await call({ op: 'login_code', id: acct.id, code: code.trim() }, 'Code sent. Checking…'); setCode(''); };
+  const logout = async () => { if (!confirm(`Log out of ${p.name} on the server? The saved session is removed; the login details stay.`)) return; await call({ op: 'logout', id: acct.id }, 'Logged out of ' + p.name + '.'); };
+  const chip = login.state === 'running' ? html`<${Chip} s="new">Signing in…<//>` : login.state === 'needs_code' ? html`<${Chip} s="amber">Code needed<//>` : acct && acct.status === 'ok' && acct.enabled ? html`<${Chip} s="ok">Logged in<//>` : acct && acct.status === 'error' ? html`<${Chip} s="red">Login failed<//>` : acct ? html`<${Chip} s="amber">Not logged in<//>` : p.needs_account ? html`<${Chip}>No account<//>` : html`<${Chip}>Public search<//>`;
+  return html`<div className="panel stack portal-card" style=${{ gap: 8 }}>
+    <div className="ph-row"><h3 className="ph">${p.name}</h3>${chip}</div>
+    <p className="muted small" style=${{ margin: 0 }}>${acct ? html`${acct.username}${acct.last_login_at ? html`<br />Last sign-in ${fmtTs(acct.last_login_at)}` : ''}` : p.notes}</p>
+    ${login.state === 'running' && html`<p className="small"><span className="spin" style=${{ marginRight: 8, verticalAlign: 'middle' }} />${login.message}</p>`}
+    ${login.state === 'needs_code' && html`<form className="form" onSubmit=${sendCode} style=${{ gap: 8 }}><p className="small" style=${{ margin: 0 }}>${login.message}</p>
+      <div style=${{ display: 'flex', gap: 8 }}><input value=${code} onInput=${e => setCode(e.target.value)} placeholder="Verification code" inputMode="numeric" autoComplete="one-time-code" style=${{ maxWidth: 180 }} /><button className="btn sm" disabled=${busy}>Submit code</button></div></form>`}
+    ${login.state === 'error' && html`<p className="err small" style=${{ margin: 0 }}>${login.message.length > 260 ? login.message.slice(0, 260) + '…' : login.message}</p>`}
+    ${login.state === 'ok' && html`<p className="small" style=${{ margin: 0, color: 'var(--teal-ink)' }}>${login.message}</p>`}
+    ${acct && acct.status === 'error' && login.state === 'idle' && acct.last_error && html`<p className="err small" style=${{ margin: 0 }}>${acct.last_error.length > 260 ? acct.last_error.slice(0, 260) + '…' : acct.last_error}</p>`}
+    ${form && !acct && html`<div className="form" style=${{ gap: 8 }}><input value=${f.username} onInput=${e => setF({ ...f, username: e.target.value })} placeholder=${'Email or username on ' + p.name} autoComplete="off" /><input type="password" value=${f.password} onInput=${e => setF({ ...f, password: e.target.value })} placeholder="Password" autoComplete="new-password" /></div>`}
+    <div className="actions">
+      ${!acct ? (form ? html`<button className="btn sm" disabled=${busy} onClick=${start}>Save and log in</button><button className="btn ghost sm" onClick=${() => setForm(false)}>Cancel</button>` : html`<button className="btn sm" onClick=${() => setForm(true)}><${Icon} n="user" />Log in to ${p.name}</button>`)
+        : login.state === 'running' || login.state === 'needs_code' ? html`<button className="btn ghost sm" disabled=${busy} onClick=${logout}>Cancel</button>`
+        : html`<button className=${'btn sm' + (acct.status === 'ok' ? ' ghost' : '')} disabled=${busy} onClick=${start}>${acct.status === 'ok' ? 'Log in again' : 'Log in to ' + p.name}</button>${acct.status === 'ok' && html`<button className="btn ghost sm" disabled=${busy} onClick=${logout}>Log out</button>`}`}
+    </div>
+  </div>`;
 }

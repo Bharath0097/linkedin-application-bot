@@ -47,6 +47,10 @@ class Job:
         return dataclasses.asdict(self)
 
 
+CODE_WORDS = ("verification code", "enter the code", "security code", "one-time", "one time code", "passcode", "verify it's you", "enter the pin", "confirmation code", "code we sent", "6-digit")
+CODE_SELECTORS = ['input[autocomplete="one-time-code"]', 'input[name*="code" i]', 'input[id*="code" i]', 'input[name*="pin" i]', 'input[id*="pin" i]', 'input[name*="passcode" i]', 'input[name*="otp" i]', 'input[inputmode="numeric"]', 'input[type="tel"]', 'input[type="text"]']
+
+
 class Portal:
     key: str = ""
     name: str = ""
@@ -57,8 +61,58 @@ class Portal:
     notes: str = ""
 
     # ----- browser based -----
-    def login(self, driver: Any, username: str, password: str) -> None:
+    def open_browser(self) -> Any:
+        from ..browser import make_driver
+
+        return make_driver()
+
+    def login(self, driver: Any, username: str, password: str, ask_code: Any = None) -> None:
+        """Sign in. ask_code, when given, is called if the site wants a verification code; it blocks until the
+        person types the code in the StratEdge portal (or returns '' on timeout)."""
         raise LoginError(f"{self.name} login is not implemented.")
+
+    def needs_code(self, driver: Any) -> bool:
+        from ..browser import page_text
+
+        body = page_text(driver).lower()
+        return any(w in body for w in CODE_WORDS) and bool(self._code_field(driver))
+
+    def _code_field(self, driver: Any) -> Any:
+        from ..browser import try_find
+
+        el = try_find(driver, CODE_SELECTORS[:-1])
+        if el is not None:
+            return el
+        el = try_find(driver, [CODE_SELECTORS[-1]])
+        return el
+
+    def handle_code(self, driver: Any, ask_code: Any) -> None:
+        """Called when the site shows a verification-code prompt."""
+        import time
+
+        from ..browser import try_find
+
+        if ask_code is None:
+            raise LoginError(f"{self.name} is asking for a verification code. Use \"Log in\" on the Job grabber page, which lets you type the code.")
+        code = (ask_code() or "").strip()
+        if not code:
+            raise LoginError("No verification code was entered in time. Start the login again.")
+        field = self._code_field(driver)
+        if field is None:
+            raise LoginError("The verification-code field disappeared. Start the login again.")
+        field.clear()
+        field.send_keys(code)
+        btn = try_find(driver, ['button[type="submit"]', 'input[type="submit"]', 'button[id*="submit" i]', 'button'])
+        if btn:
+            try:
+                btn.click()
+            except Exception:
+                from selenium.webdriver.common.keys import Keys
+
+                field.send_keys(Keys.ENTER)
+        time.sleep(5)
+        if self.needs_code(driver):
+            raise LoginError("The site did not accept that verification code.")
 
     def is_logged_in(self, driver: Any) -> bool:
         return False

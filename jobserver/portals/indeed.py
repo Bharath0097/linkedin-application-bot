@@ -94,7 +94,7 @@ class Indeed(Portal):
         except Exception:
             return False
 
-    def login(self, driver: Any, username: str, password: str) -> None:
+    def login(self, driver: Any, username: str, password: str, ask_code: Any = None) -> None:
         driver.get(self.login_url)
         try:
             e = wait_for(driver, 'input[type="email"], input[name="__email"], #ifl-InputFormField-3', 20)
@@ -108,9 +108,12 @@ class Indeed(Portal):
         time.sleep(3)
         pw = try_find(driver, ['input[type="password"]', 'input[name="__password"]'])
         if not pw:
-            body = page_text(driver).lower()
-            if "code" in body or "verify" in body:
-                raise LoginError("Indeed sent a one-time code instead of asking for a password. Sign in once from a browser on the server so the session is kept.")
+            if self.needs_code(driver):  # Indeed often emails a one-time code instead of asking for a password
+                self.handle_code(driver, ask_code)
+                time.sleep(3)
+                if not self.is_logged_in(driver):
+                    raise LoginError("Indeed did not sign in after the code.")
+                return
             raise LoginError("Indeed did not show a password field (login with a code or Google only).")
         pw.clear()
         pw.send_keys(password)
@@ -118,9 +121,8 @@ class Indeed(Portal):
         if btn:
             btn.click()
         time.sleep(4)
-        body = page_text(driver).lower()
-        if "code" in body and ("enter" in body or "sent" in body):
-            raise LoginError("Indeed is asking for a verification code. Complete it once in a browser on the server, then test again.")
+        if self.needs_code(driver):
+            self.handle_code(driver, ask_code)
         if not self.is_logged_in(driver):
             raise LoginError("Indeed rejected the login.")
 

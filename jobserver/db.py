@@ -97,7 +97,17 @@ def connect() -> sqlite3.Connection:
             _conn.execute("PRAGMA journal_mode=WAL")
             _conn.execute("PRAGMA busy_timeout=5000")
             _conn.executescript(SCHEMA)
+            _migrate(_conn)
         return _conn
+
+
+def _migrate(c: sqlite3.Connection) -> None:
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(jobs)").fetchall()}
+    if "published" not in cols:
+        c.execute("ALTER TABLE jobs ADD COLUMN published INTEGER NOT NULL DEFAULT 0")
+    rcols = {r["name"] for r in c.execute("PRAGMA table_info(runs)").fetchall()}
+    if "queries_json" not in rcols:
+        c.execute("ALTER TABLE runs ADD COLUMN queries_json TEXT NOT NULL DEFAULT '[]'")
 
 
 def reset_for_tests(path: str) -> None:
@@ -170,6 +180,7 @@ def job_row(r: sqlite3.Row, full: bool = False) -> dict:
         "id": r["id"], "portal": r["portal"], "external_id": r["external_id"], "title": r["title"], "company": r["company"],
         "location": r["location"], "remote": r["remote"], "job_type": r["job_type"], "salary": r["salary"], "posted": r["posted"],
         "url": r["url"], "skills": j(r["skills_json"], []), "query": r["query"], "first_seen": r["first_seen"], "last_seen": r["last_seen"],
+        "published": bool(r["published"]) if "published" in r.keys() else False, "run_id": r["run_id"],
     }
     desc = r["description"] or ""
     d["summary"] = desc[:400]
@@ -245,5 +256,5 @@ def run_row(r: sqlite3.Row) -> dict:
     return {
         "id": r["id"], "started_at": r["started_at"], "finished_at": r["finished_at"], "status": r["status"], "trigger_by": r["trigger_by"],
         "portals": j(r["portals_json"], []), "queries": r["queries"], "jobs_found": r["jobs_found"], "jobs_new": r["jobs_new"],
-        "errors": j(r["errors_json"], []), "log": r["log"],
+        "errors": j(r["errors_json"], []), "log": r["log"], "search": j(r["queries_json"], []) if "queries_json" in r.keys() else [],
     }

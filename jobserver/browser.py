@@ -19,6 +19,16 @@ class BrowserError(RuntimeError):
 
 def make_driver() -> Any:
     try:
+        return _make_driver()
+    except BrowserError:
+        raise
+    except Exception as e:
+        name = "Chrome and chromedriver" if settings.browser == "chrome" else "Firefox and geckodriver"
+        raise BrowserError(f"The browser could not start on the server. Install {name} (JOBSERVER_BROWSER={settings.browser}). Details: {str(e).strip()[:160]}") from e
+
+
+def _make_driver() -> Any:
+    try:
         from selenium import webdriver
     except ImportError as e:  # pragma: no cover
         raise BrowserError("Selenium is not installed (pip install selenium).") from e

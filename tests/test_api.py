@@ -84,3 +84,71 @@ def test_run_without_consultants_has_no_queries(client, fake):
 def test_bad_resume_rejected(client):
     r = client.post("/consultants/u_2/resume", files={"file": ("bad.docx", io.BytesIO(b"PK\x03\x04junk"), "application/octet-stream")})
     assert r.status_code == 400 and "Word" in r.json()["detail"]
+
+
+def test_grab_run_with_keywords_and_publish_flag(client, fake):
+    fake.jobs = [{"external_id": "g1", "title": "ServiceNow Developer", "company": "Hooli", "location": "Edison, NJ", "description": "ServiceNow ITSM scripting."}]
+    r = client.post("/grab", json={"keywords": ["ServiceNow Developer", " ", "SAP FICO"], "location": "Edison, NJ", "remote": "any", "posted_days": 3, "portals": ["fake"]})
+    assert r.status_code == 200, r.text
+    rid = r.json()["run"]["id"]
+    runner.thread.join()
+    run = client.get(f"/runs/{rid}").json()["run"]
+    assert run["status"] == "done" and run["queries"] == 2 and run["jobs_new"] == 1
+    assert [q["q"] for q in run["search"]] == ["ServiceNow Developer", "SAP FICO"] and run["search"][0]["posted_days"] == 3
+    assert [q.location for q in fake.calls] == ["Edison, NJ", "Edison, NJ"]
+    jobs = client.get(f"/runs/{rid}/jobs").json()["jobs"]
+    assert len(jobs) == 1 and jobs[0]["published"] is False
+    r = client.patch(f"/jobs/{jobs[0]['id']}", json={"published": True})
+    assert r.json()["job"]["published"] is True
+    assert client.get(f"/runs/{rid}/jobs").json()["jobs"][0]["published"] is True
+    assert client.post("/grab", json={"keywords": [], "portals": ["fake"]}).status_code == 400
+
+
+def test_interactive_login_with_verification_code(client, fake):
+    import time
+
+    fake.wants_code = True
+    fake.logins = []
+    a = client.post("/portals/accounts", json={"portal": "fake", "username": "recruiting@x.test", "password": "pw"}).json()["account"]
+    aid = a["id"]
+    st = client.get("/portals/status").json()
+    fp = [p for p in st["portals"] if p["key"] == "fake"][0]
+    assert fp["logged_in"] is False and fp["accounts"][0]["login"]["state"] == "idle"
+    r = client.post(f"/portals/accounts/{aid}/login")
+    assert r.status_code == 200, r.text
+    for _ in range(100):
+        s = client.get(f"/portals/accounts/{aid}/login").json()["login"]
+        if s["state"] == "needs_code":
+            break
+        time.sleep(0.05)
+    assert s["state"] == "needs_code", s
+    assert client.post(f"/portals/accounts/{aid}/login/code", json={"code": " "}).status_code == 400
+    assert client.post("/runs", json={"portals": ["fake"]}).status_code == 409  # no collection while a login waits
+    r = client.post(f"/portals/accounts/{aid}/login/code", json={"code": "123456"})
+    assert r.status_code == 200, r.text
+    for _ in range(100):
+        s = client.get(f"/portals/accounts/{aid}/login").json()
+        if s["login"]["state"] in ("ok", "error"):
+            break
+        time.sleep(0.05)
+    assert s["login"]["state"] == "ok", s
+    assert s["account"]["status"] == "ok" and s["account"]["last_login_at"]
+    assert fake.logins == [("recruiting@x.test", "pw")]
+    assert [p for p in client.get("/portals/status").json()["portals"] if p["key"] == "fake"][0]["logged_in"] is True
+    assert client.post(f"/portals/accounts/{aid}/login/code", json={"code": "1"}).status_code == 409
+    # a wrong code fails the login with a clear message
+    client.post(f"/portals/accounts/{aid}/login")
+    for _ in range(100):
+        if client.get(f"/portals/accounts/{aid}/login").json()["login"]["state"] == "needs_code":
+            break
+        time.sleep(0.05)
+    client.post(f"/portals/accounts/{aid}/login/code", json={"code": "000000"})
+    for _ in range(100):
+        s = client.get(f"/portals/accounts/{aid}/login").json()["login"]
+        if s["state"] in ("ok", "error"):
+            break
+        time.sleep(0.05)
+    assert s["state"] == "error" and "wrong code" in s["message"]
+    assert client.post(f"/portals/accounts/{aid}/logout").json()["ok"]
+    assert client.get(f"/portals/accounts/{aid}/login").json()["account"]["status"] == "untested"
+    fake.wants_code = False

@@ -77,7 +77,7 @@ class Dice(Portal):
         except Exception:
             return False
 
-    def login(self, driver: Any, username: str, password: str) -> None:
+    def login(self, driver: Any, username: str, password: str, ask_code: Any = None) -> None:
         driver.get(self.login_url)
         try:
             email = wait_for(driver, 'input[type="email"], input[name="email"], #email', 20)
@@ -98,9 +98,9 @@ class Dice(Portal):
         if btn:
             btn.click()
         time.sleep(4)
+        if self.needs_code(driver):
+            self.handle_code(driver, ask_code)
         body = page_text(driver).lower()
-        if "verification code" in body or "verify your" in body or "one-time" in body:
-            raise LoginError("Dice is asking for a verification code. Complete it once in a browser on the server, then test again.")
         if "/login" in driver.current_url and ("incorrect" in body or "invalid" in body or "password" in body):
             raise LoginError("Dice rejected the email or password.")
         if not self.is_logged_in(driver):

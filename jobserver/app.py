@@ -87,6 +87,23 @@ class MatchState(BaseModel):
     state: str
 
 
+class CodeIn(BaseModel):
+    code: str
+
+
+class GrabIn(BaseModel):
+    keywords: list[str] = Field(default_factory=list)
+    location: str = ""
+    remote: str = "any"
+    posted_days: int = 7
+    portals: list[str] = Field(default_factory=list)
+    trigger: str = "grab"
+
+
+class JobPatch(BaseModel):
+    published: bool | None = None
+
+
 # ---------- status ----------
 @app.get("/health")
 async def health():
@@ -175,6 +192,87 @@ async def account_test(aid: int):
     except RuntimeError as e:
         raise HTTPException(409, str(e))
     return {**res, "account": db.account_row(db.get_account(aid))}
+
+
+@app.get("/portals/status", dependencies=[Depends(auth)])
+async def portals_status():
+    """Per portal: the accounts, whether a saved session is usable, and any login in progress (for the Job grabber)."""
+    accounts = db.list_accounts()
+    out = []
+    for p in portals.describe_all():
+        accs = []
+        for a in accounts:
+            if a["portal"] != p["key"]:
+                continue
+            accs.append({**a, "login": runner.logins.status(a["id"])})
+        out.append({**p, "accounts": accs, "logged_in": any(a["status"] == "ok" and a["enabled"] for a in accs), "supports_requests": portals.get(p["key"]).supports_requests})
+    return {"portals": out, "running": runner.is_busy(), "current_run": runner.current_run}
+
+
+@app.post("/portals/accounts/{aid}/login", dependencies=[Depends(auth)])
+async def account_login_start(aid: int):
+    try:
+        return {"login": runner.logins.start(aid)}
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.get("/portals/accounts/{aid}/login", dependencies=[Depends(auth)])
+async def account_login_status(aid: int):
+    return {"login": runner.logins.status(aid), "account": db.account_row(db.get_account(aid)) if db.get_account(aid) else None}
+
+
+@app.post("/portals/accounts/{aid}/login/code", dependencies=[Depends(auth)])
+async def account_login_code(aid: int, c: CodeIn):
+    if not c.code.strip():
+        raise HTTPException(400, "Type the code first.")
+    try:
+        return {"login": runner.logins.submit_code(aid, c.code)}
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post("/portals/accounts/{aid}/logout", dependencies=[Depends(auth)])
+async def account_logout(aid: int):
+    try:
+        runner.logins.logout(aid)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
+
+
+@app.post("/grab", dependencies=[Depends(auth)])
+async def grab(g: GrabIn):
+    """The Job grabber: search the chosen portals for these keywords now."""
+    kws = [k.strip() for k in g.keywords if k and k.strip()][:12]
+    if not kws:
+        raise HTTPException(400, "Enter at least one keyword or job title.")
+    for k in g.portals:
+        portals.get(k)
+    remote = g.remote if g.remote in ("any", "remote", "onsite", "hybrid") else "any"
+    qs = [portals.SearchQuery(q=k, location=g.location.strip() or settings.default_location, remote=remote, posted_days=max(1, min(30, g.posted_days))) for k in kws]
+    try:
+        rid = runner.start_run(g.trigger or "grab", g.portals or None, None, qs)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {"run": db.run_row(db.one("SELECT * FROM runs WHERE id = ?", (rid,)))}
+
+
+@app.get("/runs/{rid}/jobs", dependencies=[Depends(auth)])
+async def run_jobs(rid: int, limit: int = Query(300, ge=1, le=1000)):
+    rows = db.q("SELECT * FROM jobs WHERE run_id = ? ORDER BY first_seen DESC LIMIT ?", (rid, limit))
+    return {"jobs": [db.job_row(r) for r in rows]}
+
+
+@app.patch("/jobs/{jid}", dependencies=[Depends(auth)])
+async def job_patch(jid: int, p: JobPatch):
+    if not db.one("SELECT id FROM jobs WHERE id = ?", (jid,)):
+        raise HTTPException(404, "No such job.")
+    if p.published is not None:
+        db.run("UPDATE jobs SET published = ? WHERE id = ?", (1 if p.published else 0, jid))
+    return {"job": db.job_row(db.one("SELECT * FROM jobs WHERE id = ?", (jid,)), full=True)}
 
 
 # ---------- runs ----------
