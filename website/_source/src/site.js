@@ -508,15 +508,25 @@ function Careers() {
   const caps = useCaps();
   const jobs = useCol(caps && caps.db ? 'org/site/jobs' : null, 'at:desc');
   const [apply, setApply] = useState(undefined);
-  const open = jobs.docs.filter(j => j.open !== false);
+  const [q, setQ] = useState(''); const [fl, setFl] = useState({ loc: '', ty: '', md: '' });
+  const all = jobs.docs.filter(j => j.open !== false);
+  const opts = k => [...new Set(all.map(j => (j[k] || '').trim()).filter(Boolean))].sort();
+  const ql = q.trim().toLowerCase();
+  const open = all.filter(j => (!ql || [j.ti, j.loc, j.sk, j.d, j.ty, j.md].filter(Boolean).join(' ').toLowerCase().includes(ql)) && (!fl.loc || j.loc === fl.loc) && (!fl.ty || j.ty === fl.ty) && (!fl.md || j.md === fl.md));
+  const isNew = j => j.at && Date.now() - j.at < 7 * 86400000;
   return html`<${Fragment}>
     <${PageHead} title="Careers" intro="Contract, contract-to-hire and full-time roles with StratEdge and our clients across the US." />
     <section className="sec"><div className="wrap">
-      <div className="head-row"><h2 style=${{ fontSize: 30 }}>Open roles</h2><button className="btn ghost" onClick=${() => setApply(null)}>Send a general application</button></div>
+      <div className="head-row"><h2 style=${{ fontSize: 30 }}>Open roles${all.length ? html` <span className="muted" style=${{ fontSize: 18, fontWeight: 500 }}>(${open.length === all.length ? all.length : open.length + ' of ' + all.length})</span>` : ''}</h2><button className="btn ghost" onClick=${() => setApply(null)}>Send a general application</button></div>
+      ${all.length > 0 && html`<div className="jobs-filter"><input type="search" value=${q} onInput=${e => setQ(e.target.value)} placeholder="Search title, skills or location" aria-label="Search roles" />
+        <select value=${fl.loc} onChange=${e => setFl({ ...fl, loc: e.target.value })} aria-label="Location"><option value="">All locations</option>${opts('loc').map(v => html`<option key=${v}>${v}</option>`)}</select>
+        <select value=${fl.ty} onChange=${e => setFl({ ...fl, ty: e.target.value })} aria-label="Engagement"><option value="">All engagements</option>${opts('ty').map(v => html`<option key=${v}>${v}</option>`)}</select>
+        <select value=${fl.md} onChange=${e => setFl({ ...fl, md: e.target.value })} aria-label="Work mode"><option value="">Any work mode</option>${opts('md').map(v => html`<option key=${v}>${v}</option>`)}</select></div>`}
       ${!caps || jobs.loading ? html`<${Spinner} label="Loading open roles…" />` : open.length ? html`<div className="jobs">${open.map(j => html`<div key=${j.id} className="job">
-          <div><h3><a href=${'#/careers/' + j.id}>${j.ti}</a></h3>${j.d && html`<p className="muted" style=${{ marginTop: 6, fontSize: 15.5, whiteSpace: 'pre-wrap' }}>${j.d.length > 320 ? j.d.slice(0, 320).replace(/\s+\S*$/, '') + '…' : j.d}</p>`}
+          <div><h3><a href=${'#/careers/' + j.id}>${j.ti}</a>${isNew(j) ? html` <span className="tag new">New</span>` : ''}</h3>${j.at ? html`<div className="muted small">Posted ${fmtDay(j.at)}</div>` : ''}${j.d && html`<p className="muted" style=${{ marginTop: 6, fontSize: 15.5, whiteSpace: 'pre-wrap' }}>${j.d.length > 320 ? j.d.slice(0, 320).replace(/\s+\S*$/, '') + '…' : j.d}</p>`}
             <div className="meta">${[j.loc, j.ty, j.md, j.sk].filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div></div>
           <div className="actions" style=${{ flexWrap: 'nowrap' }}><${ShareButton} job=${j} /><button className="btn" onClick=${() => setApply(j)}>Apply</button></div></div>`)}</div>`
+        : all.length ? html`<div className="panel"><${Empty} title="No roles match that search" action=${html`<button className="btn ghost" onClick=${() => { setQ(''); setFl({ loc: '', ty: '', md: '' }); }}>Clear filters</button>`}>Try a broader search, or send a general application.<//></div>`
         : html`<div className="panel"><${Empty} title="No roles are posted right now">Send your resume and we'll match you with new positions as they open, or email it to ${CO.email}.<//></div>`}
     </div></section>
     <section className="sec alt"><div className="wrap"><h2 style=${{ fontSize: 30 }}>Working with StratEdge</h2>
@@ -535,6 +545,15 @@ function ShareButton({ job, primary, small }) {
   const text = `${job.ti}${job.loc ? ' in ' + job.loc : ''}${job.ty ? ' (' + job.ty + ')' : ''} at StratEdge IT Consulting`;
   const copy = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch (e) { prompt('Copy this link', url); } };
   const native = async () => { try { await navigator.share({ title, text, url }); setOpen(false); } catch (e) { /* cancelled */ } };
+  const [f, setF] = useState({ to_n: '', to_e: '', from_n: '', from_e: '', msg: '' }); const [st, setSt] = useState('idle');
+  const upf = k => e => setF({ ...f, [k]: e.target.value });
+  const sendMailShare = async e => {
+    e.preventDefault();
+    if (!f.from_n.trim() || !/^\S+@\S+\.\S+$/.test(f.to_e)) { toast('Add your name and a valid email for the person.', true); return; }
+    setSt('busy');
+    try { const r = await api('public_share', { id: job.id, ...f }); setSt(r.mailed ? 'sent' : 'fail'); if (!r.mailed) toast('The email could not be sent right now. Copy the link instead.', true); }
+    catch (x) { setSt('idle'); toast(errText(x), true); }
+  };
   const links = [
     ['LinkedIn', 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(url)],
     ['WhatsApp', 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url)],
@@ -549,6 +568,14 @@ function ShareButton({ job, primary, small }) {
         <p className="muted small" style=${{ margin: 0 }}>Send this role to someone who fits it. The link opens the job with its own Apply button.</p>
         <div style=${{ display: 'flex', gap: 8 }}><input readOnly value=${url} onFocus=${e => e.target.select()} aria-label="Job link" /><button type="button" className="btn" onClick=${copy}>Copy link</button></div>
         <div className="share-row">${typeof navigator.share === 'function' && html`<button type="button" className="btn ghost sm" onClick=${native}>Share…</button>`}${links.map(([n, h]) => html`<a key=${n} className="btn ghost sm" href=${h} target="_blank" rel="noopener noreferrer">${n}</a>`)}</div>
+        ${st === 'sent' ? html`<div className="note ok"><span>Sent to ${f.to_e}. They get the job details and a View-and-apply link.</span></div>`
+          : html`<form className="form share-mail" onSubmit=${sendMailShare} noValidate>
+            <p className="lbl" style=${{ margin: 0 }}>Or email it to someone from here</p>
+            <div className="row2"><${Field} label="Their name"><input value=${f.to_n} onInput=${upf('to_n')} /><//><${Field} label="Their email"><input type="email" value=${f.to_e} onInput=${upf('to_e')} /><//></div>
+            <div className="row2"><${Field} label="Your name"><input value=${f.from_n} onInput=${upf('from_n')} autoComplete="name" /><//><${Field} label="Your email (for replies)"><input type="email" value=${f.from_e} onInput=${upf('from_e')} autoComplete="email" /><//></div>
+            <${Field} label="Note (optional)"><input value=${f.msg} onInput=${upf('msg')} placeholder="e.g. This looks like your kind of project" maxLength="300" /><//>
+            <div><button className="btn sm" disabled=${st === 'busy'}><${Icon} n="mail" />${st === 'busy' ? 'Sending…' : 'Email this job'}</button></div>
+          </form>`}
       </div><//>`}
   <//>`;
 }

@@ -221,3 +221,41 @@ def test_job_grabber_login_grab_and_publish_to_careers(stack):
     assert admin.post("jobs_admin", {"op": "unpublish", "job_id": sap["id"]}).json()["ok"]
     assert requests.get(base + "doc&path=" + f"org/site/jobs/{pid}", timeout=10).json()["e"] is False
     assert admin.post("jobs_admin", {"op": "logout", "id": a["id"]}).json()["ok"]
+
+
+def test_send_job_to_people_and_public_share(stack):
+    base = stack["php"]
+    admin = Portal(base)
+    if admin.post("login", {"email": "admin@stratedge.test", "password": "password123"}).status_code != 200:
+        register(admin, "Ada Admin", "admin@stratedge.test")
+    # a consultant with an approved profile, and a recruiting-database consultant
+    cons = Portal(base)
+    if cons.post("login", {"email": "priya@stratedge.test", "password": "password123", "as": "consultant"}).status_code != 200:
+        c = register(cons, "Priya Raman", "priya@stratedge.test")
+        cons.post("set", {"path": f"u/{c['id']}", "data": {"p": {"n": "Priya Raman", "e": "priya@stratedge.test", "role": "consultant", "ti": "SAP FICO Consultant"}, "joined": 1}})
+        admin.post("set", {"path": f"r/{c['id']}", "data": {"st": "active", "role": "consultant"}})
+    uid = cons.get("me").json()["user"]["id"]
+    assert admin.post("set", {"path": "rec/cand/items/c1", "data": {"n": "Ravi Kumar", "e": "ravi@example.test", "ti": "SAP MM Consultant", "st": "active"}}).status_code == 200
+    assert admin.post("set", {"path": "org/site/jobs/j1", "data": {"ti": "SAP FICO Consultant", "loc": "Edison, NJ", "ty": "C2C", "md": "Hybrid", "sk": "SAP FICO, S/4HANA", "d": "Long-term contract.", "open": True, "at": 1}}).status_code == 200
+    rec = admin.get("job_recipients").json()
+    assert any(p["uid"] == uid and p["e"] == "priya@stratedge.test" for p in rec["portal"]) and rec["rec"][0]["e"] == "ravi@example.test"
+    assert cons.get("job_recipients").status_code == 403  # consultants cannot send jobs
+    r = admin.post("job_send", {"id": "j1", "to": [{"n": "Priya Raman", "e": "priya@stratedge.test", "uid": uid}, {"n": "Ravi Kumar", "e": "ravi@example.test"}, {"e": "not-an-email"}, {"n": "Dup", "e": "ravi@example.test"}], "subject": "", "message": "Looks like a fit."})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["sent"] + len(j["failed"]) == 2  # php mail() may or may not deliver in the sandbox; the attempt is what we check
+    job = admin.get("doc&path=org/site/jobs/j1").json()["d"]
+    assert len(job["sent"]) == 1 and job["sent"][0]["byn"] == "Ada Admin" and set(job["sent"][0]["to"]) == {"Priya Raman", "Ravi Kumar"}
+    mine = cons.get(f"col&path=u/{uid}/jobs").json()["docs"]
+    assert mine and mine[0][0] == "j1" and mine[0][1]["ti"] == "SAP FICO Consultant" and mine[0][1]["msg"] == "Looks like a fit." and mine[0][1]["byn"] == "Ada Admin"
+    assert admin.post("job_send", {"id": "j1", "to": []}).status_code == 400
+    assert admin.post("job_send", {"id": "nope", "to": [{"e": "a@b.co"}]}).status_code == 404
+    # public "email this job to someone" from the Careers page: no login needed, throttled per network
+    anon = Portal(base)
+    r = anon.post("public_share", {"id": "j1", "to_n": "Sam", "to_e": "sam@example.test", "from_n": "Priya", "from_e": "priya@stratedge.test", "msg": "Your kind of project"})
+    assert r.status_code == 200 and "mailed" in r.json(), r.text
+    assert anon.post("public_share", {"id": "j1", "to_e": "bad", "from_n": "x"}).status_code == 400
+    assert admin.get("doc&path=org/site/jobs/j1").json()["d"]["shares"] == 1
+    assert admin.post("set", {"path": "org/site/jobs/j1", "data": {**job, "open": False}}).status_code == 200
+    assert anon.post("public_share", {"id": "j1", "to_e": "sam@example.test", "from_n": "x"}).status_code == 404
+    assert admin.post("job_send", {"id": "j1", "to": [{"e": "a@b.co"}]}).status_code == 400

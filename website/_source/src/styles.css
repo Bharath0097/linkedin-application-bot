@@ -934,3 +934,19 @@ html:has(.site),body:has(.site){overflow-x:hidden}
 .share-row{display:flex;gap:8px;flex-wrap:wrap}
 .job h3 a{color:inherit;text-decoration:none}
 .job h3 a:hover{text-decoration:underline}
+
+/* Careers filters, send-job picker */
+.jobs-filter{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:10px;margin:-20px 0 22px}
+.jobs-filter input,.jobs-filter select{width:100%;min-width:0}
+@media (max-width:800px){.jobs-filter{grid-template-columns:1fr 1fr}}
+.tag.new{background:var(--teal-bg);color:var(--teal-ink);vertical-align:middle;margin-left:8px}
+.share-mail{border-top:1px solid var(--line);padding-top:14px;gap:10px}
+.picklist{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:12px;display:grid}
+.pick{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+.pick:last-child{border-bottom:0}
+.pick.on{background:var(--teal-bg)}
+.pick input{margin-top:3px}
+.pick span{display:grid;min-width:0}
+.pick small{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv.small dt,.kv.small dd{font-size:13px}
+.modal .tabs{flex-wrap:wrap;overflow:visible}

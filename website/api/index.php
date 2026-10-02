@@ -344,6 +344,54 @@ anthropic-version: 2023-06-01
     ok(['mailed' => (bool) $sent, 'recipients' => count($to)]);
   }
 
+  /* ---------- Careers: send a job to people (staff and recruiters), public "email this job to someone" ---------- */
+  case 'job_recipients': {
+    $u = requireUser(); $staff = userLevel($u) >= 2; if (!$staff && !isRecruiter($u['id'])) fail(403, 'invalid_argument', 'Only StratEdge staff can send jobs.');
+    $out = ['portal' => [], 'rec' => [], 'ats' => []];
+    foreach (colList('r', null, 'asc', 0) as [$uid, $r]) { if (($r->st ?? '') !== 'active' || ($r->role ?? '') === 'employer') continue; $root = docGet("u/$uid"); $pp = $root->p ?? null; if (!$pp || empty($pp->e)) continue;
+      $out['portal'][] = ['uid' => $uid, 'n' => (string) $pp->n, 'e' => (string) $pp->e, 'ti' => (string) ($pp->ti ?? ''), 'loc' => (string) ($pp->loc ?? ''), 'role' => (string) ($r->role ?? 'consultant')]; }
+    if ($staff || isRecruiter($u['id'])) foreach (colList('rec/cand/items', 'n', 'asc', 0) as [$id, $c]) { if (empty($c->e) || ($c->st ?? 'active') !== 'active') continue; $out['rec'][] = ['id' => $id, 'n' => (string) ($c->n ?? ''), 'e' => (string) $c->e, 'ti' => (string) ($c->ti ?? ''), 'loc' => (string) ($c->loc ?? ''), 'sk' => (string) ($c->sk ?? '')]; }
+    if ($staff) foreach (colList('ats', 'u', 'desc', 400) as [$id, $c]) { if (empty($c->e) || in_array($c->st ?? '', ['rejected', 'hired'], true)) continue; $out['ats'][] = ['id' => $id, 'n' => (string) ($c->n ?? ''), 'e' => (string) $c->e, 'ti' => (string) ($c->jt ?? ''), 'st' => (string) ($c->st ?? '')]; }
+    ok($out);
+  }
+  case 'job_send': {
+    $u = requireUser(); $staff = userLevel($u) >= 2; if (!$staff && !isRecruiter($u['id'])) fail(403, 'invalid_argument', 'Only StratEdge staff can send jobs.');
+    $id = str($b, 'id', 40); if (!preg_match('/^[A-Za-z0-9_\-]+$/', $id)) fail(400, 'invalid_argument', 'Bad job.'); $job = docGet("org/site/jobs/$id"); if (!$job) fail(404, 'not_found', 'That job no longer exists.');
+    if (($job->open ?? true) === false) fail(400, 'invalid_argument', 'This job is closed on the Careers page. Reopen it before sending.');
+    $subject = str($b, 'subject', 200); $msg = str($b, 'message', 4000); if ($subject === '') $subject = 'Job opportunity: ' . $job->ti . ' at StratEdge IT Consulting';
+    $to = []; $seen = [];
+    foreach (array_slice((array) ($b['to'] ?? []), 0, 100) as $x) { if (!is_array($x)) continue; $e = strtolower(trim((string) ($x['e'] ?? ''))); if (!filter_var($e, FILTER_VALIDATE_EMAIL) || isset($seen[$e])) continue; $seen[$e] = 1;
+      $to[] = ['e' => $e, 'n' => mb_substr(trim((string) ($x['n'] ?? '')), 0, 120), 'uid' => preg_match('/^u_[a-f0-9]+$/', (string) ($x['uid'] ?? '')) ? (string) $x['uid'] : '']; }
+    if (!$to) fail(400, 'invalid_argument', 'Pick at least one person with a valid email.');
+    if (throttleHit('jobsend:' . $u['id'], 500, 3600)) fail(429, 'rate_limited', 'That is a lot of emails for one hour. Try again later.');
+    $link = siteUrl() . '#/careers/' . $id; $facts = implode(' · ', array_values(array_filter([(string) ($job->loc ?? ''), (string) ($job->ty ?? ''), (string) ($job->md ?? '')])));
+    $desc = trim((string) ($job->d ?? '')); if (mb_strlen($desc) > 900) $desc = mb_substr($desc, 0, 900) . '…';
+    $sent = []; $failed = []; $now = now();
+    foreach ($to as $r) {
+      $paras = array_values(array_filter([($r['n'] !== '' ? 'Hi ' . explode(' ', $r['n'])[0] . ',' : 'Hello,'), $msg !== '' ? $msg : "We have an opening that may fit you: {$job->ti}.", $job->ti . ($facts !== '' ? ' (' . $facts . ')' : ''), !empty($job->sk) ? 'Skills: ' . $job->sk : '', $desc]));
+      $text = ($r['n'] !== '' ? "Hi {$r['n']},\n\n" : '') . ($msg !== '' ? $msg . "\n\n" : '') . "{$job->ti}" . ($facts !== '' ? " ($facts)" : '') . "\n" . (!empty($job->sk) ? "Skills: {$job->sk}\n" : '') . "\n$desc\n\nView and apply: $link\n\n{$u['name']}, StratEdge IT Consulting";
+      $okm = sendMail($r['e'], $r['n'], $subject, $text, emailHtml($job->ti, $paras, ['View and apply', $link], 'Sent by ' . $u['name'] . ' at StratEdge IT Consulting. Reply to this email to reach them.'), [], $u['email']);
+      if ($okm) $sent[] = $r['e']; else $failed[] = $r['e'];
+      if ($r['uid'] !== '') { // portal members also see it under "Sent to you" in their portal
+        docSet("u/{$r['uid']}/jobs/$id", (object) ['ti' => $job->ti, 'loc' => $job->loc ?? '', 'ty' => $job->ty ?? '', 'md' => $job->md ?? '', 'sk' => $job->sk ?? '', 'at' => $now, 'by' => $u['id'], 'byn' => $u['name'], 'msg' => $msg, 'mailed' => (bool) $okm]);
+      }
+    }
+    $log = (array) ($job->sent ?? []); $log[] = (object) ['t' => $now, 'by' => $u['id'], 'byn' => $u['name'], 'n' => count($sent), 'to' => array_slice(array_map(fn($r) => $r['n'] !== '' ? $r['n'] : $r['e'], $to), 0, 40), 'failed' => count($failed)];
+    $job->sent = array_slice($log, -50); $job->sentN = (int) ($job->sentN ?? 0) + count($sent); docSet("org/site/jobs/$id", $job);
+    ok(['sent' => count($sent), 'failed' => $failed]);
+  }
+  case 'public_share': {
+    if (throttleHit('share:' . clientIp(), (int) (cfg('public_forms_per_hour') ?: 20), 3600)) fail(429, 'rate_limited', 'Too many shares from this network. Copy the link instead.');
+    $id = str($b, 'id', 40); if (!preg_match('/^[A-Za-z0-9_\-]+$/', $id)) fail(400, 'invalid_argument', 'Bad job.'); $job = docGet("org/site/jobs/$id"); if (!$job || ($job->open ?? true) === false) fail(404, 'not_found', 'That job is no longer open.');
+    $toE = strtolower(str($b, 'to_e', 190)); $toN = str($b, 'to_n', 120); $fromN = str($b, 'from_n', 120); $fromE = strtolower(str($b, 'from_e', 190)); $msg = str($b, 'msg', 1000);
+    if (!filter_var($toE, FILTER_VALIDATE_EMAIL) || $fromN === '') fail(400, 'invalid_argument', 'Add your name and a valid email address for the person.');
+    $link = siteUrl() . '#/careers/' . $id; $facts = implode(' · ', array_values(array_filter([(string) ($job->loc ?? ''), (string) ($job->ty ?? ''), (string) ($job->md ?? '')])));
+    $paras = array_values(array_filter([($toN !== '' ? "Hi $toN," : 'Hello,'), "$fromN thought this role at StratEdge IT Consulting might fit you" . ($msg !== '' ? ":\n\n\"$msg\"" : '.'), $job->ti . ($facts !== '' ? ' (' . $facts . ')' : ''), !empty($job->sk) ? 'Skills: ' . $job->sk : '']));
+    $okm = sendMail($toE, $toN, "$fromN shared a job with you: {$job->ti}", ($toN !== '' ? "Hi $toN,\n\n" : '') . "$fromN thought this role might fit you" . ($msg !== '' ? ":\n\"$msg\"" : '.') . "\n\n{$job->ti}" . ($facts !== '' ? " ($facts)" : '') . "\n\nView and apply: $link", emailHtml($job->ti, $paras, ['View and apply', $link], 'Shared through the StratEdge Careers page.'), [], filter_var($fromE, FILTER_VALIDATE_EMAIL) ? $fromE : '');
+    $job->shares = (int) ($job->shares ?? 0) + 1; docSet("org/site/jobs/$id", $job);
+    ok(['mailed' => (bool) $okm]);
+  }
+
   /* ---------- job portals: resume matching for consultants, portal accounts and scrape runs for staff ---------- */
   case 'jobs_me': { $u = requireUser(); ok(jobsCall('GET', '/consultants/' . rawurlencode($u['id']))); }
   case 'jobs_prefs': {

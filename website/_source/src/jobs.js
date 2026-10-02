@@ -42,7 +42,7 @@ function JobRow({ j, onState, onPublish, busy }) {
       <div className="actions" style=${{ justifyContent: 'flex-end' }}>
         <button className="btn ghost sm" type="button" onClick=${() => setOpen(o => !o)}>${open ? 'Hide' : 'Details'}</button>
         <a className="btn ghost sm" href=${j.url} target="_blank" rel="noopener noreferrer">Open on ${portalName(j.portal)}</a>
-        ${onPublish && (j.published ? html`<a className="btn ghost sm" href=${'#/careers/g' + j.id} target="_blank" rel="noopener"><${Icon} n="check" />On Careers</a><button className="btn ghost sm" type="button" disabled=${busy} onClick=${() => onPublish(j, false)}>Remove</button>` : html`<button className="btn sm" type="button" disabled=${busy} onClick=${() => onPublish(j, true)}><${Icon} n="mega" />Publish to Careers</button>`)}
+        ${onPublish && (j.published ? html`<a className="btn ghost sm" href=${'#/careers/g' + j.id} target="_blank" rel="noopener"><${Icon} n="check" />On Careers</a><${SendJobButton} jobId=${'g' + j.id} small=${true} /><button className="btn ghost sm" type="button" disabled=${busy} onClick=${() => onPublish(j, false)}>Remove</button>` : html`<button className="btn sm" type="button" disabled=${busy} onClick=${() => onPublish(j, true)}><${Icon} n="mega" />Publish to Careers</button>`)}
         ${onState && html`<${Fragment}>
           ${j.state !== 'saved' && j.state !== 'applied' && html`<button className="btn sm" type="button" disabled=${busy} onClick=${() => onState(j, 'saved')}><${Icon} n="star" />Save</button>`}
           ${j.state !== 'applied' && html`<button className="btn ghost sm" type="button" disabled=${busy} onClick=${() => onState(j, 'applied')}><${Icon} n="check" />Applied</button>`}
@@ -67,14 +67,17 @@ function JobsPage() {
   const [tab, setTab] = useState('new');
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
+  const sentToMe = useCol(P.prof ? `u/${P.uid}/jobs` : null, 'at:desc');
   const me = useJobsApi('jobs_me');
   const m = useJobsApi('jobs_matches&state=' + tab);
   if (!P.prof) return html`<${NeedProfile} />`;
-  if (me.error) return html`<${JobsOffline} error=${me.error} />`;
+  const sentPanel = html`<${SentToMe} docs=${sentToMe.docs} loading=${sentToMe.loading} />`;
+  if (tab === 'sent') return html`<div className="stack"><${JobsTabs} tab=${tab} setTab=${setTab} counts=${{ sent: sentToMe.docs.length }} />${sentPanel}</div>`;
+  if (me.error) return html`<div className="stack"><${JobsOffline} error=${me.error} />${sentToMe.docs.length ? html`<${JobsTabs} tab="sent" setTab=${setTab} counts=${{ sent: sentToMe.docs.length }} />${sentPanel}` : ''}</div>`;
   if (!me.data) return html`<${Spinner} label="Checking your matches…" />`;
   const c = me.data.consultant;
-  if (!c || !c.has_resume) return html`<div className="panel"><${Empty} title="Upload your resume to see matched jobs" action=${html`<a className="btn" href="#/portal/resume">Upload resume</a>`}>
-    Jobs from Dice, LinkedIn, Indeed and Monster are collected every few hours and ranked against the skills, titles and location in your resume.<//></div>`;
+  if (!c || !c.has_resume) return html`<div className="stack">${sentToMe.docs.length ? html`<${JobsTabs} tab="sent" setTab=${setTab} counts=${{ sent: sentToMe.docs.length }} />${sentPanel}` : ''}<div className="panel"><${Empty} title="Upload your resume to see matched jobs" action=${html`<a className="btn" href="#/portal/resume">Upload resume</a>`}>
+    Jobs from Dice, LinkedIn, Indeed and Monster are collected every few hours and ranked against the skills, titles and location in your resume.<//></div></div>`;
   const setState = async (j, state) => {
     setBusy(true);
     try { await api('jobs_mark', { job_id: j.id, state }); toast(state === 'saved' ? 'Saved. Find it under Saved.' : state === 'applied' ? 'Marked as applied.' : state === 'dismissed' ? 'Dismissed.' : 'Restored.'); m.reload(); me.reload(); }
@@ -91,11 +94,11 @@ function JobsPage() {
       <a href="#/portal/jobs" onClick=${e => { e.preventDefault(); setTab('new'); }}><b>${counts.new || 0}</b><span>New matches</span></a>
       <a href="#/portal/jobs" onClick=${e => { e.preventDefault(); setTab('saved'); }}><b>${counts.saved || 0}</b><span>Saved</span></a>
       <a href="#/portal/jobs" onClick=${e => { e.preventDefault(); setTab('applied'); }}><b>${counts.applied || 0}</b><span>Applied</span></a>
-      <a href="#/portal/resume"><b>${(c.profile && c.profile.skills ? c.profile.skills.length : 0)}</b><span>Skills on your resume</span></a>
+      <a href="#/portal/jobs" onClick=${e => { e.preventDefault(); setTab('sent'); }}><b>${sentToMe.docs.length}</b><span>Sent to you by StratEdge</span></a>
     </div>
     <div className="note info"><span>Matched from your resume <b>${c.resume_name}</b>${c.profile && c.profile.titles && c.profile.titles.length ? ` as ${c.profile.titles.slice(0, 2).join(' / ')}` : ''}${c.profile && c.profile.location ? ` near ${c.profile.location}` : ''}. ${last ? `Last job collection ${fmtTs(last.finished_at || last.started_at)}${last.jobs_new ? `, ${last.jobs_new} new jobs` : ''}.` : 'The first job collection has not run yet.'}</span>
       <div className="actions"><a className="btn ghost sm" href="#/portal/resume">Edit resume & preferences</a><button className="btn ghost sm" type="button" disabled=${busy} onClick=${refresh}><${Icon} n="refresh" />Refresh matches</button></div></div>
-    <div className="tabs" role="tablist">${Object.entries(MATCH_STATES).map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className="chip">${counts[k] || 0}</span></button>`)}</div>
+    <${JobsTabs} tab=${tab} setTab=${setTab} counts=${{ ...counts, sent: sentToMe.docs.length }} />
     <div className="toolbar"><input style=${{ maxWidth: 360 }} type="search" placeholder="Filter by title, company or location" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Filter jobs" /></div>
     ${m.error ? html`<${JobsOffline} error=${m.error} />` : m.loading ? html`<${Spinner} />` : list.length ? html`<div className="matches">${list.map(j => html`<${JobRow} key=${j.id} j=${j} onState=${setState} busy=${busy} />`)}</div>`
       : html`<div className="panel"><${Empty} title=${tab === 'new' ? (ql ? 'No matches for that filter' : 'No new matches yet') : `Nothing under ${MATCH_STATES[tab]}`}>${tab === 'new' && !ql ? 'Jobs are collected every few hours. Add more titles or locations under Resume & preferences to widen the search.' : ''}<//></div>`}
@@ -426,4 +429,79 @@ function PortalLoginCard({ p, reload }) {
         : html`<button className=${'btn sm' + (acct.status === 'ok' ? ' ghost' : '')} disabled=${busy} onClick=${start}>${acct.status === 'ok' ? 'Log in again' : 'Log in to ' + p.name}</button>${acct.status === 'ok' && html`<button className="btn ghost sm" disabled=${busy} onClick=${logout}>Log out</button>`}`}
     </div>
   </div>`;
+}
+
+/* ---------- consultant: jobs StratEdge sent directly ---------- */
+const JobsTabs = ({ tab, setTab, counts }) => html`<div className="tabs" role="tablist">${[...Object.entries(MATCH_STATES), ['sent', 'Sent to you']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'sent' && counts.sent ? ' amber' : '')}>${counts[k] || 0}</span></button>`)}</div>`;
+function SentToMe({ docs, loading }) {
+  if (loading) return html`<${Spinner} />`;
+  if (!docs.length) return html`<div className="panel"><${Empty} title="Nothing sent to you yet">When a StratEdge recruiter sends you a role, it appears here and in your email.<//></div>`;
+  return html`<div className="matches">${docs.map(j => html`<div key=${j.id} className="match">
+    <div style=${{ minWidth: 0 }}><h3><a href=${'#/careers/' + j.id}>${j.ti}</a></h3>
+      <div className="muted">${[j.loc, j.ty, j.md].filter(Boolean).join(' · ')}</div>
+      <div className="reasons">Sent by ${j.byn || 'StratEdge'} ${fmtTs(j.at)}${j.msg ? html`<br /><i>“${j.msg}”</i>` : ''}</div>
+      ${j.sk && html`<div className="meta">${j.sk.split(/,\s*/).filter(Boolean).slice(0, 8).map(s => html`<${Chip} key=${s}>${s}<//>`)}</div>`}</div>
+    <div className="actions" style=${{ justifyContent: 'flex-end' }}><a className="btn sm" href=${'#/careers/' + j.id}>View and apply</a><${ShareButton} job=${j} small=${true} /></div>
+  </div>`)}</div>`;
+}
+
+/* ---------- staff: send a Careers job to people by email ---------- */
+function SendJobButton({ jobId, job, small, label }) {
+  const [open, setOpen] = useState(false);
+  return html`<${Fragment}><button type="button" className=${'btn' + (small ? ' sm' : '')} onClick=${() => setOpen(true)}><${Icon} n="send" />${label || 'Send to people'}</button>
+    ${open && html`<${SendJobModal} jobId=${jobId || job.id} onClose=${() => setOpen(false)} />`}<//>`;
+}
+const RECIP_GROUPS = [['portal', 'Portal consultants'], ['rec', 'Recruiting database'], ['ats', 'Candidates (ATS)'], ['other', 'Other emails']];
+function SendJobModal({ jobId, onClose }) {
+  const P = usePortal(); const toast = useToast();
+  const jd = useDoc(`org/site/jobs/${jobId}`);
+  const rec = useJobsApi('job_recipients');
+  const [grp, setGrp] = useState('portal'); const [q, setQ] = useState('');
+  const [picked, setPicked] = useState({}); const [other, setOther] = useState('');
+  const [subject, setSubject] = useState(''); const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false); const [done, setDone] = useState(null);
+  const job = jd.data;
+  useEffect(() => { if (job && !subject) { setSubject(`Job opportunity: ${job.ti} at StratEdge IT Consulting`); setMsg(`We have an opening that looks like a fit for you: ${job.ti}${job.loc ? ' in ' + job.loc : ''}${job.ty ? ' (' + job.ty + ')' : ''}. Take a look and apply if you are interested, or reply to this email with any questions.`); } }, [job]);
+  if (jd.loading) return html`<${Modal} title="Send job" onClose=${onClose}><${Spinner} /><//>`;
+  if (!job) return html`<${Modal} title="Send job" onClose=${onClose}><p className="muted">This job is no longer on the Careers page.</p><//>`;
+  const groups = rec.data || { portal: [], rec: [], ats: [] };
+  const key = (g, x) => g + ':' + (x.uid || x.id || x.e);
+  const list = (groups[grp] || []).filter(x => { const ql = q.trim().toLowerCase(); return !ql || [x.n, x.e, x.ti, x.loc, x.sk].filter(Boolean).join(' ').toLowerCase().includes(ql); });
+  const toggle = (g, x) => setPicked(p => { const k = key(g, x); const n = { ...p }; if (n[k]) delete n[k]; else n[k] = { n: x.n, e: x.e, uid: x.uid || '' }; return n; });
+  const allVisible = () => setPicked(p => { const n = { ...p }; list.forEach(x => { n[key(grp, x)] = { n: x.n, e: x.e, uid: x.uid || '' }; }); return n; });
+  const extra = other.split(/[,;\s]+/).map(e => e.trim()).filter(e => /^\S+@\S+\.\S+$/.test(e)).map(e => ({ n: '', e }));
+  const recipients = [...Object.values(picked), ...extra];
+  const send = async () => {
+    if (!recipients.length) { toast('Pick at least one person or type an email address.', true); return; }
+    setBusy(true);
+    try { const r = await api('job_send', { id: jobId, to: recipients, subject, message: msg }); setDone(r); toast(`Sent to ${r.sent} ${r.sent === 1 ? 'person' : 'people'}.`); }
+    catch (e) { toast(errText(e), true); }
+    setBusy(false);
+  };
+  const sentLog = (job.sent || []).slice().reverse();
+  const foot = done ? html`<button className="btn" onClick=${onClose}>Done</button>` : html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy || !recipients.length} onClick=${send}><${Icon} n="send" />${busy ? 'Sending…' : `Send to ${recipients.length || ''} ${recipients.length === 1 ? 'person' : 'people'}`}</button>`;
+  return html`<${Modal} wide title=${'Send: ' + job.ti} onClose=${onClose} foot=${foot}>
+    ${done ? html`<div className="stack">
+        <div className="note ok"><span><b>Sent to ${done.sent} ${done.sent === 1 ? 'person' : 'people'}.</b> Each email has the job details and a "View and apply" button; replies come to ${P.caps.me.email}. Portal consultants also see it under Matched jobs › Sent to you.</span></div>
+        ${done.failed.length ? html`<div className="note red"><span>Could not deliver to: ${done.failed.join(', ')}. Check the outgoing mail settings in api/config.php (storage/mail.log has details).</span></div>` : ''}
+      </div>`
+      : html`<div className="g2" style=${{ alignItems: 'start' }}>
+      <div className="stack" style=${{ gap: 10 }}>
+        <div className="tabs" role="tablist" style=${{ marginBottom: 0 }}>${RECIP_GROUPS.map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${grp === k} className=${grp === k ? 'on' : ''} onClick=${() => setGrp(k)}>${v}${k !== 'other' ? html`<span className="chip">${(groups[k] || []).length}</span>` : ''}</button>`)}</div>
+        ${grp === 'other' ? html`<${Field} label="Email addresses" hint="Comma- or line-separated. Anyone: vendors, referrals, past candidates."><textarea value=${other} onInput=${e => setOther(e.target.value)} rows="5" placeholder="name@example.com, other@example.com" /><//>`
+          : html`<${Fragment}>
+            <div className="toolbar" style=${{ margin: 0 }}><input type="search" placeholder="Search name, email, title, skills" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search people" />${list.length > 1 && html`<button className="btn ghost sm" type="button" onClick=${allVisible}>Select all ${list.length}</button>`}</div>
+            <div className="picklist">${rec.loading && !rec.data ? html`<${Spinner} />` : list.length ? list.map(x => { const k = key(grp, x); return html`<label key=${k} className=${'pick' + (picked[k] ? ' on' : '')}><input type="checkbox" checked=${!!picked[k]} onChange=${() => toggle(grp, x)} /><span><b>${x.n || x.e}</b><small>${[x.e, x.ti, x.loc, x.st].filter(Boolean).join(' · ')}</small></span></label>`; })
+              : html`<p className="muted small" style=${{ padding: 10 }}>${grp === 'portal' ? 'No approved consultants with an email yet.' : grp === 'rec' ? 'No consultants with an email in the recruiting database.' : 'No candidates with an email in the ATS.'}</p>`}</div>
+          <//>`}
+        ${recipients.length ? html`<div className="meta" style=${{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>${recipients.slice(0, 12).map(r => html`<${Chip} key=${r.e} s="ok">${r.n || r.e}<//>`)}${recipients.length > 12 ? html`<span className="muted small">+${recipients.length - 12} more</span>` : ''}</div>` : ''}
+      </div>
+      <div className="form">
+        <${Field} label="Subject"><input value=${subject} onInput=${e => setSubject(e.target.value)} /><//>
+        <${Field} label="Message" hint="The job title, location, engagement, skills, description and a View-and-apply link are added below your message."><textarea value=${msg} onInput=${e => setMsg(e.target.value)} rows="6" /><//>
+        <dl className="kv small"><dt>Job</dt><dd>${job.ti}${job.loc ? ', ' + job.loc : ''}</dd><dt>Link</dt><dd><a href=${'#/careers/' + jobId} target="_blank" rel="noopener">${jobLink(jobId)}</a></dd><dt>Replies go to</dt><dd>${P.caps.me.email}</dd></dl>
+        ${sentLog.length ? html`<details><summary className="muted small">Sent before (${job.sentN || 0} ${job.sentN === 1 ? 'person' : 'people'})</summary><ul className="list small">${sentLog.slice(0, 8).map((s, i) => html`<li key=${i}><div><div className="t">${s.n} by ${s.byn}, ${fmtTs(s.t)}</div><div className="m">${(s.to || []).join(', ')}</div></div></li>`)}</ul></details>` : ''}
+      </div>
+    </div>`}
+  <//>`;
 }

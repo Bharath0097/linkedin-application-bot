@@ -34,9 +34,11 @@ This repository now holds two things that work together:
 - **Publish to Careers.** Any grabbed or collected job can be posted to the website's Careers page with one click (and removed again). Published jobs show their source in Admin › Website › Job openings.
 - Extra boards can be added without editing the registry: `JOBSERVER_EXTRA_PORTALS=package.module:ClassName` (see `tests/fakeboard.py` for the minimal shape).
 
-### Careers page: share a particular job
+### Careers: send and share jobs
 
-Every open role on `#/careers` has its own page (`#/careers/<id>`) and a **Share** button: copy the link, share to LinkedIn, WhatsApp, X, Facebook or email, or use the device's share sheet on phones. The shared link opens the job with its Apply button. Staff get the same Share button in Admin › Website › Job openings.
+- **Send to people** (Admin › Website › Job openings, and on published jobs in the Job grabber): pick portal consultants, people in the recruiting database, ATS candidates or type any email addresses, edit the subject and message, and send. Each person gets an email with the job details and a *View and apply* button; replies go to the sender. Portal consultants also see the job under *Matched jobs › Sent to you*. The job keeps a log of who it was sent to and shows "Sent to N" in the table.
+- **Share**: every open role on `#/careers` has its own page (`#/careers/<id>`) and a Share button: copy the link, share to LinkedIn, WhatsApp, X, Facebook or email, use the phone's share sheet, or email the job to someone straight from the page (no login needed, throttled per network).
+- The Careers page itself has search and location / engagement / work-mode filters, posted dates and a *New* badge for roles under a week old.
 
 ### Separate logins
 

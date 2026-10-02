@@ -611,12 +611,12 @@ function AdminWebsite({ q }) {
         : html`<${Empty} title="Inbox is empty">Messages from the Contact and Careers pages land here.<//>`}
     </section>`}
     ${tab === 'jobs' && html`<${Fragment}>
-      <div className="toolbar"><p className="muted small">Open jobs appear on the website's Careers page.</p><div className="push"><button className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Post a job</button></div></div>
+      <div className="toolbar"><p className="muted small">Open jobs appear on the website's Careers page. "Send" emails a job to chosen consultants, candidates or any address; "Share" copies a link or posts it.</p><div className="push"><button className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Post a job</button></div></div>
       <section className="panel" style=${{ padding: '6px 8px' }}>
         ${jobs.loading ? html`<${Spinner} />` : jobs.docs.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Role</th><th>Location</th><th>Engagement</th><th>Status</th><th /></tr></thead>
           <tbody>${jobs.docs.map(j => html`<tr key=${j.id}><td><b style=${{ fontWeight: 600 }}>${j.ti}</b>${j.sk ? html`<div className="muted small">${j.sk}</div>` : ''}${j.src ? html`<div className="muted small">Grabbed from ${j.src.portal ? j.src.portal[0].toUpperCase() + j.src.portal.slice(1) : 'a portal'}${j.src.company ? ', ' + j.src.company : ''}</div>` : ''}</td><td>${j.loc || '—'}${j.md ? html`<div className="muted small">${j.md}</div>` : ''}</td><td>${j.ty}</td>
-            <td>${j.open !== false ? html`<${Chip} s="ok">Open<//>` : html`<${Chip}>Closed<//>`}</td>
-            <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>${j.open !== false && html`<${ShareButton} job=${j} small=${true} />`}<button className="btn ghost sm" onClick=${() => setEdit(j)}>Edit</button><button className="btn ghost sm icon" aria-label=${'Delete ' + j.ti} onClick=${() => delJob(j)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
+            <td>${j.open !== false ? html`<${Chip} s="ok">Open<//>` : html`<${Chip}>Closed<//>`}${j.sentN ? html`<div className="muted small">Sent to ${j.sentN}</div>` : ''}${j.shares ? html`<div className="muted small">Shared ${j.shares}×</div>` : ''}</td>
+            <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>${j.open !== false && html`<${SendJobButton} jobId=${j.id} small=${true} label="Send" /><${ShareButton} job=${j} small=${true} />`}<button className="btn ghost sm" onClick=${() => setEdit(j)}>Edit</button><button className="btn ghost sm icon" aria-label=${'Delete ' + j.ti} onClick=${() => delJob(j)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
           : html`<${Empty} title="No jobs posted" action=${html`<button className="btn" onClick=${() => setEdit(null)}>Post your first job</button>`}>Roles you post here show on the Careers page with an Apply button.<//>`}
       </section>
     <//>`}
