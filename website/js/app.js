@@ -3045,7 +3045,16 @@ function useJobsApi(route, deps) {
 function JobsOffline({ error }) {
   const P = usePortal();
   const code = error && error.code;
-  return html`<div className=${'note ' + (code === 'jobs_offline' ? 'amber' : 'red')}><span><b>${code === 'jobs_offline' ? 'Job matching is not running right now.' : 'Job matching hit a problem.'}</b> ${error ? error.message : ''}${P.isAdmin ? html` Set <code>jobs_url</code> and <code>jobs_key</code> in api/config.php and start the job server with <code>python -m jobserver</code>.` : ' StratEdge has been notified; your timesheets and other pages work as usual.'}</span></div>`;
+  const chk = useJobsApi(P.isAdmin && code === 'jobs_offline' ? 'jobs_check' : 'me');
+  const c = P.isAdmin && code === 'jobs_offline' ? chk.data : null;
+  return html`<div className="stack" style=${{ gap: 10 }}>
+    <div className=${'note ' + (code === 'jobs_offline' ? 'amber' : 'red')}><span><b>${code === 'jobs_offline' ? 'Job matching is not running right now.' : 'Job matching hit a problem.'}</b> ${error ? error.message : ''}${P.isAdmin ? '' : ' Your timesheets and other pages work as usual; StratEdge has been told.'}</span>
+      ${P.isAdmin && code === 'jobs_offline' ? html`<div className="actions"><button className="btn sm" type="button" disabled=${chk.loading} onClick=${chk.reload}><${Icon} n="refresh" />${chk.loading ? 'Checking…' : 'Check again'}</button></div>` : ''}</div>
+    ${c && html`<section className="panel stack" style=${{ gap: 8 }}><h3 className="ph">Connection check</h3>
+      <dl className="kv small"><dt>Job server address</dt><dd><code>${c.url || '(empty)'}</code> <span className="muted">jobs_url in api/config.php</span></dd><dt>Reachable</dt><dd>${c.ok ? html`<${Chip} s="ok">Yes, version ${c.version}<//>` : html`<${Chip} s="red">No<//>`}</dd>${c.ok && html`<dt>API key</dt><dd>${c.key_ok ? html`<${Chip} s="ok">Accepted<//>` : html`<${Chip} s="red">Refused<//>`}</dd>`}${c.error && html`<dt>Problem</dt><dd>${c.error}</dd>`}</dl>
+      ${c.hints && c.hints.length ? html`<ul className="list small">${c.hints.map((h, i) => html`<li key=${i}><div>${h}</div></li>`)}</ul>` : ''}
+      <p className="muted small" style=${{ margin: 0 }}><b>Where to run the job server.</b> It is the Python service from the repository (<code>python -m jobserver</code>). Run it on the same server as the site when you have shell access or a VPS, through cPanel › Setup Python App on shared hosting (resume matching and LinkedIn public search; no browser logins), or on any PC or small cloud VM with the address put in jobs_url. The README in the repository walks through each option.</p></section>`}
+  </div>`;
 }
 
 const ScoreMeter = ({ n }) => html`<span className="score" title=${'Match score ' + n + ' of 100'}><i style=${{ '--w': Math.max(4, n) + '%' }} /><b>${n}</b></span>`;

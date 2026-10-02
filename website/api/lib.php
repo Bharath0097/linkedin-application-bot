@@ -303,7 +303,7 @@ function touchSeen(?array $u): void {
 /* ---------- job-portal server (python -m jobserver) ---------- */
 function jobsUrl(): string { return rtrim((string) cfg('jobs_url'), '/'); }
 function jobsCall(string $method, string $path, $body = null, ?array $file = null, int $timeout = 30): array {
-  $base = jobsUrl(); if ($base === '') fail(503, 'jobs_offline', 'The job server is not configured. Set jobs_url in api/config.php and start it with "python -m jobserver".');
+  $base = jobsUrl(); if ($base === '') fail(503, 'jobs_offline', 'The job server address (jobs_url in api/config.php) is empty.');
   if (!function_exists('curl_init')) fail(503, 'jobs_offline', 'PHP cURL is required to talk to the job server.');
   $headers = ['X-Api-Key: ' . (string) cfg('jobs_key'), 'Accept: application/json'];
   $ch = curl_init($base . $path);
@@ -313,9 +313,9 @@ function jobsCall(string $method, string $path, $body = null, ?array $file = nul
   $opts[CURLOPT_HTTPHEADER] = $headers;
   curl_setopt_array($ch, $opts);
   $raw = curl_exec($ch); $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE); $err = curl_error($ch); curl_close($ch);
-  if ($raw === false || $status === 0) { @error_log(date('c') . " jobserver unreachable: $err\n", 3, dirname(__DIR__) . '/storage/error.log'); fail(503, 'jobs_offline', 'The job server did not answer. Start it on the server with "python -m jobserver" (see README).'); }
+  if ($raw === false || $status === 0) { @error_log(date('c') . " jobserver unreachable: $err\n", 3, dirname(__DIR__) . '/storage/error.log'); fail(503, 'jobs_offline', 'The job server at ' . $base . ' did not answer' . ($err !== '' ? ' (' . $err . ')' : '') . '.'); }
   $j = json_decode((string) $raw, true); if (!is_array($j)) $j = ['detail' => trim((string) $raw)];
-  if ($status === 401) fail(503, 'jobs_offline', 'The job server refused the API key. Make jobs_key in api/config.php equal to JOBSERVER_API_KEY.');
+  if ($status === 401) fail(503, 'jobs_offline', 'The job server at ' . $base . ' refused the API key: jobs_key in api/config.php must equal JOBSERVER_API_KEY on the job server.');
   if ($status >= 400) fail($status >= 500 ? 502 : 400, 'jobs_error', (string) ($j['detail'] ?? 'The job server rejected the request.'));
   return $j;
 }

@@ -417,6 +417,25 @@ anthropic-version: 2023-06-01
   }
   case 'jobs_rematch': { $u = requireUser(); ok(jobsCall('POST', '/consultants/' . rawurlencode($u['id']) . '/rematch')); }
   case 'jobs_job': { requireUser(); ok(jobsCall('GET', '/jobs/' . (int) ($_GET['id'] ?? 0))); }
+  case 'jobs_check': {
+    requireAdmin(); $base = jobsUrl(); $out = ['url' => $base, 'curl' => function_exists('curl_init'), 'ok' => false, 'status' => 0, 'error' => '', 'version' => '', 'key_ok' => null, 'hints' => []];
+    if ($base === '') { $out['error'] = 'jobs_url is empty in api/config.php.'; $out['hints'][] = 'Set jobs_url to the address of the job server, e.g. http://127.0.0.1:8765 when it runs on this same server, or https://jobs.yourdomain.com when it runs elsewhere.'; ok($out); }
+    if (!$out['curl']) { $out['error'] = 'PHP cURL is not available on this host.'; $out['hints'][] = 'Ask the host to enable the curl extension for PHP.'; ok($out); }
+    $ch = curl_init($base . '/health'); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_CONNECTTIMEOUT => 5]); $raw = curl_exec($ch); $out['status'] = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE); $err = curl_error($ch); curl_close($ch);
+    if ($raw === false || $out['status'] === 0) {
+      $out['error'] = 'No answer from ' . $base . ($err !== '' ? ' (' . $err . ')' : '') . '.';
+      $host = (string) parse_url($base, PHP_URL_HOST);
+      if (in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) { $out['hints'][] = 'jobs_url points at this web server itself, so the job server must run on this same machine. On shared hosting that is only possible through cPanel > Setup Python App (see README.txt); otherwise run it on a VPS or office PC and put that address in jobs_url.'; }
+      else { $out['hints'][] = 'Check that the job server is running on ' . $host . ' with JOBSERVER_HOST=0.0.0.0, that its port is open in the firewall, and that this web host is allowed to make outgoing connections to it.'; }
+      $out['hints'][] = 'Details of each failed attempt are appended to storage/error.log.';
+      ok($out);
+    }
+    $j = json_decode((string) $raw, true); $out['ok'] = is_array($j) && !empty($j['ok']); $out['version'] = (string) ($j['version'] ?? '');
+    if (!$out['ok']) { $out['error'] = 'Something answered at ' . $base . ' but it is not the job server (HTTP ' . $out['status'] . ').'; $out['hints'][] = 'Make sure jobs_url is the job server address, not the website address.'; ok($out); }
+    $ch = curl_init($base . '/overview'); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_HTTPHEADER => ['X-Api-Key: ' . (string) cfg('jobs_key')]]); curl_exec($ch); $st = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+    $out['key_ok'] = $st === 200; if ($st === 401) { $out['error'] = 'The job server is running but refused the API key.'; $out['hints'][] = 'jobs_key in api/config.php must be exactly the JOBSERVER_API_KEY value in the job server\'s .env (restart the job server after changing it).'; }
+    ok($out);
+  }
   case 'jobs_admin': {
     $me = requireAdmin(); $src = $method === 'POST' ? $b : $_GET; $op = str($src, 'op', 20);
     switch ($op) {

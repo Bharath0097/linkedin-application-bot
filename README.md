@@ -48,6 +48,18 @@ The Log in page has three tabs: Consultant, Employee and Client (`#/login?as=con
 - **Employee portal** (StratEdge staff): attendance, timesheets, tasks, onboarding, documents and the recruiting workspace (consultants, RTRs, submissions, daily reports). Consultants never see the recruiting workspace.
 - Admin › Team lets you move a person between portals. Accounts created before this version are consultants; switch your internal staff to *Employee portal*.
 
+## Where to run the job server
+
+The website (PHP) and the job server (Python) are two programs. The portal shows **"Job matching is not running right now"** when the PHP side cannot reach the job server at `jobs_url`. Admins get a *Connection check* panel under that message with the exact address tried and the reason. Pick one of these setups:
+
+| Setup | What works | How |
+| --- | --- | --- |
+| **A. Same server as the website** (VPS, dedicated server, or any host with SSH and Python 3.10+) | Everything, including Dice/LinkedIn/Indeed/Monster logins when Firefox or Chrome is installed | Follow *Running the job server* below; keep `jobs_url = http://127.0.0.1:8765`. Use `deploy/jobserver.service` so it restarts with the machine. |
+| **B. Shared cPanel hosting** (no SSH service, but "Setup Python App" is available) | Resume matching, LinkedIn public search, keyword grabs on LinkedIn, sending and sharing jobs. No browser logins (Dice, Indeed, Monster) | cPanel › Setup Python App › Create: Python 3.10+, application root = a folder holding this repository, startup file `passenger_wsgi.py`, entry point `application`. Add `JOBSERVER_API_KEY` (and any other `JOBSERVER_*`) as environment variables there, run `pip install -r requirements.txt` from the app's virtualenv command shown in that screen, then set `jobs_url` to the app's URL (e.g. `https://jobs.yourdomain.com`). |
+| **C. Another machine** (office PC, small cloud VM) | Everything, including browser logins | Run it there with `JOBSERVER_HOST=0.0.0.0`, open the port (or put it behind HTTPS with a reverse proxy), and set `jobs_url` to that address. The web host must be allowed to make outgoing connections to it. |
+
+In every setup `jobs_key` in `website/api/config.php` must equal `JOBSERVER_API_KEY` on the job server.
+
 ## Running the job server
 
 ```bash

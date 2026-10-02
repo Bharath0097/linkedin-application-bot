@@ -160,6 +160,9 @@ def test_separate_logins_and_resume_matching(stack):
     assert cons.get("jobs_admin&op=overview").status_code == 403  # consultants cannot manage portal logins
     assert admin.post("jobs_admin", {"op": "account_delete", "id": aid}).json()["ok"]
     assert admin.get("jobs_admin&op=consultants").json()["consultants"][0]["uid"] == c["id"]
+    chk = admin.get("jobs_check").json()
+    assert chk["ok"] and chk["key_ok"] and chk["url"] == stack["jobs"] and chk["version"], chk
+    assert cons.get("jobs_check").status_code == 403
     assert admin.get("jobs_admin&op=runs").json()["runs"] == []
     del jdb
 
