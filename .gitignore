@@ -177,3 +177,10 @@ geckodriver.log
 # premium files
 angelco.py
 globalLogicCode.py
+
+# Website runtime data (SQLite database, uploads, logs) stays on the server
+website/storage/*.sqlite*
+website/storage/*.log
+website/storage/files/*
+!website/storage/files/.keep
+!website/storage/files/.htaccess
