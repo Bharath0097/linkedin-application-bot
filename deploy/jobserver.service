@@ -1,0 +1,18 @@
+# systemd unit for the StratEdge job-portal server.
+#   sudo cp deploy/jobserver.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now jobserver
+[Unit]
+Description=StratEdge job-portal server (Dice, LinkedIn, Indeed, Monster scraping and resume matching)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/linkedin-application-bot
+EnvironmentFile=/opt/linkedin-application-bot/.env
+ExecStart=/usr/bin/python3 -m jobserver
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
