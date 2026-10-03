@@ -380,7 +380,7 @@ function JobPortalsAdmin({ bench, tab: tab0 }) {
     ${tab === 'sources' && !bench && html`<${SourcesTab} reload=${ov.reload} />`}
     ${tab === 'runs' && html`<${RunsTab} o=${o} run=${run} onStart=${started} readOnly=${bench} />`}
     ${tab === 'jobs' && html`<${CollectedJobs} o=${o} onSubmit=${sub.onSubmit} bench=${bench} />`}
-    ${tab === 'consultants' && html`<${ConsultantMatches} onSubmit=${sub.onSubmit} />`}
+    ${tab === 'consultants' && html`<${ConsultantMatches} onSubmit=${sub.onSubmit} bench=${bench} />`}
     ${sub.modal}
   </div>`;
 }
@@ -508,7 +508,7 @@ function CollectedJobs({ o, onSubmit, bench }) {
   <//>`;
 }
 
-function ConsultantMatches({ onSubmit }) {
+function ConsultantMatches({ onSubmit, bench }) {
   const P = usePortal(); const toast = useToast();
   const r = useJobsApi('jobs_admin&op=consultants');
   const [open, setOpen] = useState(null); const [busy, setBusy] = useState(false);
@@ -519,7 +519,7 @@ function ConsultantMatches({ onSubmit }) {
   const nameOfC = c => c.name || (P.people[c.uid] && P.people[c.uid].name) || c.uid;
   const rematch = async () => { setBusy(true); try { const x = await api('jobs_admin', { op: 'rematch_all' }); toast(`Matches refreshed for ${x.people} ${x.people === 1 ? 'person' : 'people'}.`); r.reload(); } catch (e) { toast(errText(e), true); } setBusy(false); };
   return html`<${Fragment}>
-    <div className="toolbar" style=${{ justifyContent: 'flex-end' }}><button className="btn ghost sm" type="button" disabled=${busy} onClick=${rematch}><${Icon} n="refresh" />${busy ? 'Refreshing…' : 'Refresh all matches'}</button></div>
+    ${!bench && html`<div className="toolbar" style=${{ justifyContent: 'flex-end' }}><button className="btn ghost sm" type="button" disabled=${busy} onClick=${rematch}><${Icon} n="refresh" />${busy ? 'Refreshing…' : 'Refresh all matches'}</button></div>`}
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl">
         <thead><tr><th>Consultant</th><th>Resume</th><th>Matched as</th><th>Location</th><th className="r">New</th><th className="r">Saved</th><th className="r">Applied</th><th className="r"><span className="sr">Open</span></th></tr></thead>
@@ -620,7 +620,7 @@ function SubmitModal({ j, onClose, onDone }) {
   const nameOfC = c => c.name || (P.people[c.uid] && P.people[c.uid].name) || c.email || c.uid;
   const emailOk = !to.trim() || /^\S+@\S+\.\S+$/.test(to.trim());
   const ready = !!picked && !!rid && emailOk; // the anchor below must stay rendered while busy, or the click that opens the posting loses its target
-  const body = () => ({ job_id: j.id, uid, resume_id: +rid, to: to.trim(), note: note.trim() });
+  const body = () => ({ job_id: j.id, uid, resume_id: +rid, to: to.trim(), note: note.trim(), d: dkey() });
   const after = r => { toast(`Submitted ${nameOfC(picked)} for ${j.title}. Logged under RTRs & submissions${r.mailed ? ' and emailed to ' + (r.to || to.trim()) : ''}.`); onDone(r); };
   const fire = () => { if (!ready || busy) return; setBusy(true); api('jobs_apply', body()).then(after).catch(e => { toast(errText(e), true); setBusy(false); }); }; // not awaited: the anchor opens the posting meanwhile
   const quiet = async () => { if (!ready || busy) return; setBusy(true); try { after(await api('jobs_apply', body())); } catch (e) { toast(errText(e), true); setBusy(false); } };

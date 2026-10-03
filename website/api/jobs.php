@@ -1411,7 +1411,7 @@ function jobsAdmin(string $method, array $b): void {
 
 /* ---------- one-click apply: log the application, mark the match applied, email the resume to the posting's contact, and for bench recruiters log the submission ---------- */
 function jobsApply(array $b): void {
-  $me = requireUser(); $staff = userLevel($me) >= 2; $priv = $staff || isBench($me['id']);
+  $me = requireUser(); $staff = userLevel($me) >= 2; $priv = $staff || isBench($me['id']); session_write_close(); @set_time_limit(90);
   $uid = str($b, 'uid', 40); $kind = 'self';
   if ($uid !== '' && $uid !== $me['id']) { if (!$priv) fail(403, 'invalid_argument', 'Only StratEdge staff and bench sales recruiters can submit someone else.'); $kind = 'bench'; }
   else $uid = $me['id'];
@@ -1438,7 +1438,8 @@ function jobsApply(array $b): void {
   $tpl = trim((string) ($pref['apply_note'] ?? ''));
   if ($tpl === '') $tpl = "Hello,\n\nPlease consider {name} for the {job} role" . ($job['company'] !== '' ? ' at {company}' : '') . ". {name} is a {title} with {years} of experience in {skills}, based in {location}, available for {types}.\n\nThe resume is attached. Reply to this email to schedule a call.\n\n{signature}";
   $vars = ['name' => $cu['name'], 'title' => $title, 'job' => $job['title'], 'company' => $job['company'], 'years' => $years, 'skills' => $skills ? implode(', ', $skills) : $title, 'location' => $loc, 'types' => $typesText, 'phone' => $phone, 'email' => $email, 'signature' => $signature, 'recruiter' => $me['name']];
-  $text = jobApplyNote($tpl, $vars); if (!str_contains($tpl, '{signature}')) $text .= "\n\n" . $signature;
+  if ($kind === 'self' && $note !== '') $text = $note; // the consultant edited the note in the Apply dialog: send exactly that
+  else { $text = jobApplyNote($tpl, $vars); if (!str_contains($tpl, '{signature}')) $text .= "\n\n" . $signature; }
   // email, only when an address is known and the resume file is still there
   $mailed = false; $subject = 'Application: ' . $job['title'] . ' – ' . $cu['name'];
   if ($to !== '') {
@@ -1457,8 +1458,8 @@ function jobsApply(array $b): void {
   if ($m->fetchColumn()) $p->prepare('UPDATE job_matches SET state = ?, updated_at = ? WHERE uid = ? AND job_id = ?')->execute(['applied', $now, $uid, $jid]);
   else $p->prepare('INSERT INTO job_matches (uid, job_id, score, reasons, state, created_at, updated_at) VALUES (?,?,?,?,?,?,?)')->execute([$uid, $jid, 0, '[]', 'applied', $now, $now]);
   if ($kind === 'bench') { // the recruiting workspace sees it under RTRs & submissions
-    $nid = bin2hex(random_bytes(6)); $loc2 = (string) $job['location'];
-    docSet("rec/sub/items/$nid", (object) ['d' => date('Y-m-d'), 'cid' => '', 'cn' => $cu['name'], 'req' => $job['title'] . ($loc2 !== '' ? ', ' . $loc2 : ''), 'vn' => $job['company'] !== '' ? $job['company'] : (string) $job['pub'], 'vw' => (string) $job['url'], 'rn' => '', 'rp' => '', 're' => $to, 'ec' => '', 'mn' => '', 'mp' => '', 'mem' => '', 'rate' => '', 'rtr' => false, 'rtrAt' => '', 'st' => 'submitted', 'intv' => '',
+    $nid = bin2hex(random_bytes(6)); $loc2 = (string) $job['location']; $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($b['d'] ?? '')) ? (string) $b['d'] : date('Y-m-d'); // the recruiter's local day, like entries logged by hand
+    docSet("rec/sub/items/$nid", (object) ['d' => $day, 'cid' => '', 'cn' => $cu['name'], 'req' => $job['title'] . ($loc2 !== '' ? ', ' . $loc2 : ''), 'vn' => $job['company'] !== '' ? $job['company'] : (string) $job['pub'], 'vw' => (string) $job['url'], 'rn' => '', 'rp' => '', 're' => $to, 'ec' => '', 'mn' => '', 'mp' => '', 'mem' => '', 'rate' => '', 'rtr' => false, 'rtrAt' => '', 'st' => 'submitted', 'intv' => '',
       'notes' => 'One-click submit from the job grabber' . ($note !== '' ? ': ' . $note : ''), 'by' => $me['id'], 'byn' => $me['name'], 'at' => $now, 'u' => $now, 'un' => $me['name'], 'job_id' => $jid, 'app_id' => $appId]);
   }
   ok(['app' => jobAppOut(jobAppGet($appId), $priv), 'mailed' => $mailed, 'to' => $priv ? $to : '', 'url' => (string) $job['url'], 'counts' => jobMatchCounts($uid)]);

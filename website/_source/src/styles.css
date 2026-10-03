@@ -51,9 +51,10 @@
 
 /* ===== Base ===== */
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-/* overflow-x:clip (not hidden): hidden would turn <body> into a scroll container and position:sticky headers stop sticking in Chrome/Safari; clip only clips.
+/* overflow-x:clip on <body> only (not hidden, and not on <html>): hidden would turn <body> into a scroll container and position:sticky headers stop sticking in Chrome/Safari; clip only clips,
+   and leaving <html> visible lets body's overflow propagate to the viewport so the Modal scroll lock (body.style.overflow=hidden) keeps working.
    scrollbar-gutter keeps the centred layout from shifting 15px between pages with and without a scrollbar (Windows Chrome/Firefox) and when a modal locks scrolling. */
-html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%;overflow-x:clip;scrollbar-gutter:stable}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%;scrollbar-gutter:stable}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.55 var(--font);font-stretch:100%;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;min-height:100%;overflow-x:clip}
 img{max-width:100%;display:block}
@@ -897,7 +898,7 @@ main:focus{outline:none}
 .counters{display:flex;flex-wrap:wrap;gap:14px 44px}
 .counters .counter b{display:block;font-size:36px;font-weight:800;line-height:1;color:var(--navy)}
 .counters .counter span{font-size:13.5px;color:var(--ink-3)}
-/* no sideways wobble on phones; tidy stats band. (html/body use overflow-x:clip in the base block: overflow-x:hidden here made <body> a scroll container and the sticky header stopped sticking in Chrome and Safari.) */
+/* no sideways wobble on phones; tidy stats band. (<body> uses overflow-x:clip in the base block: overflow-x:hidden here made <body> a scroll container and the sticky header stopped sticking in Chrome and Safari.) */
 .site{overflow-x:clip}
 .edge-wrap{overflow:visible}
 @media (max-width:600px){.bot-ring,.sonar{display:none}}
@@ -977,7 +978,7 @@ main:focus{outline:none}
    Listed after the .site field rule because its `background:#fff` shorthand would clear the arrow image. */
 select:not([multiple]):not([size]),.site select:not([multiple]):not([size]){-webkit-appearance:none;appearance:none;padding-right:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237F8FAB' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px 16px}
 select::-ms-expand{display:none}
-.pswitch select{padding-right:30px;background-position:right 9px center}
+.pswitch select:not([multiple]):not([size]){padding-right:30px;background-position:right 9px center}
 .days input{-webkit-appearance:none;appearance:none}
 /* grid children default to min-width:auto and push the layout wider than the viewport when a long word, email or table sits inside */
 .g2>*,.g32>*,.form .row2>*,.form .row3>*,.foot .wrap>*,.contact>*,.staff>*,.hc>*,.why>*,.planner>*,.assist>*,.xp>*,.hero .wrap>*,.login>*,.tsline .top>*,.signer-row>*,.invline>*,.kv>*,.match>*,.job>*,.post>*,.portal,.plan,.ind,.benefit,.svc-card,.pillar{min-width:0}
