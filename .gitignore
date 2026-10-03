@@ -184,3 +184,7 @@ website/storage/*.log
 website/storage/files/*
 !website/storage/files/.keep
 !website/storage/files/.htaccess
+
+# The website ships plain-text files that the bot's *.txt rule would otherwise hide
+!website/README.txt
+!website/robots.txt

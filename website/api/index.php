@@ -19,7 +19,7 @@ $b = $method === 'POST' ? body() : [];
 
 switch ($r) {
   /* ---------- accounts ---------- */
-  case 'me': { $u = currentUser(); ok(['user' => $u ? publicUser($u) : null, 'portal' => $u ? portalOf($u['id']) : '', 'jobs' => true]); }
+  case 'me': { $u = currentUser(); ok(['user' => $u ? publicUser($u) : null, 'portal' => $u ? portalOf($u['id']) : '', 'bench' => $u ? isBench($u['id']) : false, 'jobs' => true]); }
   case 'register': {
     if (throttleHit('reg:' . clientIp(), 20, 3600)) fail(429, 'rate_limited', 'Too many sign-ups from this network. Try again later.');
     $name = str($b, 'name', 120); $email = strtolower(str($b, 'email', 190)); $pass = (string) ($b['password'] ?? '');
@@ -42,12 +42,12 @@ switch ($r) {
     if (!$u || !password_verify($pass, $u['pass'])) fail(401, 'invalid_login', 'That email and password don\'t match.');
     if ($u['status'] !== 'active') fail(403, 'disabled', 'This account is paused. Contact StratEdge HR.');
     throttleClear('login:' . $email);
-    // Separate logins: the consultant, employee and client login pages only accept accounts that belong to that portal.
+    // Separate logins: the consultant, employee, bench sales and client login pages only accept accounts that belong to that portal.
     // StratEdge staff (admin, HR, accounting) can sign in from any of them; accounts without a profile yet are not restricted.
     $as = str($b, 'as', 12); $portal = portalOf($u['id']); $staff = in_array($u['role'], ['admin', 'hr', 'acct'], true);
     if (!$staff && isset(PORTAL_NAMES[$as]) && $portal !== '' && PORTAL_NAMES[$portal] !== PORTAL_NAMES[$as]) {
-      $want = PORTAL_NAMES[$portal]; http_response_code(403);
-      echo json_encode(['error' => 'wrong_portal', 'portal' => $want, 'message' => 'This account belongs to the ' . $want . ' portal. Use the ' . $want . ' login instead.']); exit;
+      $want = PORTAL_NAMES[$portal]; $label = PORTAL_LABELS[$want] ?? $want; http_response_code(403);
+      echo json_encode(['error' => 'wrong_portal', 'portal' => $want, 'message' => 'This account belongs to the ' . $label . ' portal. Use the ' . $label . ' login instead.']); exit;
     }
     if (password_needs_rehash($u['pass'], PASSWORD_DEFAULT)) db()->prepare('UPDATE users SET pass = ? WHERE id = ?')->execute([password_hash($pass, PASSWORD_DEFAULT), $u['id']]);
     session_regenerate_id(true); $_SESSION['uid'] = $u['id'];
@@ -123,8 +123,11 @@ switch ($r) {
   case 'file': {
     $base = (string) ($_GET['base'] ?? ''); $id = (string) ($_GET['id'] ?? '');
     if (!validPath($base, true) || !preg_match('/^[a-f0-9]{32}$/', $id)) { http_response_code(404); exit('Not found'); }
-    $path = "$base/f/$id";
-    if (!can($path, 'r') && !tokenAllows($path, (string) ($_GET['tok'] ?? ''))) { http_response_code(404); exit('Not found'); }
+    $path = "$base/f/$id"; $allowed = can($path, 'r') || tokenAllows($path, (string) ($_GET['tok'] ?? ''));
+    if (!$allowed) { // recruiters (employees and bench sales) may download a consultant's resume so they can submit it
+      $cu = currentUser(); if ($cu && preg_match('/^u\/u_[a-f0-9]+$/', $base) && isRecruiter($cu['id'])) { $fd = docGet($path); $allowed = $fd && ($fd->c ?? '') === 'resume'; }
+    }
+    if (!$allowed) { http_response_code(404); exit('Not found'); }
     $d = docGet($path); $f = cfg('files_dir') . "/$id";
     if (!$d || !is_file($f)) { http_response_code(404); exit('Not found'); }
     $name = preg_replace('/[^A-Za-z0-9 ._()\-]/', '_', (string) ($d->n ?? 'file'));
@@ -392,8 +395,8 @@ anthropic-version: 2023-06-01
     ok(['mailed' => (bool) $okm]);
   }
 
-  /* ---------- job matching, built in (api/jobs.php): resume profiles, collected jobs, matches, sources ---------- */
-  case 'jobs_me': case 'jobs_prefs': case 'jobs_resume': case 'jobs_matches': case 'jobs_mark': case 'jobs_rematch': case 'jobs_job': case 'jobs_tick': case 'jobs_cron': case 'jobs_admin': {
+  /* ---------- job matching, built in (api/jobs.php): resume profiles (several per person), collected jobs, matches, one-click apply, sources ---------- */
+  case 'jobs_me': case 'jobs_prefs': case 'jobs_resume': case 'jobs_resumes': case 'jobs_resume_set': case 'jobs_resume_delete': case 'jobs_matches': case 'jobs_mark': case 'jobs_rematch': case 'jobs_job': case 'jobs_apply': case 'jobs_apps': case 'jobs_app_set': case 'jobs_tick': case 'jobs_cron': case 'jobs_admin': {
     require_once __DIR__ . '/jobs.php'; jobsRoute($r, $method, $b);
   }
 

@@ -66,7 +66,7 @@ function ServicesExplorer() {
   const [cur, setCur] = useState(SERVICES[0].s);
   const s = SERVICES.find(x => x.s === cur); const x = SERVICE_EXTRA[cur] || {};
   return html`<div className="xp">
-    <div className="xp-list" role="tablist" aria-label="Services">${SERVICES.map(v => html`<button key=${v.s} role="tab" aria-selected=${cur === v.s} className=${cur === v.s ? 'on' : ''} onClick=${() => setCur(v.s)}><${Icon} n=${SERVICE_ICON[v.s]} /><span>${v.n}</span></button>`)}</div>
+    <div className="xp-list" role="tablist" aria-label="Services">${SERVICES.map(v => html`<button type="button" key=${v.s} role="tab" aria-selected=${cur === v.s} className=${cur === v.s ? 'on' : ''} onClick=${() => setCur(v.s)}><${Icon} n=${SERVICE_ICON[v.s]} /><span>${v.n}</span></button>`)}</div>
     <div className="xp-detail" key=${cur}>
       <div className="xp-head"><span className="xp-ico"><${Icon} n=${SERVICE_ICON[cur]} /></span><div><h3>${s.n}</h3><p>${s.l}</p></div></div>
       <div className="xp-grid">
@@ -108,7 +108,7 @@ function TeamPlanner() {
       ${roles.length ? html`<ul className="list">${roles.map(([r, n]) => html`<li key=${r}><span>${r}</span><span className="qty"><button type="button" aria-label=${'Fewer ' + r} onClick=${() => bump(r, -1)}>−</button><b>${n}</b><button type="button" aria-label=${'More ' + r} onClick=${() => bump(r, 1)}>+</button></span></li>`)}</ul>` : html`<p className="muted small">Tap roles on the left. Add more than one person per role with the + button.</p>`}
       <div className="row2 form" style=${{ gap: 10 }}><${Field} label="Location"><input value=${f.loc} onInput=${e => setF({ ...f, loc: e.target.value })} placeholder="City, state or remote" /><//><${Field} label="Start"><input type="date" value=${f.sd} onInput=${e => setF({ ...f, sd: e.target.value })} /><//></div>
       <div className="row2 form" style=${{ gap: 10 }}><${Field} label="Engagement"><select value=${f.ty} onChange=${e => setF({ ...f, ty: e.target.value })}>${['C2C', 'W2', '1099', 'Contract-to-hire', 'Direct hire', 'SOW project team'].map(t => html`<option key=${t}>${t}</option>`)}</select><//><${Field} label="Work mode"><select value=${f.md} onChange=${e => setF({ ...f, md: e.target.value })}>${['Onsite', 'Hybrid', 'Remote'].map(t => html`<option key=${t}>${t}</option>`)}</select><//></div>
-      <button className="btn lg" style=${{ width: '100%' }} disabled=${!roles.length} onClick=${send}><${Icon} n="send" />Send this plan to StratEdge</button>
+      <button type="button" className="btn lg" style=${{ width: '100%' }} disabled=${!roles.length} onClick=${send}><${Icon} n="send" />Send this plan to StratEdge</button>
     </div>
   </div>`;
 }
@@ -146,7 +146,7 @@ function PlanCards() {
     <h3>${p.t}</h3><p className="plan-price">Custom pricing <span>after a free consultation</span></p><p className="muted">${p.d}</p>
     <p className="small"><b>Best for:</b> ${p.best}</p>
     <ul className="ticks">${p.pts.map(x => html`<li key=${x}>${x}</li>`)}</ul>
-    <button className=${'btn' + (p.rec ? '' : ' ghost')} style=${{ width: '100%' }} onClick=${() => go(p.k)}>Request ${p.t}</button>
+    <button type="button" className=${'btn' + (p.rec ? '' : ' ghost')} style=${{ width: '100%' }} onClick=${() => go(p.k)}>Request ${p.t}</button>
   </div>`)}</div>`;
 }
 const BENEFITS = [
@@ -166,7 +166,7 @@ function Walkthrough() {
   const [i, setI] = useState(0); const [paused, setPaused] = useState(false);
   useEffect(() => { if (paused || REDUCED()) return; const t = setInterval(() => setI(x => (x + 1) % WALK.length), 4500); return () => clearInterval(t); }, [paused]);
   return html`<div className="walk" onMouseEnter=${() => setPaused(true)} onMouseLeave=${() => setPaused(false)}>
-    <div className="walk-tabs" role="tablist">${WALK.map((w, k) => html`<button key=${w[0]} role="tab" aria-selected=${i === k} className=${i === k ? 'on' : ''} onClick=${() => { setI(k); setPaused(true); }}><span className="walk-n">${k + 1}</span>${w[0]}${i === k && !paused && html`<i className="walk-prog" />`}</button>`)}</div>
+    <div className="walk-tabs" role="tablist">${WALK.map((w, k) => html`<button type="button" key=${w[0]} role="tab" aria-selected=${i === k} className=${i === k ? 'on' : ''} onClick=${() => { setI(k); setPaused(true); }}><span className="walk-n">${k + 1}</span>${w[0]}${i === k && !paused && html`<i className="walk-prog" />`}</button>`)}</div>
     <div className="walk-body" key=${i}>
       <div className="walk-stage"><div className="walk-num">0${i + 1}</div><div className="walk-orb" /><div className="walk-line" /></div>
       <div><h3>${WALK[i][0]}</h3><p>${WALK[i][1]}</p><p className="muted">${WALK[i][2]}</p></div>
@@ -178,7 +178,7 @@ function AssistantSec() {
   const ask = q => { dispatchEvent(new CustomEvent('edge-open', { detail: { ask: q } })); };
   return html`<section className="sec alt rv"><div className="wrap assist">
     <div><div className="kicker">Assistant</div><h2>Ask the StratEdge assistant</h2><p className="intro">It knows our services, engagement models, portals and timesheets, and answers in seconds. Try one of these, or type your own question in the corner.</p>
-      <div className="assist-qs">${ASSISTANT_QS.map(q => html`<button key=${q} className="chipbtn" onClick=${() => ask(q)}>${q}</button>`)}</div></div>
+      <div className="assist-qs">${ASSISTANT_QS.map(q => html`<button type="button" key=${q} className="chipbtn" onClick=${() => ask(q)}>${q}</button>`)}</div></div>
     <div className="assist-demo"><${Mascot} size=${150} /><div className="assist-chat"><div className="msg b">Hi, I'm the StratEdge assistant. Ask me about services, timesheets or how to request talent.</div><div className="msg u">How fast can you send profiles?</div><div className="msg b">Usually within 2 to 5 business days for common roles. Want me to open the talent request form?</div></div></div>
   </div></section>`;
 }

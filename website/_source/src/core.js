@@ -152,9 +152,9 @@ const NativeDL = { save: async ({ filename, data }) => {
   setTimeout(() => URL.revokeObjectURL(url), 4000); return { status: 'saved' }; } };
 
 const Cap = { state: 'loading', db: NativeDB, user: NativeUser, dl: NativeDL, me: null, uid: null, isAdmin: false, isHR: false, roleName: '', isOwner: false, canWrite: null, portal: '', jobs: false };
-const PORTAL_LABEL = { consultant: 'Consultant portal', employee: 'Employee portal', employer: 'Client portal', client: 'Client portal' };
+const PORTAL_LABEL = { consultant: 'Consultant portal', employee: 'Employee portal', bench: 'Bench sales portal', employer: 'Client portal', client: 'Client portal' };
 const portalLabel = role => PORTAL_LABEL[role] || 'Employee portal';
-const portalKeyOf = role => role === 'employer' ? 'client' : role === 'employee' ? 'employee' : 'consultant';
+const portalKeyOf = role => role === 'employer' ? 'client' : role === 'employee' ? 'employee' : role === 'bench' ? 'bench' : 'consultant';
 const capListeners = new Set();
 const capNotify = () => capListeners.forEach(f => f({ ...Cap }));
 async function reloadCaps() {
@@ -405,7 +405,7 @@ function computePay(pay, md, mk, leaves, holidays, adjs, opts) {
   return { p, days, workDays, calDays, present, pending, rejected, leaveDays, paidDays, unpaidDays, reg, ot, dayRate, hourRate, base: r2(base), otPay: r2(otPay), allow, gross, ded, dedT, adj, adjT, net: r2(gross - dedT + adjT), from, to };
 }
 const approvedLeaves = (root, asg) => Object.entries((root && root.lv) || {}).filter(([id, l]) => !l.x && ((asg && asg.lvd) || {})[id] && asg.lvd[id].s === 'approved').map(([, l]) => l);
-const ROLE_LABEL = { consultant: 'Consultant', employer: 'Client contact' };
+const ROLE_LABEL = { consultant: 'Consultant', employer: 'Client contact', bench: 'Bench sales recruiter' };
 const REQ_ST = { open: 'Open', reviewing: 'Reviewing', shared: 'Candidates shared', filled: 'Filled', closed: 'Closed' };
 const CAND_ST = { shared: 'Shared', shortlist: 'Shortlisted', interview: 'Interview requested', rejected: 'Not a fit', hired: 'Hired' };
 const CD_LABEL = { none: 'Not sent to client', pending: 'Awaiting client', approved: 'Client approved', returned: 'Client returned', withdrawn: 'Withdrawn' };
@@ -484,7 +484,7 @@ function Modal({ title, onClose, children, foot, wide }) {
   }, []);
   return html`<div className="overlay" onMouseDown=${e => { if (e.target === e.currentTarget) onClose(); }}>
     <div className=${'modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label=${title}>
-      <div className="mh"><h2>${title}</h2><button className="btn ghost icon" onClick=${onClose} aria-label="Close"><${Icon} n="x" /></button></div>
+      <div className="mh"><h2>${title}</h2><button type="button" className="btn ghost icon" onClick=${onClose} aria-label="Close"><${Icon} n="x" /></button></div>
       <div className="mb">${children}</div>
       ${foot && html`<div className="mf">${foot}</div>`}
     </div></div>`;
@@ -526,9 +526,9 @@ function FileActions({ base, f, onDelete }) {
   const dl = async () => { setBusy(true); try { await downloadStored(base, f.id); } catch (e) { if (!e || e.code !== 'declined') toast(errText(e), true); } setBusy(false); };
   const view = async () => { setBusy(true); try { setPv(await previewUrl(base, f.id)); } catch (e) { toast(errText(e), true); } setBusy(false); };
   return html`<${Fragment}>
-    ${isImg && html`<button className="btn ghost sm" disabled=${busy} onClick=${view}><${Icon} n="eye" />View</button>`}
-    <button className="btn ghost sm" disabled=${busy} onClick=${dl}><${Icon} n="down" />${busy ? '…' : 'Download'}</button>
-    ${onDelete && html`<button className="btn ghost sm icon" aria-label=${'Delete ' + f.n} disabled=${busy} onClick=${onDelete}><${Icon} n="trash" /></button>`}
+    ${isImg && html`<button type="button" className="btn ghost sm" disabled=${busy} onClick=${view}><${Icon} n="eye" />View</button>`}
+    <button type="button" className="btn ghost sm" disabled=${busy} onClick=${dl}><${Icon} n="down" />${busy ? '…' : 'Download'}</button>
+    ${onDelete && html`<button type="button" className="btn ghost sm icon" aria-label=${'Delete ' + f.n} disabled=${busy} onClick=${onDelete}><${Icon} n="trash" /></button>`}
     ${pv && html`<${Modal} title=${f.n} onClose=${() => setPv(null)} wide><img className="preview" src=${pv.url} alt=${f.n} /><//>`}
   <//>`;
 }

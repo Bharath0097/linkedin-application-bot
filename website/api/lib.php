@@ -79,14 +79,19 @@ function ruleFor(string $path, ?string $uid): array {
 }
 function myR(string $uid): ?stdClass { static $c = []; if (!array_key_exists($uid, $c)) $c[$uid] = docGet("r/$uid"); return $c[$uid]; }
 function myCid(string $uid): ?string { $d = myR($uid); return ($d && isset($d->cid) && is_string($d->cid) && $d->cid !== '') ? $d->cid : null; }
-// Which portal a person belongs to: 'consultant' (placed consultant), 'employee' (StratEdge staff), 'employer' (client contact) or '' when unknown.
+// Which portal a person belongs to: 'consultant' (placed consultant), 'employee' (StratEdge staff), 'employer' (client contact),
+// 'bench' (StratEdge bench sales recruiter) or '' when unknown.
 function portalOf(string $uid): string {
   $d = myR($uid); $role = (string) ($d->role ?? '');
   if ($role === '') { $u = docGet("u/$uid"); $role = (string) ($u->p->role ?? ''); }
-  return in_array($role, ['consultant', 'employee', 'employer'], true) ? $role : '';
+  return in_array($role, ['consultant', 'employee', 'employer', 'bench'], true) ? $role : '';
 }
-const PORTAL_NAMES = ['consultant' => 'consultant', 'employee' => 'employee', 'employer' => 'client', 'client' => 'client'];
-// The recruiting workspace is for StratEdge employees (internal staff), not for placed consultants or client contacts.
+// Portal role -> login name (the ?as= value on the login page); login name -> label used in messages.
+const PORTAL_NAMES = ['consultant' => 'consultant', 'employee' => 'employee', 'employer' => 'client', 'client' => 'client', 'bench' => 'bench'];
+const PORTAL_LABELS = ['consultant' => 'consultant', 'employee' => 'employee', 'client' => 'client', 'bench' => 'bench sales'];
+// A bench sales recruiter: approved (active) assignment with the 'bench' portal role. They get the job grabber and the recruiting workspace.
+function isBench(string $uid): bool { $d = myR($uid); return (bool) ($d && ($d->st ?? '') === 'active' && ($d->role ?? '') === 'bench'); }
+// The recruiting workspace is for StratEdge employees and bench sales recruiters (internal staff), not for placed consultants or client contacts.
 function isRecruiter(string $uid): bool { $d = myR($uid); return (bool) ($d && ($d->st ?? '') === 'active' && !in_array($d->role ?? '', ['employer', 'consultant'], true) && empty($d->norec)); }
 function isSigner(?stdClass $d, ?string $uid): bool { if (!$d || $uid === null) return false; foreach ((array) ($d->signers ?? []) as $s) if (($s->uid ?? '') === $uid) return true; return false; }
 function can(string $path, string $mode): bool {

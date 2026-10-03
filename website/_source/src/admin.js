@@ -53,8 +53,8 @@ function TsReview({ m, w, onClose }) {
   };
   const days = weekDays(w); const rows = tsRowsFor(d);
   const dayT = DOW.map((_, i) => rows.reduce((a, r) => a + (r.h[i] || 0), 0));
-  const foot = st === 'pending' ? html`<button className="btn danger" disabled=${busy} onClick=${() => decide('rejected')}>Return with note</button><button className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve timesheet</button>`
-    : st === 'approved' ? html`<button className="btn ghost" disabled=${busy} onClick=${() => decide('reopened')}>Reopen for changes</button>` : html`<button className="btn ghost" onClick=${onClose}>Close</button>`;
+  const foot = st === 'pending' ? html`<button type="button" className="btn danger" disabled=${busy} onClick=${() => decide('rejected')}>Return with note</button><button type="button" className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve timesheet</button>`
+    : st === 'approved' ? html`<button type="button" className="btn ghost" disabled=${busy} onClick=${() => decide('reopened')}>Reopen for changes</button>` : html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button>`;
   return html`<${Modal} wide title=${`${nameOf(m.id, m.u, P.people)}: ${weekLabel(w)}`} onClose=${onClose} foot=${foot}>
     ${d === undefined ? html`<${Spinner} />` : !d ? html`<${Empty} title="This timesheet isn't available">It may have been withdrawn.<//>` : html`<div className="stack">
       <div className="actions"><${Chip} s=${st}>${TS_LABEL[st]}<//>${cst !== 'none' && html`<${Chip} s=${cst === 'approved' ? 'ok' : cst === 'returned' ? 'red' : 'amber'}>${CD_LABEL[cst]}<//>`}<span className="muted small">${sum && sum.sa ? 'Submitted ' + fmtTs(sum.sa) : 'Not submitted'}${m.r && m.r.cl ? ', ' + m.r.cl : ''}${m.r && m.r.ec ? ' for ' + m.r.ec : ''}</span></div>
@@ -90,7 +90,7 @@ function AdminOverview() {
           : html`<${Empty} title="Nobody is clocked in right now" />`}</section>
       <section className="panel"><div className="ph-row"><h2 className="ph">Waiting on you</h2><a className="small" href="#/portal/admin/approvals">All approvals</a></div>
         ${A.pendTs.length + A.pendLv.length + A.requests.length + openReqs.length ? html`<ul className="list">
-          ${A.requests.slice(0, 3).map(m => html`<li key=${'r' + m.id}><${Person} uid=${m.id} root=${m.u} people=${P.people} sub=${'Access request, ' + (m.role === 'employer' ? 'client contact' : m.role === 'employee' ? 'StratEdge employee' : 'consultant')} /><a className="btn ghost sm" href="#/portal/admin/team?tab=new">Review</a></li>`)}
+          ${A.requests.slice(0, 3).map(m => html`<li key=${'r' + m.id}><${Person} uid=${m.id} root=${m.u} people=${P.people} sub=${'Access request, ' + (m.role === 'employer' ? 'client contact' : m.role === 'employee' ? 'StratEdge employee' : m.role === 'bench' ? 'bench sales recruiter' : 'consultant')} /><a className="btn ghost sm" href="#/portal/admin/team?tab=new">Review</a></li>`)}
           ${A.pendTs.slice(0, 5).map(x => html`<li key=${x.m.id + x.w}><${Person} uid=${x.m.id} root=${x.m.u} people=${P.people} sub=${`Timesheet, ${weekLabel(x.w)}, ${h1(x.s.t)} h`} /><a className="btn ghost sm" href="#/portal/admin/approvals">Review</a></li>`)}
           ${A.pendLv.slice(0, 3).map(x => html`<li key=${x.id}><${Person} uid=${x.m.id} root=${x.m.u} people=${P.people} sub=${`${LEAVE_K[x.l.k]}, ${fmtDate(x.l.f)}`} /><a className="btn ghost sm" href="#/portal/admin/approvals?tab=leave">Review</a></li>`)}
           ${openReqs.slice(0, 3).map(r => html`<li key=${r.m.id + r.id}><div><div className="t">${r.ti}</div><div className="m">Requirement from ${r.cl}, ${REQ_ST[r.st || 'open']}</div></div><a className="btn ghost sm" href="#/portal/admin/requirements">Open</a></li>`)}
@@ -137,14 +137,14 @@ function MemberModal({ m, onClose }) {
   const resetPw = async () => { setBusy(true); try { const r = await api('admin_reset', { uid: m.id }); setTemp(r.password); } catch (e) { toast(errText(e), true); } setBusy(false); };
   const toggleAdmin = async e => { const role = e.target.value; try { await api('admin_role', { uid: m.id, role }); A.loadAccounts(); toast(role === 'admin' ? `${firstName(p.n)} now has admin access.` : role === 'hr' ? `${firstName(p.n)} now has HR portal access.` : role === 'acct' ? `${firstName(p.n)} now has accounting portal access.` : 'Staff access removed.'); } catch (x) { toast(errText(x), true); } };
   const startOnb = async () => { setBusy(true); try { await dbMerge(`r/${m.id}`, { onb: { kind: 'onb', started: Date.now(), items: {}, by: P.uid } }); toast('Onboarding checklist started. They see it in their portal.'); } catch (x) { toast(errText(x), true); } setBusy(false); };
-  return html`<${Modal} wide title=${p.n} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button><button className=${'btn' + (m.st === 'new' ? ' go' : '')} disabled=${busy} onClick=${save}>${m.st === 'new' ? 'Approve access' : 'Save'}</button>`}>
+  return html`<${Modal} wide title=${p.n} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button><button type="button" className=${'btn' + (m.st === 'new' ? ' go' : '')} disabled=${busy} onClick=${save}>${m.st === 'new' ? 'Approve access' : 'Save'}</button>`}>
     <div className="stack">
       <div className="g2">
         <dl className="kv"><dt>Requested</dt><dd>${portalLabel(p.role)}${p.co ? ', ' + p.co : ''}</dd><dt>Email</dt><dd><a href=${'mailto:' + p.e}>${p.e}</a></dd>${p.ph && html`<dt>Phone</dt><dd><a href=${'tel:' + p.ph}>${p.ph}</a></dd>`}
           ${p.ti && html`<dt>Title</dt><dd>${p.ti}</dd>`}${p.loc && html`<dt>Location</dt><dd>${p.loc}</dd>`}<dt>Joined portal</dt><dd>${m.u.joined ? fmtDay(m.u.joined) : '—'}</dd></dl>
         <div className="form">
           <div className="row2"><${Field} label="Status"><select value=${f.st} onChange=${up('st')}><option value="active">Active</option><option value="inactive">Inactive (access paused)</option></select><//>
-            <${Field} label="Portal" hint="Consultants get resume matching and jobs; employees get the recruiting workspace."><select value=${f.role} onChange=${up('role')}><option value="consultant">Consultant portal</option><option value="employee">Employee portal (StratEdge staff)</option><option value="employer">Client portal (client contact)</option></select><//></div>
+            <${Field} label="Portal" hint="Consultants get resume matching and jobs; employees get the recruiting workspace; bench sales recruiters get the job grabber and recruiting workspace."><select value=${f.role} onChange=${up('role')}><option value="consultant">Consultant portal</option><option value="employee">Employee portal (StratEdge staff)</option><option value="bench">Bench sales portal (recruiter)</option><option value="employer">Client portal (client contact)</option></select><//></div>
           <${Field} label=${emp ? 'Company' : 'Client company'} hint=${emp ? 'Their company\u2019s client workspace.' : 'Links this consultant to a client workspace so the client can approve their timesheets.'}>
             <select value=${f.cid} onChange=${pickClient}><option value="">${emp ? 'Choose a client' : 'No client workspace'}</option>${A.clients.map(c => html`<option key=${c.id} value=${c.id}>${c.n}${c.ec ? ' (' + c.ec + ')' : ''}</option>`)}<option value="__new">Add a new client…</option></select><//>
           ${f.cid === '__new' && html`<div className="row2"><${Field} label="New client name"><input value=${newC.n} onInput=${e => setNewC({ ...newC, n: e.target.value })} /><//><${Field} label="End client (optional)"><input value=${newC.ec} onInput=${e => setNewC({ ...newC, ec: e.target.value })} /><//></div>`}
@@ -161,17 +161,17 @@ function MemberModal({ m, onClose }) {
       <div className="panel" style=${{ background: 'var(--surface-2)', display: 'grid', gap: 10 }}><h3 className="ph">Account</h3>
         <p className="muted small">Signs in with ${acct ? acct.email : p.e}${acct && acct.status === 'disabled' ? '. Account paused.' : ''}</p>
         ${acct && !m.self && html`<div style=${{ maxWidth: 420 }}><${Field} label="Staff access" hint="HR: onboarding, documents, payroll, approvals. Admin: everything."><select value=${acct.role} onChange=${toggleAdmin}><option value="user">None (employee or client only)</option><option value="hr">HR portal</option><option value="acct">Accounting portal</option><option value="admin">Admin portal</option></select><//></div>`}
-        ${f.role === 'employee' && html`<label className="check"><input type="checkbox" checked=${!!f.norec} onChange=${up('norec')} /><span>Hide the recruiting workspace (consultants, RTRs, submissions, daily reports) for this person. Every employee has it by default; consultants never see it.</span></label>`}
-        ${!emp && m.st !== 'new' && html`<div className="actions">${m.r && m.r.onb && m.r.onb.kind !== 'done' ? html`<a className="btn ghost sm" href="#/portal/hr/onboarding">Onboarding in progress (${onbProgress(m.r.onb, P.tpl).done}/${onbProgress(m.r.onb, P.tpl).total})</a>` : html`<button className="btn ghost sm" disabled=${busy} onClick=${startOnb}>Start onboarding checklist</button>`}</div>`}
-        <div className="actions"><button className="btn ghost sm" disabled=${busy} onClick=${resetPw}>Reset password</button>${temp && html`<span className="small">Temporary password: <b style=${{ fontFamily: 'inherit', fontSize: 16 }}>${temp}</b>. Share it privately; they can change it under Profile.</span>`}</div>
+        ${(f.role === 'employee' || f.role === 'bench') && html`<label className="check"><input type="checkbox" checked=${!!f.norec} onChange=${up('norec')} /><span>Hide the recruiting workspace (consultants, RTRs, submissions, daily reports) for this person. Every employee and bench sales recruiter has it by default; consultants never see it.</span></label>`}
+        ${!emp && m.st !== 'new' && html`<div className="actions">${m.r && m.r.onb && m.r.onb.kind !== 'done' ? html`<a className="btn ghost sm" href="#/portal/hr/onboarding">Onboarding in progress (${onbProgress(m.r.onb, P.tpl).done}/${onbProgress(m.r.onb, P.tpl).total})</a>` : html`<button type="button" className="btn ghost sm" disabled=${busy} onClick=${startOnb}>Start onboarding checklist</button>`}</div>`}
+        <div className="actions"><button type="button" className="btn ghost sm" disabled=${busy} onClick=${resetPw}>Reset password</button>${temp && html`<span className="small">Temporary password: <b style=${{ fontFamily: 'inherit', fontSize: 16 }}>${temp}</b>. Share it privately; they can change it under Profile.</span>`}</div>
       </div>
       ${m.st !== 'new' && !emp && html`<${Fragment}>
-        <div className="tabs" role="tablist">${[['ts', 'Timesheets'], ['pay', 'Pay'], ['tax', 'Tax'], ['att', 'Attendance'], ['docs', 'Documents'], ['lv', 'Time off']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+        <div className="tabs" role="tablist">${[['ts', 'Timesheets'], ['pay', 'Pay'], ['tax', 'Tax'], ['att', 'Attendance'], ['docs', 'Documents'], ['lv', 'Time off']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
         ${tab === 'pay' && html`<${PayForm} m=${m} />`}
       ${tab === 'tax' && html`<${TaxProfileForm} m=${m} />`}
         ${tab === 'ts' && (Object.keys(m.u.ts || {}).length ? html`<ul className="list">${Object.entries(m.u.ts).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 26).map(([w, s]) => { const x = tsStatus(s, (r.rev || {})[w]); return html`<li key=${w}>
             <div><div className="t">${weekLabel(w)}</div><div className="m">${h1(s.t)} hours${s.f ? `, ${s.f} attachment${s.f > 1 ? 's' : ''}` : ''}</div></div>
-            <div className="actions"><${Chip} s=${x}>${TS_LABEL[x]}<//><button className="btn ghost sm" onClick=${() => setRv(w)}>Open</button></div></li>`; })}</ul>`
+            <div className="actions"><${Chip} s=${x}>${TS_LABEL[x]}<//><button type="button" className="btn ghost sm" onClick=${() => setRv(w)}>Open</button></div></li>`; })}</ul>`
           : html`<${Empty} title="No timesheets yet" />`)}
         ${tab === 'att' && html`<${MemberAttendance} m=${m} />`}
         ${tab === 'docs' && html`<${MemberDocs} m=${m} />`}
@@ -188,7 +188,7 @@ function MemberAttendance({ m }) {
   useEffect(() => { setD(undefined); dbGet(`u/${m.id}/att/${mk}`).then(x => setD(x || {})).catch(() => setD({})); }, [mk]);
   const rows = d ? attRows(d, m.u.clock && m.u.clock.on ? m.u.clock : null, Date.now()) : [];
   return html`<div className="stack" style=${{ gap: 10 }}>
-    <div className="wknav"><button className="btn ghost icon" aria-label="Previous month" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${monthLabel(mk)}</b>
+    <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous month" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${monthLabel(mk)}</b>
       <button className="btn ghost icon" aria-label="Next month" disabled=${mk >= mkey(dkey())} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button>
       <span className="muted small" style=${{ marginLeft: 8 }}>${hm(rows.reduce((a, x) => a + x.m, 0))} total</span></div>
     ${d === undefined ? html`<${Spinner} />` : rows.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Location</th><th className="r">Hours</th></tr></thead>
@@ -213,7 +213,7 @@ function AdminTeam({ q }) {
   const list = A.members.filter(m => m.st === tab && (!ql || [m.u.p.n, m.u.p.e, m.u.p.ti, m.u.p.co, m.r && m.r.cl, m.r && m.r.ec].filter(Boolean).join(' ').toLowerCase().includes(ql)));
   const cur = open && A.members.find(m => m.id === open);
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['active', 'Active'], ['new', 'Access requests'], ['inactive', 'Inactive']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'new' && counts.new ? ' amber' : '')}>${counts[k] || 0}</span></button>`)}</div>
+    <div className="tabs" role="tablist">${[['active', 'Active'], ['new', 'Access requests'], ['inactive', 'Inactive']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'new' && counts.new ? ' amber' : '')}>${counts[k] || 0}</span></button>`)}</div>
     <div className="toolbar"><input style=${{ maxWidth: 340 }} type="search" placeholder="Search name, email, company" value=${s} onInput=${e => setS(e.target.value)} aria-label="Search team" /></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl">
@@ -221,7 +221,7 @@ function AdminTeam({ q }) {
         <tbody>${list.map(m => { const lw = Object.keys(m.u.ts || {}).sort().pop(); const x = lw ? tsStatus(m.u.ts[lw], ((m.r || {}).rev || {})[lw]) : null; const emp = m.role === 'employer'; const c = clientOf(A, m);
           return html`<tr key=${m.id} className="click" tabIndex="0" onClick=${() => setOpen(m.id)} onKeyDown=${e => { if (e.key === 'Enter') setOpen(m.id); }}>
             <td><${Person} uid=${m.id} root=${m.u} people=${P.people} sub=${m.u.p.ti || m.u.p.e} /></td>
-            <td><${Chip} s=${emp ? 'new' : m.role === 'consultant' ? 'ok' : ''}>${emp ? 'Client' : m.role === 'consultant' ? 'Consultant' : 'Employee'}<//>${A.accounts[m.id] && A.accounts[m.id].role === 'admin' ? html` <${Chip} s="ok">Admin<//>` : ''}${!emp && m.u.payReq && !(m.r && m.r.pay && +m.r.pay.amt) ? html` <${Chip} s="amber">Pay plan requested<//>` : ''}</td>
+            <td><${Chip} s=${emp ? 'new' : m.role === 'consultant' ? 'ok' : ''}>${emp ? 'Client' : m.role === 'consultant' ? 'Consultant' : m.role === 'bench' ? 'Bench sales' : 'Employee'}<//>${A.accounts[m.id] && A.accounts[m.id].role === 'admin' ? html` <${Chip} s="ok">Admin<//>` : ''}${!emp && m.u.payReq && !(m.r && m.r.pay && +m.r.pay.amt) ? html` <${Chip} s="amber">Pay plan requested<//>` : ''}</td>
             <td>${(c && c.n) || (m.r && m.r.cl) || m.u.p.co || html`<span className="muted">Not set</span>`}${m.r && m.r.ec ? html`<div className="muted small">${m.r.ec}</div>` : ''}</td>
             <td>${emp ? '—' : (m.r && m.r.ty) || '—'}</td>
             <td>${emp ? '—' : m.u.clock && m.u.clock.on ? html`<${Chip} s="ok">In since ${fmtTime(m.u.clock.i)}<//>` : html`<span className="muted small">Out</span>`}</td>
@@ -250,7 +250,7 @@ function ClientModal({ c, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title=${c ? 'Edit client' : 'Add a client'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>${c ? 'Save' : 'Add client'}</button>`}>
+  return html`<${Modal} title=${c ? 'Edit client' : 'Add a client'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>${c ? 'Save' : 'Add client'}</button>`}>
     <div className="form">
       <${Field} label="Client name" hint="The company whose managers approve timesheets in the client portal."><input value=${f.n} onInput=${up('n')} /><//>
       <div className="row2"><${Field} label="End client (if different)"><input value=${f.ec} onInput=${up('ec')} /><//><${Field} label="Location"><input value=${f.loc} onInput=${up('loc')} placeholder="City, state" /><//></div>
@@ -263,14 +263,14 @@ function AdminClients() {
   if (A.loading) return html`<${Spinner} />`;
   const rows = A.clients.map(c => ({ c, cons: A.members.filter(m => m.role !== 'employer' && m.st === 'active' && m.r && m.r.cid === c.id), cons2: A.members.filter(m => m.role === 'employer' && m.r && m.r.cid === c.id) }));
   return html`<div className="stack">
-    <div className="toolbar"><p className="muted small">Each client gets its own workspace. Consultants linked to it appear there, and the client's contacts approve their hours.</p><div className="push"><button className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Add client</button></div></div>
+    <div className="toolbar"><p className="muted small">Each client gets its own workspace. Consultants linked to it appear there, and the client's contacts approve their hours.</p><div className="push"><button type="button" className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Add client</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${rows.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Client</th><th>End client</th><th>Consultants</th><th>Client contacts</th><th /></tr></thead>
         <tbody>${rows.map(({ c, cons, cons2 }) => html`<tr key=${c.id}><td><b style=${{ fontWeight: 600 }}>${c.n}</b>${c.loc ? html`<div className="muted small">${c.loc}</div>` : ''}</td><td>${c.ec || '—'}</td>
           <td>${cons.length ? cons.map(m => m.u.p.n).join(', ') : html`<span className="muted">None yet</span>`}</td>
           <td>${cons2.length ? cons2.map(m => m.u.p.n).join(', ') : html`<span className="muted">None yet</span>`}</td>
-          <td className="r"><button className="btn ghost sm" onClick=${() => setEdit(c)}>Edit</button></td></tr>`)}</tbody></table></div>`
-        : html`<${Empty} title="No clients yet" action=${html`<button className="btn" onClick=${() => setEdit(null)}>Add your first client</button>`}>Add the companies your consultants work for. You can also create one while approving a consultant or client contact.<//>`}
+          <td className="r"><button type="button" className="btn ghost sm" onClick=${() => setEdit(c)}>Edit</button></td></tr>`)}</tbody></table></div>`
+        : html`<${Empty} title="No clients yet" action=${html`<button type="button" className="btn" onClick=${() => setEdit(null)}>Add your first client</button>`}>Add the companies your consultants work for. You can also create one while approving a consultant or client contact.<//>`}
     </section>
     ${edit !== undefined && html`<${ClientModal} c=${edit} onClose=${() => setEdit(undefined)} />`}
   </div>`;
@@ -293,7 +293,7 @@ function ReqDetailAdmin({ r, onClose, onChanged }) {
     setBusy(false);
   };
   const cands = Object.entries(r.cands || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
-  return html`<${Modal} wide title=${r.ti} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button>`}>
+  return html`<${Modal} wide title=${r.ti} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button>`}>
     <div className="stack">
       <dl className="kv"><dt>Client</dt><dd>${r.cl}, posted by ${r.m.u.p.n} on ${fmtDay(r.at)}</dd><dt>Need</dt><dd>${r.n || 1} ${(r.n || 1) > 1 ? 'people' : 'person'}${r.loc ? ', ' + r.loc : ''}${r.md ? ', ' + r.md : ''}${r.ty ? ', ' + r.ty : ''}${r.sd ? ', start ' + fmtDate(r.sd) : ''}</dd>
         ${r.sk && html`<dt>Skills</dt><dd>${r.sk}</dd>`}${r.d && html`<dt>Details</dt><dd style=${{ whiteSpace: 'pre-wrap' }}>${r.d}</dd>`}</dl>
@@ -306,7 +306,7 @@ function ReqDetailAdmin({ r, onClose, onChanged }) {
         <div className="row2"><${Field} label="Name or initials"><input value=${c.n} onInput=${upC('n')} placeholder="e.g. R. Sharma" /><//><${Field} label="Title"><input value=${c.ti} onInput=${upC('ti')} placeholder="e.g. Senior Network Engineer" /><//></div>
         <${Field} label="Summary for the client"><textarea value=${c.sum} onInput=${upC('sum')} placeholder="Experience, certifications, highlights" /><//>
         <${Field} label="Availability"><input value=${c.av} onInput=${upC('av')} placeholder="e.g. 2 weeks notice, open to onsite" /><//>
-        <div><button className="btn" disabled=${busy} onClick=${share}>${busy ? 'Sharing…' : 'Share with client'}</button></div></div>
+        <div><button type="button" className="btn" disabled=${busy} onClick=${share}>${busy ? 'Sharing…' : 'Share with client'}</button></div></div>
     </div><//>`;
 }
 function AdminRequirements() {
@@ -317,8 +317,8 @@ function AdminRequirements() {
   const list = reqs.filter(r => tab === 'all' || (tab === 'open' ? !['filled', 'closed'].includes(r.st || 'open') : ['filled', 'closed'].includes(r.st)));
   const cur = open && reqs.find(r => r.id === open.id && r.m.id === open.mid);
   return html`<div className="stack">
-    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Filled or closed'], ['all', 'All']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
-      <div className="push"><button className="btn ghost" onClick=${() => setTick(tick + 1)}>Refresh</button></div></div>
+    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Filled or closed'], ['all', 'All']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setTick(tick + 1)}>Refresh</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Requirement</th><th>Client</th><th className="r">Need</th><th>Status</th><th className="r">Candidates</th><th>Posted</th><th /></tr></thead>
         <tbody>${list.map(r => html`<tr key=${r.m.id + r.id} className="click" tabIndex="0" onClick=${() => setOpen({ id: r.id, mid: r.m.id })} onKeyDown=${e => { if (e.key === 'Enter') setOpen({ id: r.id, mid: r.m.id }); }}>
@@ -340,7 +340,7 @@ function LeaveDecide({ x, s, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title=${(s === 'approved' ? 'Approve' : 'Decline') + ' time off'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className=${'btn ' + (s === 'approved' ? 'go' : 'danger')} disabled=${busy} onClick=${go}>${s === 'approved' ? 'Approve' : 'Decline'}</button>`}>
+  return html`<${Modal} title=${(s === 'approved' ? 'Approve' : 'Decline') + ' time off'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className=${'btn ' + (s === 'approved' ? 'go' : 'danger')} disabled=${busy} onClick=${go}>${s === 'approved' ? 'Approve' : 'Decline'}</button>`}>
     <p style=${{ marginBottom: 14 }}><b>${x.m.u.p.n}</b>, ${LEAVE_K[x.l.k]}: ${fmtDate(x.l.f)}${x.l.t !== x.l.f ? ' to ' + fmtDate(x.l.t) : ''} (${bizDays(x.l.f, x.l.t)} business days)</p>
     <${Field} label="Note to the consultant (optional)"><textarea value=${c} onInput=${e => setC(e.target.value)} /><//><//>`;
 }
@@ -360,23 +360,23 @@ function AdminApprovals({ q }) {
   if (A.loading) return html`<${Spinner} />`;
   const curM = rv && A.members.find(m => m.id === rv.mid);
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['ts', 'Timesheets', A.pendTs.length], ['att', 'Attendance (clock-ins)', null], ['leave', 'Time off', A.pendLv.length], ['done', 'Recently reviewed', null]].map(([k, v, n]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${n != null && html`<span className=${'chip' + (n ? ' amber' : '')}>${n}</span>`}</button>`)}</div>
+    <div className="tabs" role="tablist">${[['ts', 'Timesheets', A.pendTs.length], ['att', 'Attendance (clock-ins)', null], ['leave', 'Time off', A.pendLv.length], ['done', 'Recently reviewed', null]].map(([k, v, n]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${n != null && html`<span className=${'chip' + (n ? ' amber' : '')}>${n}</span>`}</button>`)}</div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${tab === 'ts' && (A.pendTs.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Person</th><th>Week</th><th className="r">Hours</th><th>Client approval</th><th>Attachments</th><th>Submitted</th><th /></tr></thead>
         <tbody>${A.pendTs.map(x => { const k = cs[x.m.id + x.w]; return html`<tr key=${x.m.id + x.w}><td><${Person} uid=${x.m.id} root=${x.m.u} people=${P.people} sub=${x.m.r && x.m.r.cl} /></td><td className="nw">${weekLabel(x.w)}</td><td className="r num"><b>${h1(x.s.t)}</b></td>
           <td>${x.m.r && x.m.r.cid ? (k ? html`<${Chip} s=${k === 'approved' ? 'ok' : k === 'returned' ? 'red' : 'amber'}>${CD_LABEL[k]}<//>` : html`<span className="muted small">…</span>`) : html`<span className="muted small">No client workspace</span>`}</td>
           <td>${x.s.f ? x.s.f : html`<span className=${x.m.r && x.m.r.na ? 'chip red' : 'muted'}>${x.m.r && x.m.r.na ? 'Missing' : 'None'}</span>`}</td><td className="num muted">${fmtTs(x.s.sa)}</td>
-          <td className="r"><button className="btn sm" onClick=${() => setRv({ mid: x.m.id, w: x.w })}>Review</button></td></tr>`; })}</tbody></table></div>`
+          <td className="r"><button type="button" className="btn sm" onClick=${() => setRv({ mid: x.m.id, w: x.w })}>Review</button></td></tr>`; })}</tbody></table></div>`
         : html`<${Empty} title="No timesheets waiting">Submitted timesheets appear here, oldest first, with the client's decision alongside.<//>`)}
       ${tab === 'att' && html`<${AttApprovals} />`}
       ${tab === 'leave' && (A.pendLv.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Person</th><th>Type</th><th>Dates</th><th className="r">Days</th><th>Note</th><th /></tr></thead>
         <tbody>${A.pendLv.map(x => html`<tr key=${x.id}><td><${Person} uid=${x.m.id} root=${x.m.u} people=${P.people} /></td><td>${LEAVE_K[x.l.k]}</td><td className="num">${fmtDate(x.l.f)}${x.l.t !== x.l.f ? ' – ' + fmtDate(x.l.t) : ''}</td>
           <td className="r num">${bizDays(x.l.f, x.l.t)}</td><td className="muted">${x.l.r || ''}</td>
-          <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}><button className="btn ghost sm" onClick=${() => setLd({ x, s: 'declined' })}>Decline</button><button className="btn go sm" onClick=${() => setLd({ x, s: 'approved' })}>Approve</button></div></td></tr>`)}</tbody></table></div>`
+          <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}><button type="button" className="btn ghost sm" onClick=${() => setLd({ x, s: 'declined' })}>Decline</button><button type="button" className="btn go sm" onClick=${() => setLd({ x, s: 'approved' })}>Approve</button></div></td></tr>`)}</tbody></table></div>`
         : html`<${Empty} title="No time-off requests waiting" />`)}
       ${tab === 'done' && (A.reviewed.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Person</th><th>Week</th><th className="r">Hours</th><th>Decision</th><th>Reviewed</th><th /></tr></thead>
         <tbody>${A.reviewed.map(x => html`<tr key=${x.m.id + x.w}><td><${Person} uid=${x.m.id} root=${x.m.u} people=${P.people} /></td><td className="nw">${weekLabel(x.w)}</td><td className="r num">${h1(x.s.t)}</td>
-          <td><${Chip} s=${x.st}>${TS_LABEL[x.st]}<//></td><td className="num muted">${fmtTs(x.rev.at)}</td><td className="r"><button className="btn ghost sm" onClick=${() => setRv({ mid: x.m.id, w: x.w })}>Open</button></td></tr>`)}</tbody></table></div>`
+          <td><${Chip} s=${x.st}>${TS_LABEL[x.st]}<//></td><td className="num muted">${fmtTs(x.rev.at)}</td><td className="r"><button type="button" className="btn ghost sm" onClick=${() => setRv({ mid: x.m.id, w: x.w })}>Open</button></td></tr>`)}</tbody></table></div>`
         : html`<${Empty} title="No reviews yet" />`)}
     </section>
     ${curM && html`<${TsReview} m=${curM} w=${rv.w} onClose=${() => setRv(null)} />`}
@@ -414,11 +414,11 @@ function AdminAttendance() {
   };
   return html`<div className="stack">
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous day" onClick=${() => setDay(addDays(day, -1))}><${Icon} n="left" /></button>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous day" onClick=${() => setDay(addDays(day, -1))}><${Icon} n="left" /></button>
         <input type="date" value=${day} max=${dkey()} onInput=${e => e.target.value && setDay(e.target.value)} style=${{ width: 170 }} aria-label="Day" />
         <button className="btn ghost icon" aria-label="Next day" disabled=${day >= dkey()} onClick=${() => setDay(addDays(day, 1))}><${Icon} n="right" /></button></div>
-      ${day !== dkey() && html`<button className="btn ghost sm" onClick=${() => setDay(dkey())}>Today</button>`}
-      <div className="push"><button className="btn ghost" onClick=${() => setTick(tick + 1)}>Refresh</button><button className="btn ghost" disabled=${busy || !active.length} onClick=${exportMonth}><${Icon} n="down" />${busy ? 'Preparing…' : 'Export ' + monthLabel(mkey(day))}</button></div>
+      ${day !== dkey() && html`<button type="button" className="btn ghost sm" onClick=${() => setDay(dkey())}>Today</button>`}
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setTick(tick + 1)}>Refresh</button><button type="button" className="btn ghost" disabled=${busy || !active.length} onClick=${exportMonth}><${Icon} n="down" />${busy ? 'Preparing…' : 'Export ' + monthLabel(mkey(day))}</button></div>
     </div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${!active.length ? html`<${Empty} title="No active consultants yet">Approve people under Team to see their attendance.<//>` : !data ? html`<${Spinner} />` : html`<div className="tblwrap"><table className="tbl">
@@ -449,7 +449,7 @@ function NewTask({ onClose }) {
     } catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title="New task" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${create}>${busy ? 'Assigning…' : 'Assign task'}</button>`}>
+  return html`<${Modal} title="New task" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${create}>${busy ? 'Assigning…' : 'Assign task'}</button>`}>
     <div className="form">
       <${Field} label="Title"><input value=${f.ti} onInput=${up('ti')} placeholder="e.g. Upload your updated COI" /><//>
       <${Field} label="Details"><textarea value=${f.d} onInput=${up('d')} /><//>
@@ -471,8 +471,8 @@ function AdminTasks() {
   const list = all.filter(x => tab === 'all' || (tab === 'done' ? x.pr.s === 'done' : x.pr.s !== 'done'));
   const archive = async x => { try { await dbMerge(`r/${x.m.id}`, { tasks: { [x.id]: { x: 1 } } }); toast('Task archived.'); } catch (e) { toast(errText(e), true); } };
   return html`<div className="stack">
-    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Done'], ['all', 'All']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
-      <div className="push"><button className="btn" onClick=${() => setNw(true)}><${Icon} n="plus" />New task</button></div></div>
+    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Done'], ['all', 'All']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+      <div className="push"><button type="button" className="btn" onClick=${() => setNw(true)}><${Icon} n="plus" />New task</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Task</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Progress</th><th /></tr></thead>
         <tbody>${list.map(x => html`<tr key=${x.m.id + x.id}><td><b style=${{ fontWeight: 600 }}>${x.t.ti}</b>${x.pr.n ? html`<div className="muted small">${x.pr.n}</div>` : ''}</td>
@@ -480,8 +480,8 @@ function AdminTasks() {
           <td className=${'num' + (x.t.due && x.t.due < dkey() && x.pr.s !== 'done' ? ' err' : '')}>${x.t.due ? fmtDate(x.t.due) : '—'}</td>
           <td><span className=${'prio ' + x.t.p}>${x.t.p === 'high' ? 'High' : x.t.p === 'low' ? 'Low' : 'Normal'}</span></td>
           <td><${Chip} s=${x.pr.s || 'todo'}>${TASK_S[x.pr.s || 'todo']}<//></td>
-          <td className="r"><button className="btn ghost sm" onClick=${() => archive(x)}>Archive</button></td></tr>`)}</tbody></table></div>`
-        : html`<${Empty} title=${tab === 'done' ? 'No completed tasks' : 'No tasks yet'} action=${tab !== 'done' && html`<button className="btn" onClick=${() => setNw(true)}>Assign a task</button>`}>Assign onboarding steps, document requests or project to-dos to one person or the whole team.<//>`}
+          <td className="r"><button type="button" className="btn ghost sm" onClick=${() => archive(x)}>Archive</button></td></tr>`)}</tbody></table></div>`
+        : html`<${Empty} title=${tab === 'done' ? 'No completed tasks' : 'No tasks yet'} action=${tab !== 'done' && html`<button type="button" className="btn" onClick=${() => setNw(true)}>Assign a task</button>`}>Assign onboarding steps, document requests or project to-dos to one person or the whole team.<//>`}
     </section>
     ${nw && html`<${NewTask} onClose=${() => setNw(false)} />`}
   </div>`;
@@ -525,7 +525,7 @@ function AdminReports() {
     <div className="toolbar">
       <${Field} label="From week of"><input type="date" value=${from} onInput=${e => e.target.value && setFrom(e.target.value)} /><//>
       <${Field} label="To week of"><input type="date" value=${to} onInput=${e => e.target.value && setTo(e.target.value)} /><//>
-      <div className="push" style=${{ alignSelf: 'flex-end' }}><button className="btn ghost" disabled=${!rows.length} onClick=${expSummary}><${Icon} n="down" />Summary CSV</button><button className="btn" disabled=${!rows.length || busy} onClick=${expLines}><${Icon} n="down" />${busy ? 'Preparing…' : 'Timesheet lines CSV'}</button></div>
+      <div className="push" style=${{ alignSelf: 'flex-end' }}><button type="button" className="btn ghost" disabled=${!rows.length} onClick=${expSummary}><${Icon} n="down" />Summary CSV</button><button type="button" className="btn" disabled=${!rows.length || busy} onClick=${expLines}><${Icon} n="down" />${busy ? 'Preparing…' : 'Timesheet lines CSV'}</button></div>
     </div>
     <p className="muted small">Weeks of ${weekLabel(f)} through ${weekLabel(t)}. Use the timesheet lines export for invoicing and payroll.</p>
     <section className="panel" style=${{ padding: '6px 8px' }}>
@@ -560,7 +560,7 @@ function AdminAnnouncements() {
       <div><button className="btn" disabled=${busy}>${busy ? 'Posting…' : 'Post announcement'}</button></div></form>
     <section className="panel"><h2 className="ph" style=${{ marginBottom: 4 }}>Posted</h2>
       ${P.ann.length ? P.ann.map(a => html`<article key=${a.id} className="ann"><div className="ph-row" style=${{ marginBottom: 2 }}><h3>${a.ti}</h3>
-          <div className="actions"><button className="btn ghost sm" onClick=${() => pin(a)}>${a.pin ? 'Unpin' : 'Pin'}</button><button className="btn ghost sm icon" aria-label=${'Delete ' + a.ti} onClick=${() => del(a)}><${Icon} n="trash" /></button></div></div>
+          <div className="actions"><button type="button" className="btn ghost sm" onClick=${() => pin(a)}>${a.pin ? 'Unpin' : 'Pin'}</button><button type="button" className="btn ghost sm icon" aria-label=${'Delete ' + a.ti} onClick=${() => del(a)}><${Icon} n="trash" /></button></div></div>
         <time>${fmtDay(a.at)}${a.pin ? ', pinned' : ''}</time><p>${a.b}</p></article>`)
       : html`<${Empty} title="Nothing posted yet">Announcements show on every team member's dashboard.<//>`}
     </section>
@@ -580,7 +580,7 @@ function JobModal({ job, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title=${job ? 'Edit job' : 'Post a job'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>${job ? 'Save job' : 'Post job'}</button>`}>
+  return html`<${Modal} title=${job ? 'Edit job' : 'Post a job'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>${job ? 'Save job' : 'Post job'}</button>`}>
     <div className="form">
       <${Field} label="Job title"><input value=${f.ti} onInput=${up('ti')} placeholder="e.g. Senior Network Engineer" /><//>
       <div className="row3"><${Field} label="Location"><input value=${f.loc} onInput=${up('loc')} placeholder="City, state" /><//>
@@ -599,7 +599,7 @@ function AdminWebsite({ q }) {
   const toggle = async x => { try { await dbMerge(`inbox/${x.uid}`, { m: { [x.id]: { done: !x.done } } }); } catch (e) { toast(errText(e), true); } };
   const delJob = async j => { try { await dbDel(`org/site/jobs/${j.id}`); toast('Job removed.'); } catch (e) { toast(errText(e), true); } };
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['inbox', 'Inbox', A.unread], ['jobs', 'Job openings', jobs.docs.filter(j => j.open !== false).length]].map(([k, v, n]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'inbox' && n ? ' amber' : '')}>${n}</span></button>`)}</div>
+    <div className="tabs" role="tablist">${[['inbox', 'Inbox', A.unread], ['jobs', 'Job openings', jobs.docs.filter(j => j.open !== false).length]].map(([k, v, n]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'inbox' && n ? ' amber' : '')}>${n}</span></button>`)}</div>
     ${tab === 'inbox' && html`<section className="panel">
       <p className="muted small" style=${{ marginBottom: 8 }}>Messages from the Contact page, talent requests from employers, and job applications with resumes.</p>
       ${A.msgs.length ? html`<ul className="list">${A.msgs.map(x => html`<li key=${x.uid + x.id} style=${{ opacity: x.done ? 0.6 : 1 }}>
@@ -607,17 +607,17 @@ function AdminWebsite({ q }) {
           <div className="m" style=${{ marginTop: 6 }}><a href=${'mailto:' + x.e}>${x.e}</a>${x.ph ? ', ' + x.ph : ''}${x.co ? ', ' + x.co : ''}${x.sv ? '. Service: ' + x.sv : ''}${x.jt ? '. Role: ' + x.jt : ''}${x.li ? html`. <a href=${x.li} target="_blank" rel="noopener">Profile link</a>` : ''}</div>
           ${x.msg && html`<p style=${{ marginTop: 6, fontSize: 15, whiteSpace: 'pre-wrap' }}>${x.msg}</p>`}
           ${x.fid && html`<div className="actions" style=${{ marginTop: 8 }}><${FileActions} base=${'inbox/' + x.uid} f=${{ id: x.fid, n: 'Resume', ty: '' }} /></div>`}</div>
-        <button className="btn ghost sm" onClick=${() => toggle(x)}>${x.done ? 'Mark as new' : 'Mark handled'}</button></li>`)}</ul>`
+        <button type="button" className="btn ghost sm" onClick=${() => toggle(x)}>${x.done ? 'Mark as new' : 'Mark handled'}</button></li>`)}</ul>`
         : html`<${Empty} title="Inbox is empty">Messages from the Contact and Careers pages land here.<//>`}
     </section>`}
     ${tab === 'jobs' && html`<${Fragment}>
-      <div className="toolbar"><p className="muted small">Open jobs appear on the website's Careers page. "Send" emails a job to chosen consultants, candidates or any address; "Share" copies a link or posts it.</p><div className="push"><button className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Post a job</button></div></div>
+      <div className="toolbar"><p className="muted small">Open jobs appear on the website's Careers page. "Send" emails a job to chosen consultants, candidates or any address; "Share" copies a link or posts it.</p><div className="push"><button type="button" className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />Post a job</button></div></div>
       <section className="panel" style=${{ padding: '6px 8px' }}>
         ${jobs.loading ? html`<${Spinner} />` : jobs.docs.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Role</th><th>Location</th><th>Engagement</th><th>Status</th><th /></tr></thead>
           <tbody>${jobs.docs.map(j => html`<tr key=${j.id}><td><b style=${{ fontWeight: 600 }}>${j.ti}</b>${j.sk ? html`<div className="muted small">${j.sk}</div>` : ''}${j.src ? html`<div className="muted small">Grabbed from ${j.src.portal ? j.src.portal[0].toUpperCase() + j.src.portal.slice(1) : 'a portal'}${j.src.company ? ', ' + j.src.company : ''}</div>` : ''}</td><td>${j.loc || '—'}${j.md ? html`<div className="muted small">${j.md}</div>` : ''}</td><td>${j.ty}</td>
             <td>${j.open !== false ? html`<${Chip} s="ok">Open<//>` : html`<${Chip}>Closed<//>`}${j.sentN ? html`<div className="muted small">Sent to ${j.sentN}</div>` : ''}${j.shares ? html`<div className="muted small">Shared ${j.shares}×</div>` : ''}</td>
-            <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>${j.open !== false && html`<${SendJobButton} jobId=${j.id} small=${true} label="Send" /><${ShareButton} job=${j} small=${true} />`}<button className="btn ghost sm" onClick=${() => setEdit(j)}>Edit</button><button className="btn ghost sm icon" aria-label=${'Delete ' + j.ti} onClick=${() => delJob(j)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
-          : html`<${Empty} title="No jobs posted" action=${html`<button className="btn" onClick=${() => setEdit(null)}>Post your first job</button>`}>Roles you post here show on the Careers page with an Apply button.<//>`}
+            <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>${j.open !== false && html`<${SendJobButton} jobId=${j.id} small=${true} label="Send" /><${ShareButton} job=${j} small=${true} />`}<button type="button" className="btn ghost sm" onClick=${() => setEdit(j)}>Edit</button><button type="button" className="btn ghost sm icon" aria-label=${'Delete ' + j.ti} onClick=${() => delJob(j)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
+          : html`<${Empty} title="No jobs posted" action=${html`<button type="button" className="btn" onClick=${() => setEdit(null)}>Post your first job</button>`}>Roles you post here show on the Careers page with an Apply button.<//>`}
       </section>
     <//>`}
     ${edit !== undefined && html`<${JobModal} job=${edit} onClose=${() => setEdit(undefined)} />`}
@@ -656,7 +656,7 @@ function PayForm({ m }) {
   };
   const monthly = f.type !== 'hourly';
   return html`<div className="form">
-      ${plan && +plan.amt ? html`<div className=${'note ' + (confOk ? 'ok' : 'amber')}><span>${confOk ? html`<b>Salary confirmed</b> by ${conf.byn} ${fmtDay(conf.at)}.` : html`<b>Salary not yet confirmed by an administrator.</b> ${conf ? 'The plan changed after the last confirmation.' : ''}`}</span>${P.roleName === 'admin' && !confOk ? html`<div className="actions"><button className="btn go sm" onClick=${confirmNow}>Confirm salary</button></div>` : ''}</div>` : ''}
+      ${plan && +plan.amt ? html`<div className=${'note ' + (confOk ? 'ok' : 'amber')}><span>${confOk ? html`<b>Salary confirmed</b> by ${conf.byn} ${fmtDay(conf.at)}.` : html`<b>Salary not yet confirmed by an administrator.</b> ${conf ? 'The plan changed after the last confirmation.' : ''}`}</span>${P.roleName === 'admin' && !confOk ? html`<div className="actions"><button type="button" className="btn go sm" onClick=${confirmNow}>Confirm salary</button></div>` : ''}</div>` : ''}
     <div className="row3"><${Field} label="Pay plan"><select value=${f.type} onChange=${up('type')}><option value="monthly">Monthly salary</option><option value="hourly">Hourly rate</option></select><//>
       <${Field} label="Currency"><select value=${f.cur} onChange=${up('cur')}>${Object.entries(CURRENCIES).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//>
       <${Field} label=${monthly ? 'Monthly salary' : 'Rate per hour'}><input type="number" min="0" step="0.01" inputMode="decimal" value=${f.amt || ''} onInput=${up('amt')} placeholder=${monthly ? 'e.g. 60000' : 'e.g. 450'} /><//></div>
@@ -670,7 +670,7 @@ function PayForm({ m }) {
     <${Field} label="Effective from"><input type="date" value=${f.from || ''} onInput=${up('from')} /><//>
     <${ItemsEditor} label="Allowances (added every month)" addLabel="Add allowance" items=${f.allow || []} onChange=${v => setF({ ...f, allow: v })} />
     <${ItemsEditor} label="Deductions (taken every month; % is of gross)" addLabel="Add deduction" items=${f.ded || []} onChange=${v => setF({ ...f, ded: v })} />
-    <div className="actions"><button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save pay plan'}</button><span className="muted small">Employees see their earnings computed from clock-ins as soon as this is saved.</span></div>
+    <div className="actions"><button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save pay plan'}</button><span className="muted small">Employees see their earnings computed from clock-ins as soon as this is saved.</span></div>
   </div>`;
 }
 function PayrollDetail({ row, mk, onClose }) {
@@ -684,7 +684,7 @@ function PayrollDetail({ row, mk, onClose }) {
     setBusy(false);
   };
   const c = row.c;
-  return html`<${Modal} wide title=${`${row.m.u.p.n}: ${monthLabel(mk)}`} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button><button className="btn" disabled=${busy} onClick=${save}>Save adjustments</button>`}>
+  return html`<${Modal} wide title=${`${row.m.u.p.n}: ${monthLabel(mk)}`} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button><button type="button" className="btn" disabled=${busy} onClick=${save}>Save adjustments</button>`}>
     <div className="stack">
       <div className="kpis" style=${{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))' }}>
         <a><b>${fmtMoney(c.net, c.p.cur)}</b><span>Net pay</span></a><a><b>${c.present} / ${c.workDays}</b><span>Present / working days</span></a><a><b>${hm(c.reg)}</b><span>Regular hours</span></a><a><b>${hm(c.ot)}</b><span>Overtime</span></a></div>
@@ -728,18 +728,18 @@ function AdminPayroll() {
   const cur = open && rows.find(r => r.m.id === open);
   return html`<div className="stack">
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b>
         <button className="btn ghost icon" aria-label="Next pay period" disabled=${mk >= cycleFor(dkey(), ps)} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button></div>
-      <div className="push"><button className="btn ghost" onClick=${() => setEditHol(v => !v)}>Payroll settings</button><button className="btn ghost" onClick=${() => setTick(t => t + 1)}>Refresh</button><button className="btn" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Payroll CSV</button></div>
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setEditHol(v => !v)}>Payroll settings</button><button type="button" className="btn ghost" onClick=${() => setTick(t => t + 1)}>Refresh</button><button type="button" className="btn" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Payroll CSV</button></div>
     </div>
     ${editHol && html`<section className="panel form"><h2 className="ph">Payroll settings</h2>
       <div className="row2"><${Field} label="Pay period starts on day" hint="26 means each period runs from the 26th to the 25th of the next month and is paid as that month. 1 means calendar months."><input type="number" min="1" max="28" value=${cfg.payStart} onInput=${e => setCfg({ ...cfg, payStart: e.target.value })} /><//>
         <${Field} label="Break allowance per day (minutes)" hint="Break time beyond this is unpaid unless an admin approves the extended break."><input type="number" min="0" value=${cfg.breakMax} onInput=${e => setCfg({ ...cfg, breakMax: e.target.value })} /><//></div>
       <label className="check"><input type="checkbox" checked=${!!cfg.attApproval} onChange=${e => setCfg({ ...cfg, attApproval: e.target.checked })} /><span>Clock-ins need admin approval before they count as paid days (Approvals › Attendance)</span></label>
-      <div className="actions"><button className="btn" onClick=${saveCfg}>Save settings</button></div>
+      <div className="actions"><button type="button" className="btn" onClick=${saveCfg}>Save settings</button></div>
       <h2 className="ph" style=${{ marginTop: 10 }}>Company holidays</h2><p className="muted small">One date per line (YYYY-MM-DD). Holidays are paid days and don't count as working days.</p>
       <textarea value=${hol} onInput=${e => setHol(e.target.value)} placeholder="2026-10-02\n2026-11-11" style=${{ minHeight: 120, maxWidth: 360, fontVariantNumeric: 'tabular-nums' }} />
-      <div className="actions"><button className="btn" onClick=${saveHol}>Save holidays</button><button className="btn ghost" onClick=${() => setEditHol(false)}>Close</button></div></section>`}
+      <div className="actions"><button type="button" className="btn" onClick=${saveHol}>Save holidays</button><button type="button" className="btn ghost" onClick=${() => setEditHol(false)}>Close</button></div></section>`}
     ${Object.keys(totals).length > 0 && html`<div className="kpis" style=${{ gridTemplateColumns: `repeat(${Object.keys(totals).length + 1},minmax(0,1fr))` }}>
       ${Object.entries(totals).map(([k, v]) => html`<a key=${k}><b>${fmtMoney(v, k)}</b><span>Total net pay (${k})</span></a>`)}<a><b>${rows.length}</b><span>People on payroll</span></a></div>`}
     <section className="panel" style=${{ padding: '6px 8px' }}>
@@ -769,7 +769,7 @@ function TaxProfileForm({ m }) {
     : html`<${Fragment}>
       <div className="row3"><${Field} label="Tax regime"><select value=${f.regime} onChange=${up('regime')}><option value="new">New regime</option><option value="old">Old regime</option></select><//>${f.regime === 'old' && html`<${Field} label="Annual deductions (80C, 80D, HRA exemption)"><input type="number" step="1" value=${f.ded} onInput=${up('ded')} /><//>`}<label className="check" style=${{ alignSelf: 'end', paddingBottom: 12 }}><input type="checkbox" checked=${!!f.pf} onChange=${up('pf')} /><span>EPF applies</span></label></div>
       <div className="row2"><${Field} label="Basic as % of gross" hint="Blank uses the default from Tax settings."><input type="number" step="1" value=${f.basicPct} onInput=${up('basicPct')} /><//><${Field} label="Professional tax per month" hint="Blank uses the default; set by state (e.g. 200)."><input type="number" step="1" value=${f.pt} onInput=${up('pt')} /><//></div><//>`}
-    <div className="actions"><button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save tax details'}</button><span className="muted small">Used by Accounting › Payroll runs to compute withholdings on each paystub.</span></div>
+    <div className="actions"><button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save tax details'}</button><span className="muted small">Used by Accounting › Payroll runs to compute withholdings on each paystub.</span></div>
   </div>`;
 }
 
@@ -784,14 +784,14 @@ function SignIns() {
   const isOnline = d => d.seen && now - d.seen < 10 * 60000;
   useEffect(() => { if (!open) { setHist(null); return; } let live = true; dbList(`log/${open}/items`).then(l => { if (live) setHist(l.sort((a, b) => b.t - a.t)); }).catch(() => setHist([])); return () => { live = false; }; }, [open]);
   const exp = async () => { try { await saveDownload('sign-ins.csv', toCSV([['Name', 'Email', 'Role', 'Last sign-in', 'Online', 'Network address', 'Approximate location', 'Precise location', 'Device', 'Sign-ins'], ...rows.map(d => [d.name, d.email, roleOf(d), new Date(d.last.t).toISOString(), isOnline(d) ? 'yes' : 'no', d.last.ip, geoLabel(d.last), d.last.pos ? `${d.last.pos.lat}, ${d.last.pos.lng} (±${d.last.pos.acc} m)` : '', uaSummary(d.last.ua), d.n])])); } catch (e) { if (!e || e.code !== 'declined') toast(errText(e), true); } };
-  const roleOf = d => { const m = byId[d.id]; return m ? (m.role === 'employer' ? 'Client contact' : m.r && m.r.cl ? `Employee, ${m.r.cl}` : 'Employee') : d.role === 'admin' ? 'Admin' : d.role === 'hr' ? 'HR' : d.role === 'acct' ? 'Accounting' : 'Account'; };
+  const roleOf = d => { const m = byId[d.id]; return m ? (m.role === 'employer' ? 'Client contact' : m.role === 'bench' ? 'Bench sales recruiter' : m.r && m.r.cl ? `Employee, ${m.r.cl}` : 'Employee') : d.role === 'admin' ? 'Admin' : d.role === 'hr' ? 'HR' : d.role === 'acct' ? 'Accounting' : 'Account'; };
   const cur = open && logs.docs.find(d => d.id === open);
   const Loc = ({ r }) => html`<span>${geoLabel(r) || html`<span className="muted">Unknown</span>`}</span>`;
   const Exact = ({ r }) => r.pos ? html`<a href=${mapLink(r.pos)} target="_blank" rel="noopener">${r.pos.lat}, ${r.pos.lng}</a><div className="muted small">±${r.pos.acc} m · map</div>` : html`<span className="muted small">Not shared${r.posErr ? ' (' + (POS_ERR[r.posErr] || r.posErr) + ')' : ''}</span>`;
   return html`<div className="stack">
     <div className="kpis" style=${{ gridTemplateColumns: 'repeat(3,minmax(0,1fr))' }}><a><b>${logs.docs.filter(isOnline).length}</b><span>Signed in now (active in the last 10 minutes)</span></a><a><b>${logs.docs.filter(d => d.last && d.last.t >= now - 86400000).length}</b><span>Signed in within 24 hours</span></a><a><b>${logs.docs.reduce((a, d) => a + (+d.n || 0), 0)}</b><span>Sign-ins recorded</span></a></div>
-    <div className="toolbar"><div className="seg" style=${{ marginBottom: 0 }}>${[['all', 'All'], ['today', 'Today'], ['7d', '7 days'], ['30d', '30 days']].map(([k, v]) => html`<button key=${k} className=${range === k ? 'on' : ''} onClick=${() => setRange(k)}>${v}</button>`)}</div>
-      <input type="search" style=${{ maxWidth: 260 }} placeholder="Search name, email, address, city" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search sign-ins" /><div className="push"><button className="btn ghost" onClick=${exp}><${Icon} n="down" />CSV</button></div></div>
+    <div className="toolbar"><div className="seg" style=${{ marginBottom: 0 }}>${[['all', 'All'], ['today', 'Today'], ['7d', '7 days'], ['30d', '30 days']].map(([k, v]) => html`<button type="button" key=${k} className=${range === k ? 'on' : ''} onClick=${() => setRange(k)}>${v}</button>`)}</div>
+      <input type="search" style=${{ maxWidth: 260 }} placeholder="Search name, email, address, city" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search sign-ins" /><div className="push"><button type="button" className="btn ghost" onClick=${exp}><${Icon} n="down" />CSV</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${logs.loading ? html`<${Spinner} />` : rows.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Person</th><th>Status</th><th>Last sign-in</th><th>City (from address)</th><th>Exact location</th><th>Network address</th><th>Device</th><th className="r">Sign-ins</th></tr></thead>
         <tbody>${rows.map(d => { const m = byId[d.id]; return html`<tr key=${d.id} className="click" tabIndex="0" onClick=${() => setOpen(d.id)} onKeyDown=${e => { if (e.key === 'Enter') setOpen(d.id); }}>
@@ -800,7 +800,7 @@ function SignIns() {
           <td className="num nw">${fmtTs(d.last.t)}</td><td><${Loc} r=${d.last} /></td><td><${Exact} r=${d.last} /></td><td className="num small">${d.last.ip}</td><td className="small">${uaSummary(d.last.ua)}</td><td className="r num">${d.n}</td></tr>`; })}</tbody></table></div>`
         : html`<${Empty} title="No sign-ins yet">Every portal sign-in is recorded here with its time, network address, approximate location and device. Precise location appears when the person allows location sharing in their browser.<//>`}
     </section>
-    ${cur && html`<${Modal} wide title=${`Sign-in history: ${cur.name}`} onClose=${() => setOpen(null)} foot=${html`<button className="btn" onClick=${() => setOpen(null)}>Close</button>`}>
+    ${cur && html`<${Modal} wide title=${`Sign-in history: ${cur.name}`} onClose=${() => setOpen(null)} foot=${html`<button type="button" className="btn" onClick=${() => setOpen(null)}>Close</button>`}>
       ${hist === null ? html`<${Spinner} />` : hist.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>When</th><th>Event</th><th>City (from address)</th><th>Exact location</th><th>Network address</th><th>Device</th></tr></thead>
         <tbody>${hist.slice(0, 200).map(r => html`<tr key=${r.id}><td className="num nw">${fmtTs(r.t)}</td><td>${r.how === 'punch' ? (EV_LABEL[r.ev] || r.ev) : (EV_LABEL[r.how] || 'Signed in')}</td><td><${Loc} r=${r} /></td><td><${Exact} r=${r} /></td><td className="num small">${r.ip}${r.geo && r.geo.isp ? html`<div className="muted small">${r.geo.isp}</div>` : ''}</td><td className="small">${uaSummary(r.ua)}<div className="muted small" style=${{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title=${r.ua}>${r.ua}</div></td></tr>`)}</tbody></table></div>` : html`<${Empty} title="No history" />`}
       <p className="muted small" style=${{ marginTop: 10 }}>Sign-ins, sign-outs, clock-ins, clock-outs and breaks are listed with the network address and the city it resolves to (VPNs and mobile carriers can place it elsewhere). Exact location is recorded when the person allows location sharing in their browser.</p><//>`}
@@ -823,15 +823,15 @@ function AttApprovals() {
   const approveAll = async (uid) => { const list = rows.filter(r => (r.st === 'pending' || r.st === 'changed') && !r.open && (!uid || r.m.id === uid)); if (!list.length) return; const byUser = {}; list.forEach(r => { (byUser[r.m.id] = byUser[r.m.id] || {})[r.k] = { s: 'approved', m: r.mins, by: P.uid, at: Date.now(), n: '' }; }); try { for (const [id, attA] of Object.entries(byUser)) await dbMerge(`r/${id}`, { attA }); toast(`${list.length} day${list.length === 1 ? '' : 's'} approved.`); } catch (e) { toast(errText(e), true); } };
   const pendingCount = rows.filter(r => r.st === 'pending' || r.st === 'changed').length;
   return html`<div className="stack" style=${{ marginTop: 12 }}>
-    <div className="toolbar"><div className="wknav"><button className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b><button className="btn ghost icon" aria-label="Next pay period" disabled=${mk >= cycleFor(dkey(), ps)} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button></div>
-      <div className="seg" style=${{ marginBottom: 0 }}>${[['pending', 'To approve'], ['rejected', 'Rejected'], ['all', 'All days']].map(([k, v]) => html`<button key=${k} className=${show === k ? 'on' : ''} onClick=${() => setShow(k)}>${v}</button>`)}</div>
-      <div className="push"><button className="btn ghost" onClick=${() => setTick(t => t + 1)}>Refresh</button><button className="btn go" disabled=${!pendingCount} onClick=${() => approveAll()}>Approve all (${pendingCount})</button></div></div>
+    <div className="toolbar"><div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b><button className="btn ghost icon" aria-label="Next pay period" disabled=${mk >= cycleFor(dkey(), ps)} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button></div>
+      <div className="seg" style=${{ marginBottom: 0 }}>${[['pending', 'To approve'], ['rejected', 'Rejected'], ['all', 'All days']].map(([k, v]) => html`<button type="button" key=${k} className=${show === k ? 'on' : ''} onClick=${() => setShow(k)}>${v}</button>`)}</div>
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setTick(t => t + 1)}>Refresh</button><button type="button" className="btn go" disabled=${!pendingCount} onClick=${() => approveAll()}>Approve all (${pendingCount})</button></div></div>
     ${rows.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Person</th><th>Date</th><th>Clock in → out</th><th className="r">Hours</th><th>Status</th><th /></tr></thead>
       <tbody>${rows.map(r => html`<tr key=${r.m.id + r.k}><td><${Person} uid=${r.m.id} root=${r.m.u} people=${P.people} sub=${(r.m.r && r.m.r.cl) || r.m.u.p.ti} /></td><td className="num nw">${fmtDate(r.k, { weekday: 'short', month: 'short', day: 'numeric' })}</td>
         <td className="small">${(r.d.s || []).map((x, i) => html`<div key=${i}>${fmtTime(x.i)} → ${x.o ? fmtTime(x.o) : html`<span className="muted">still in</span>`}${x.m ? ' · ' + (MODES[x.m] || x.m) : ''}${x.e ? html` <${Chip} s="amber">Manual entry<//>` : ''}${x.n ? html`<div className="muted">${x.n}</div>` : ''}<${PunchLoc} m=${x.li} label="in" /><${PunchLoc} m=${x.lo} label="out" /></div>`)}
           ${(r.d.b || []).length > 0 && html`<div style=${{ marginTop: 4 }}><b>Breaks:</b> ${(r.d.b || []).map((x, i) => html`<span key=${i}>${i ? ', ' : ''}${fmtTime(x.i)}–${x.o ? fmtTime(x.o) : 'now'}</span>`)} (${hm(r.bm)})${r.over ? html` <${Chip} s=${r.extOk ? 'ok' : 'amber'}>${hm(r.over)} over allowance${r.extOk ? ', approved' : (r.a && r.a.bx === 'unpaid') ? ', unpaid' : ''}<//>` : ''}${(r.d.b || []).map((x, i) => html`<${PunchLoc} key=${'b' + i} m=${x.li} label=${'break ' + (i + 1) + ' start'} />`)}</div>`}</td>
         <td className="r num">${hm(r.mins)}</td><td><${Chip} s=${r.st === 'approved' ? 'ok' : r.st === 'rejected' ? 'red' : 'amber'}>${ATT_ST[r.st]}<//>${r.a && r.a.n ? html`<div className="muted small">${r.a.n}</div>` : ''}</td>
-        <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>${r.open ? html`<span className="muted small">Waiting for clock-out</span>` : html`${r.over && !r.extOk && html`<button className="btn sm" onClick=${() => decide(r, 'approved', '', 'approved').then(() => toast('Day and extended break approved (paid).'))}>Approve with extra break</button>`}${(r.st !== 'approved' || (r.over && !r.extOk && !(r.a && r.a.bx === 'unpaid'))) && html`<button className="btn go sm" onClick=${() => decide(r, 'approved', '', r.over && !r.extOk ? 'unpaid' : null).then(() => toast(r.over && !r.extOk ? 'Approved; the extra break time is unpaid.' : 'Approved.'))}>${r.over && !r.extOk ? 'Approve (extra break unpaid)' : 'Approve'}</button>`}${r.st !== 'rejected' && html`<button className="btn ghost sm" onClick=${() => { const n = prompt('Why is this day rejected? (shown to the employee)'); if (n === null) return; decide(r, 'rejected', n).then(() => toast('Rejected.')); }}>Reject</button>`}`}</div></td></tr>`)}</tbody></table></div>`
+        <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>${r.open ? html`<span className="muted small">Waiting for clock-out</span>` : html`${r.over && !r.extOk && html`<button type="button" className="btn sm" onClick=${() => decide(r, 'approved', '', 'approved').then(() => toast('Day and extended break approved (paid).'))}>Approve with extra break</button>`}${(r.st !== 'approved' || (r.over && !r.extOk && !(r.a && r.a.bx === 'unpaid'))) && html`<button type="button" className="btn go sm" onClick=${() => decide(r, 'approved', '', r.over && !r.extOk ? 'unpaid' : null).then(() => toast(r.over && !r.extOk ? 'Approved; the extra break time is unpaid.' : 'Approved.'))}>${r.over && !r.extOk ? 'Approve (extra break unpaid)' : 'Approve'}</button>`}${r.st !== 'rejected' && html`<button type="button" className="btn ghost sm" onClick=${() => { const n = prompt('Why is this day rejected? (shown to the employee)'); if (n === null) return; decide(r, 'rejected', n).then(() => toast('Rejected.')); }}>Reject</button>`}`}</div></td></tr>`)}</tbody></table></div>`
       : html`<${Empty} title=${show === 'pending' ? 'Nothing to approve' : 'No days here'}>Each day an employee clocks in and out appears here. Approved days count toward their pay for the ${cyc.short} period; days edited after approval come back for review.<//>`}
   </div>`;
 }

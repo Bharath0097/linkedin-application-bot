@@ -134,11 +134,19 @@ function SiteHeader({ path }) {
   const [dd, setDd] = useState(false);
   const [sheet, setSheet] = useState(false);
   const ddRef = useRef(null);
-  useEffect(() => { setDd(false); setSheet(false); }, [path]);
+  /* ddOpen mirrors dd synchronously (React may not have re-rendered between the mouseenter and the click of one tap); hoverAt remembers when a hover opened it */
+  const ddOpen = useRef(false); const hoverAt = useRef(0);
+  const openDd = v => { ddOpen.current = v; setDd(v); };
+  const ddHover = e => { if (e && e.pointerType && e.pointerType !== 'mouse') return; hoverAt.current = Date.now(); openDd(true); };
+  const ddClick = () => {
+    /* Closed (or opened by the synthetic mouseenter of this same tap): open the menu. Already open from a hover or an earlier tap: go to Services. */
+    if (ddOpen.current && Date.now() - hoverAt.current > 150) { openDd(false); location.hash = '#/services'; } else openDd(true);
+  };
+  useEffect(() => { openDd(false); setSheet(false); }, [path]);
   useEffect(() => {
     if (!dd) return;
-    const f = e => { if (ddRef.current && !ddRef.current.contains(e.target)) setDd(false); };
-    const k = e => { if (e.key === 'Escape') setDd(false); };
+    const f = e => { if (ddRef.current && !ddRef.current.contains(e.target)) openDd(false); };
+    const k = e => { if (e.key === 'Escape') openDd(false); };
     addEventListener('mousedown', f); addEventListener('keydown', k);
     return () => { removeEventListener('mousedown', f); removeEventListener('keydown', k); };
   }, [dd]);
@@ -155,23 +163,23 @@ function SiteHeader({ path }) {
       <nav className="links" aria-label="Main">
         <a className=${on('/')} href="#/">Home</a>
         <a className=${on('/about')} href="#/about">About us</a>
-        <div className="dd" ref=${ddRef} onMouseLeave=${() => setDd(false)}>
-          <button aria-expanded=${dd} onClick=${() => setDd(v => !v)} onMouseEnter=${() => setDd(true)} className=${on('/services')}>Services <${Icon} n="chev" cls="sm" /></button>
-          ${dd && html`<div className="dd-menu">${SERVICES.map(s => html`<a key=${s.s} href=${'#/services/' + s.s}>${s.n}<small>${s.d}</small></a>`)}</div>`}
+        <div className="dd" ref=${ddRef} onPointerLeave=${window.PointerEvent ? (e => { if (!e.pointerType || e.pointerType === 'mouse') openDd(false); }) : undefined} onMouseLeave=${window.PointerEvent ? undefined : (() => openDd(false))}>
+          <button type="button" aria-expanded=${dd} aria-haspopup="true" aria-controls="services-menu" onClick=${ddClick} onPointerEnter=${window.PointerEvent ? ddHover : undefined} onMouseEnter=${window.PointerEvent ? undefined : ddHover} className=${on('/services')}>Services <${Icon} n="chev" cls="sm" /></button>
+          ${dd && html`<div className="dd-menu" id="services-menu">${SERVICES.map(s => html`<a key=${s.s} href=${'#/services/' + s.s}>${s.n}<small>${s.d}</small></a>`)}</div>`}
         </div>
         <a className=${on('/blog')} href="#/blog">Blog</a>
         <a className=${on('/careers')} href="#/careers">Careers</a>
         <a className=${on('/contact')} href="#/contact">Contact us</a>
       </nav>
       <div className="nav-cta">
-        <button className="askbtn hide-m" onClick=${() => dispatchEvent(new CustomEvent('edge-open'))} aria-label="Ask the StratEdge assistant" title="Ask the assistant"><span className="askbot"><${Bot} small /></span></button>
+        <button type="button" className="askbtn hide-m" onClick=${() => dispatchEvent(new CustomEvent('edge-open'))} aria-label="Ask the StratEdge assistant" title="Ask the assistant"><span className="askbot"><${Bot} small /></span></button>
         <a className="btn ghost hide-m" href="#/request-talent">Request talent</a>
         <a className="btn" href=${LOGIN}>Log in</a>
-        <button className="btn ghost icon burger" aria-label="Open menu" onClick=${() => setSheet(true)}><${Icon} n="menu" /></button>
+        <button type="button" className="btn ghost icon burger" aria-label="Open menu" onClick=${() => setSheet(true)}><${Icon} n="menu" /></button>
       </div>
     </div></header>
     ${sheet && html`<div className="sheet" role="dialog" aria-modal="true" aria-label="Menu">
-      <div className="top-row"><a className="brand" href="#/"><${Logo} /></a><button className="btn ghost icon" aria-label="Close menu" onClick=${() => setSheet(false)}><${Icon} n="x" /></button></div>
+      <div className="top-row"><a className="brand" href="#/"><${Logo} /></a><button type="button" className="btn ghost icon" aria-label="Close menu" onClick=${() => setSheet(false)}><${Icon} n="x" /></button></div>
       <a href="#/">Home</a><a href="#/about">About us</a><a href="#/services">Services</a>
       <div className="sub">${SERVICES.map(s => html`<a key=${s.s} href=${'#/services/' + s.s}>${s.n}</a>`)}</div>
       <a href="#/blog">Blog</a><a href="#/careers">Careers</a><a href="#/faq">FAQ</a><a href="#/contact">Contact us</a>
@@ -189,8 +197,8 @@ function SiteFooter() {
       <div><h4>Get in touch</h4><ul>
         <li><a href=${'tel:' + CO.tel}>${CO.phone}</a></li><li><a href=${'mailto:' + CO.email}>${CO.email}</a></li>
         <li><a href=${CO.map} target="_blank" rel="noopener">${CO.addr1}, ${CO.addr2}</a></li>
-        <li><a href=${CO.linkedin} target="_blank" rel="noopener">LinkedIn</a></li><li><a href=${LOGIN + '?as=consultant'}>Consultant portal</a></li><li><a href=${LOGIN + '?as=employee'}>Employee portal</a></li><li><a href=${LOGIN + '?as=client'}>Client portal</a></li>
-        <li><button className="btn sm go" style=${{ marginTop: 8 }} onClick=${() => dispatchEvent(new CustomEvent('edge-open'))}><${Icon} n="chat" />Ask the StratEdge assistant</button></li></ul></div>
+        <li><a href=${CO.linkedin} target="_blank" rel="noopener">LinkedIn</a></li><li><a href=${LOGIN + '?as=consultant'}>Consultant portal</a></li><li><a href=${LOGIN + '?as=employee'}>Employee portal</a></li><li><a href=${LOGIN + '?as=bench'}>Bench sales portal</a></li><li><a href=${LOGIN + '?as=client'}>Client portal</a></li>
+        <li><button type="button" className="btn sm go" style=${{ marginTop: 8 }} onClick=${() => dispatchEvent(new CustomEvent('edge-open'))}><${Icon} n="chat" />Ask the StratEdge assistant</button></li></ul></div>
     </div>
     <div className="legal"><div className="wrap">
       <span>© ${new Date().getFullYear()} ${CO.legal}. All rights reserved. <${PortalStatus} /></span>
@@ -227,20 +235,21 @@ function Hero() {
 }
 const StatsBand = () => html`<section className="stats-band"><div className="wrap"><div className="stats-row">${STATS.map(([n, l]) => html`<${Counter} key=${l} n=${parseInt(n, 10)} suffix="+" label=${l} />`)}<div className="counter roles"><b>2–5</b><span>days to first profiles</span></div></div></div></section>`;
 const PortalBand = () => html`<div className="band"><div className="wrap">
-  <p><strong>Already working with StratEdge?</strong> Consultants upload a resume, see matched jobs and submit timesheets in the consultant portal. StratEdge staff use the employee portal. Clients approve hours and post requirements in the client portal.</p>
-  <div className="actions"><a className="btn go" href=${LOGIN + '?as=consultant'}>Consultant portal</a><a className="btn ghost" href=${LOGIN + '?as=employee'}>Employee portal</a><a className="btn ghost" href=${LOGIN + '?as=client'}>Client portal</a></div></div></div>`;
+  <p><strong>Already working with StratEdge?</strong> Consultants upload a resume, see matched jobs and submit timesheets in the consultant portal. StratEdge staff use the employee portal, and bench sales recruiters the bench sales portal. Clients approve hours and post requirements in the client portal.</p>
+  <div className="actions"><a className="btn go" href=${LOGIN + '?as=consultant'}>Consultant portal</a><a className="btn ghost" href=${LOGIN + '?as=employee'}>Employee portal</a><a className="btn ghost" href=${LOGIN + '?as=bench'}>Bench sales portal</a><a className="btn ghost" href=${LOGIN + '?as=client'}>Client portal</a></div></div></div>`;
 const PORTALS = [
   { k: 'consultant', t: 'Consultant portal', d: 'For consultants placed by StratEdge, and those on the bench.', pts: ['Upload your resume and get matched to jobs collected from leading job boards every few hours', 'Save, track and apply to the roles that fit', 'Clock in, weekly timesheets, earnings and documents'] },
   { k: 'employee', t: 'Employee portal', d: 'For StratEdge staff: recruiters, delivery and office teams.', pts: ['Clock in and out from any device', 'Recruiting workspace: consultants, RTRs and submissions', 'Tasks, time off, onboarding and documents'] },
+  { k: 'bench', t: 'Bench sales portal', d: 'For StratEdge bench sales recruiters who market consultants to vendors and clients.', pts: ['Job grabber: search every job source by keyword and publish roles to Careers', 'Submit a consultant to a role in one click with the right resume', 'Consultants, RTRs, submissions and the daily report'] },
   { k: 'client', t: 'Client portal', d: 'For the managers our consultants work with.', pts: ['Approve or return consultant timesheets', 'See who is on site and hours clocked', 'Post requirements and review candidates'] },
   { k: 'hr', t: 'HR & Accounting', d: 'For StratEdge HR and accounting staff.', pts: ['Onboarding, e-signatures and the ATS', 'Invoices, bills, payroll runs and paystubs', 'US and India tax calculations and reports'] },
   { k: 'admin', t: 'Admin portal', d: 'For StratEdge account managers.', pts: ['Final approvals, team and client setup', 'Attendance across every engagement', 'Hours exports for payroll and invoicing'] },
 ];
 const PortalsSec = () => html`<section className="sec alt"><div className="wrap">
-  <div className="kicker">Portals</div><h2>Five portals, one login</h2>
+  <div className="kicker">Portals</div><h2>Six portals, one login</h2>
   <p className="intro">Everyone signs in with their own account and lands in the portal built for them.</p>
   <div className="portals">${PORTALS.map(p => html`<div key=${p.k} className="portal"><h3>${p.t}</h3><p>${p.d}</p><ul>${p.pts.map(x => html`<li key=${x}>${x}</li>`)}</ul>
-    <a className=${'btn ' + (p.k === 'admin' || p.k === 'hr' ? 'ghost' : '')} href=${LOGIN + '?as=' + p.k}>${p.k === 'admin' ? 'Admin sign-in' : p.k === 'hr' ? 'HR sign-in' : 'Open the ' + p.t.toLowerCase()}</a></div>`)}</div>
+    <a className=${'btn ' + (p.k === 'admin' || p.k === 'hr' ? 'ghost' : '')} href=${LOGIN + '?as=' + p.k}>${p.k === 'admin' ? 'Admin sign-in' : p.k === 'hr' ? 'HR sign-in' : p.k === 'bench' ? 'Open the bench sales portal' : 'Open the ' + p.t.toLowerCase()}</a></div>`)}</div>
 </div></section>`;
 
 function StaffingFeature() {
@@ -488,17 +497,17 @@ function ApplyModal({ job, onClose }) {
     catch (x) { setSt('mail'); toast(errText(x), true); }
   };
   const title = job ? 'Apply: ' + job.ti : 'Send your resume';
-  if (st === 'sent') return html`<${Modal} title=${title} onClose=${onClose} foot=${html`<button className="btn" onClick=${onClose}>Done</button>`}><p>Application received. Our recruiting team will review it and contact you at ${f.e}.</p><//>`;
+  if (st === 'sent') return html`<${Modal} title=${title} onClose=${onClose} foot=${html`<button type="button" className="btn" onClick=${onClose}>Done</button>`}><p>Application received. Our recruiting team will review it and contact you at ${f.e}.</p><//>`;
   if (st === 'mail') return html`<${Modal} title=${title} onClose=${onClose}>
     <p className="muted" style=${{ marginBottom: 16 }}>The application couldn't be sent through the site just now. Attach your resume to the email that opens instead.</p>
     <a className="btn lg" href=${mailtoFor('Application: ' + (job ? job.ti : 'General'), [`Name: ${f.n}`, `Email: ${f.e}`, f.ph && `Phone: ${f.ph}`, f.li && `LinkedIn: ${f.li}`, '', f.msg])}><${Icon} n="mail" />Open email</a><//>`;
-  return html`<${Modal} title=${title} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${st === 'busy'} onClick=${send}>${st === 'busy' ? 'Sending…' : 'Submit application'}</button>`}>
+  return html`<${Modal} title=${title} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${st === 'busy'} onClick=${send}>${st === 'busy' ? 'Sending…' : 'Submit application'}</button>`}>
     <div className="form">
       <div className="row2"><${Field} label="Full name"><input value=${f.n} onInput=${up('n')} autoComplete="name" /><//><${Field} label="Email"><input type="email" value=${f.e} onInput=${up('e')} autoComplete="email" /><//></div>
       <div className="row2"><${Field} label="Phone"><input type="tel" value=${f.ph} onInput=${up('ph')} /><//><${Field} label="LinkedIn or portfolio"><input value=${f.li} onInput=${up('li')} placeholder="https://" /><//></div>
       <${Field} label="Note to the recruiter"><textarea value=${f.msg} onInput=${up('msg')} placeholder="Availability, visa or work authorization, rate expectations" /><//>
       <div><span className="lbl">Resume</span>
-        ${file ? html`<ul className="files" style=${{ marginTop: 8 }}><li><div className="fn"><b>${file.name}</b><span>${sizeLabel(file.size)}</span></div><button className="btn ghost sm" onClick=${() => setFile(null)}>Remove</button></li></ul>`
+        ${file ? html`<ul className="files" style=${{ marginTop: 8 }}><li><div className="fn"><b>${file.name}</b><span>${sizeLabel(file.size)}</span></div><button type="button" className="btn ghost sm" onClick=${() => setFile(null)}>Remove</button></li></ul>`
           : html`<div style=${{ marginTop: 8 }}><${FilePick} label="Add your resume." hint="PDF or Word (.docx), up to 5 MB." onFiles=${fs => setFile(fs[0])} /></div>`}
       </div>
       ${err && html`<p className="err" role="alert">${err}</p>`}
@@ -517,7 +526,7 @@ function Careers() {
   return html`<${Fragment}>
     <${PageHead} title="Careers" intro="Contract, contract-to-hire and full-time roles with StratEdge and our clients across the US." />
     <section className="sec"><div className="wrap">
-      <div className="head-row"><h2 style=${{ fontSize: 30 }}>Open roles${all.length ? html` <span className="muted" style=${{ fontSize: 18, fontWeight: 500 }}>(${open.length === all.length ? all.length : open.length + ' of ' + all.length})</span>` : ''}</h2><button className="btn ghost" onClick=${() => setApply(null)}>Send a general application</button></div>
+      <div className="head-row"><h2 style=${{ fontSize: 30 }}>Open roles${all.length ? html` <span className="muted" style=${{ fontSize: 18, fontWeight: 500 }}>(${open.length === all.length ? all.length : open.length + ' of ' + all.length})</span>` : ''}</h2><button type="button" className="btn ghost" onClick=${() => setApply(null)}>Send a general application</button></div>
       ${all.length > 0 && html`<div className="jobs-filter"><input type="search" value=${q} onInput=${e => setQ(e.target.value)} placeholder="Search title, skills or location" aria-label="Search roles" />
         <select value=${fl.loc} onChange=${e => setFl({ ...fl, loc: e.target.value })} aria-label="Location"><option value="">All locations</option>${opts('loc').map(v => html`<option key=${v}>${v}</option>`)}</select>
         <select value=${fl.ty} onChange=${e => setFl({ ...fl, ty: e.target.value })} aria-label="Engagement"><option value="">All engagements</option>${opts('ty').map(v => html`<option key=${v}>${v}</option>`)}</select>
@@ -525,8 +534,8 @@ function Careers() {
       ${!caps || jobs.loading ? html`<${Spinner} label="Loading open roles…" />` : open.length ? html`<div className="jobs">${open.map(j => html`<div key=${j.id} className="job">
           <div><h3><a href=${'#/careers/' + j.id}>${j.ti}</a>${isNew(j) ? html` <span className="tag new">New</span>` : ''}</h3>${j.at ? html`<div className="muted small">Posted ${fmtDay(j.at)}</div>` : ''}${j.d && html`<p className="muted" style=${{ marginTop: 6, fontSize: 15.5, whiteSpace: 'pre-wrap' }}>${j.d.length > 320 ? j.d.slice(0, 320).replace(/\s+\S*$/, '') + '…' : j.d}</p>`}
             <div className="meta">${[j.loc, j.ty, j.md, j.sk].filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div></div>
-          <div className="actions" style=${{ flexWrap: 'nowrap' }}><${ShareButton} job=${j} /><button className="btn" onClick=${() => setApply(j)}>Apply</button></div></div>`)}</div>`
-        : all.length ? html`<div className="panel"><${Empty} title="No roles match that search" action=${html`<button className="btn ghost" onClick=${() => { setQ(''); setFl({ loc: '', ty: '', md: '' }); }}>Clear filters</button>`}>Try a broader search, or send a general application.<//></div>`
+          <div className="actions" style=${{ flexWrap: 'nowrap' }}><${ShareButton} job=${j} /><button type="button" className="btn" onClick=${() => setApply(j)}>Apply</button></div></div>`)}</div>`
+        : all.length ? html`<div className="panel"><${Empty} title="No roles match that search" action=${html`<button type="button" className="btn ghost" onClick=${() => { setQ(''); setFl({ loc: '', ty: '', md: '' }); }}>Clear filters</button>`}>Try a broader search, or send a general application.<//></div>`
         : html`<div className="panel"><${Empty} title="No roles are posted right now">Send your resume and we'll match you with new positions as they open, or email it to ${CO.email}.<//></div>`}
     </div></section>
     <section className="sec alt"><div className="wrap"><h2 style=${{ fontSize: 30 }}>Working with StratEdge</h2>
@@ -593,7 +602,7 @@ function CareerJob({ id }) {
       <div className="prose">${j.d ? html`<p style=${{ whiteSpace: 'pre-wrap', fontSize: 17 }}>${j.d}</p>` : html`<p className="muted">Contact us for the full description.</p>`}
         ${j.sk && html`<div className="meta" style=${{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 20 }}>${j.sk.split(/,\s*/).filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div>`}
         ${j.src && j.src.credit && j.src.url && html`<p className="muted small" style=${{ marginTop: 16 }}>Originally listed on <a href=${j.src.url} target="_blank" rel="noopener">${j.src.portal || 'the job board'}</a>.</p>`}
-        <div className="actions" style=${{ marginTop: 32 }}><button className="btn lg" onClick=${() => setApply(true)}>Apply for this role</button><${ShareButton} job=${j} /></div></div>
+        <div className="actions" style=${{ marginTop: 32 }}><button type="button" className="btn lg" onClick=${() => setApply(true)}>Apply for this role</button><${ShareButton} job=${j} /></div></div>
       <aside className="panel"><h3 style=${{ fontSize: 20, marginBottom: 12 }}>At a glance</h3>
         <dl className="kv">${j.loc && html`<dt>Location</dt><dd>${j.loc}</dd>`}${j.ty && html`<dt>Engagement</dt><dd>${j.ty}</dd>`}${j.md && html`<dt>Work mode</dt><dd>${j.md}</dd>`}<dt>Posted</dt><dd>${j.at ? fmtDay(j.at) : '—'}</dd><dt>Questions</dt><dd><a href=${'mailto:' + CO.email}>${CO.email}</a><br /><a href=${'tel:' + CO.tel}>${CO.phone}</a></dd></dl>
         <p className="muted small" style=${{ marginTop: 14 }}>Know someone who fits? Share the link; it opens this page with the Apply button.</p></aside>
@@ -614,8 +623,8 @@ function LoginPage({ q }) {
   const [wrong, setWrong] = useState('');
   const up = k => e => setF({ ...f, [k]: e.target.value });
   const dest = '#/portal' + (as ? '?as=' + as : '');
-  const LOGINS = [['consultant', 'Consultant'], ['employee', 'Employee'], ['client', 'Client']];
-  const asName = { consultant: 'Consultant', employee: 'Employee', client: 'Client', admin: 'Admin', hr: 'HR and accounting' }[as] || '';
+  const LOGINS = [['consultant', 'Consultant'], ['employee', 'Employee'], ['bench', 'Bench sales'], ['client', 'Client']];
+  const asName = { consultant: 'Consultant', employee: 'Employee', bench: 'Bench sales', client: 'Client', admin: 'Admin', hr: 'HR and accounting' }[as] || '';
   const submit = async e => {
     e.preventDefault(); setErr(''); setWrong('');
     if (!/^\S+@\S+\.\S+$/.test(f.e)) { setErr('Enter a valid email address.'); return; }
@@ -643,12 +652,12 @@ function LoginPage({ q }) {
       <p className="lbl" style=${{ marginBottom: 8 }}>Open your portal</p>
       <div className="stack" style=${{ gap: 8 }}>
         ${c.portal ? html`<a className="btn lg" href=${'#/portal?as=' + portalKeyOf(c.portal)}>${portalLabel(c.portal)}</a>`
-          : c.isAdmin ? null : html`<${Fragment}><a className=${'btn lg' + (as === 'consultant' || !as ? '' : ' ghost')} href="#/portal?as=consultant">Consultant portal</a><a className=${'btn lg' + (as === 'employee' ? '' : ' ghost')} href="#/portal?as=employee">Employee portal</a><a className=${'btn lg' + (as === 'client' ? '' : ' ghost')} href="#/portal?as=client">Client portal</a><//>`}
+          : c.isAdmin ? null : html`<${Fragment}><a className=${'btn lg' + (as === 'consultant' || !as ? '' : ' ghost')} href="#/portal?as=consultant">Consultant portal</a><a className=${'btn lg' + (as === 'employee' ? '' : ' ghost')} href="#/portal?as=employee">Employee portal</a><a className=${'btn lg' + (as === 'bench' ? '' : ' ghost')} href="#/portal?as=bench">Bench sales portal</a><a className=${'btn lg' + (as === 'client' ? '' : ' ghost')} href="#/portal?as=client">Client portal</a><//>`}
         ${(c.isHR || c.roleName === 'admin') && html`<a className="btn lg soft" href="#/portal/hr">HR portal</a>`}
         ${(c.isAcct || c.roleName === 'admin') && html`<a className="btn lg soft" href="#/portal/acct">Accounting portal</a>`}
         ${c.roleName === 'admin' && html`<a className="btn lg soft" href="#/portal/admin">Admin portal</a>`}
       </div>
-      <p className="muted small" style=${{ marginTop: 16 }}>Your account decides what you see: consultants get the consultant portal, StratEdge staff the employee portal, client contacts the client portal. <button className="btn link small" onClick=${logout}>Log out</button></p>
+      <p className="muted small" style=${{ marginTop: 16 }}>Your account decides what you see: consultants get the consultant portal, StratEdge staff the employee portal, bench sales recruiters the bench sales portal, client contacts the client portal. <button type="button" className="btn link small" onClick=${logout}>Log out</button></p>
     <//>`;
   else if (c.state === 'none') body = html`<p className="muted">The portal server isn\u2019t reachable right now. Try again in a few minutes, or email ${CO.email}.</p>`;
   else body = html`<${Fragment}>
@@ -660,13 +669,13 @@ function LoginPage({ q }) {
         <${Field} label="Password" hint=${mode === 'register' ? 'At least 8 characters.' : null}><input type="password" value=${f.p} onInput=${up('p')} autoComplete=${mode === 'register' ? 'new-password' : 'current-password'} /><//>
         ${mode === 'register' && html`<${Field} label="Confirm password"><input type="password" value=${f.p2} onInput=${up('p2')} autoComplete="new-password" /><//>`}
         ${err && html`<p className="err" role="alert">${err}${wrong && html` <a href=${'#/login?as=' + wrong}>Go to the ${wrong} login</a>`}</p>`}
-        <div><button className="btn lg" style=${{ width: '100%' }} disabled=${busy}>${busy ? 'Please wait…' : mode === 'register' ? 'Create ' + (asName && as !== 'admin' && as !== 'hr' ? asName.toLowerCase() + ' ' : '') + 'account' : asName ? asName + ' log in' : 'Log in'}</button></div>
+        <div><button type="submit" className="btn lg" style=${{ width: '100%' }} disabled=${busy}>${busy ? 'Please wait…' : mode === 'register' ? 'Create ' + (asName && as !== 'admin' && as !== 'hr' ? asName.toLowerCase() + ' ' : '') + 'account' : asName ? asName + ' log in' : 'Log in'}</button></div>
         ${mode === 'login' ? html`<p className="muted small">Forgot your password? Contact StratEdge HR at <a href=${'mailto:' + CO.email}>${CO.email}</a> and they can reset it.<br />For security, the time, network address and approximate location of each sign-in are recorded; sharing your precise location when the browser asks is optional.</p>`
-          : html`<p className="muted small">${as === 'consultant' ? 'After you create your account you\u2019ll fill in a short profile and upload your resume; StratEdge approves your access and matched jobs start appearing.' : as === 'employee' ? 'Employee accounts are for StratEdge staff. After you create yours, an administrator approves it.' : 'After you create your account you\u2019ll fill in a short profile, then StratEdge approves your access.'}</p>`}
+          : html`<p className="muted small">${as === 'consultant' ? 'After you create your account you\u2019ll fill in a short profile and upload your resume; StratEdge approves your access and matched jobs start appearing.' : as === 'employee' ? 'Employee accounts are for StratEdge staff. After you create yours, an administrator approves it.' : as === 'bench' ? 'Bench sales recruiter accounts are for StratEdge recruiters who market consultants. After you create yours, an administrator approves it.' : 'After you create your account you\u2019ll fill in a short profile, then StratEdge approves your access.'}</p>`}
       </form>
     <//>`;
   return html`<div className="login">
-    <div className="blade"><h1>${as === 'client' ? 'Client portal' : as === 'admin' ? 'Admin portal' : as === 'hr' ? 'HR and accounting portal' : as === 'employee' ? 'Employee portal' : as === 'consultant' ? 'Consultant portal' : 'StratEdge portals'}</h1>
+    <div className="blade"><h1>${as === 'client' ? 'Client portal' : as === 'admin' ? 'Admin portal' : as === 'hr' ? 'HR and accounting portal' : as === 'employee' ? 'Employee portal' : as === 'bench' ? 'Bench sales portal' : as === 'consultant' ? 'Consultant portal' : 'StratEdge portals'}</h1>
       <ul>${(PORTALS.find(p => p.k === (as || 'consultant')) || PORTALS[0]).pts.map((r, i) => html`<li key=${r} style=${{ animationDelay: (0.1 + i * 0.06) + 's' }}>${r}</li>`)}</ul></div>
     <div className="login-card"><h2>${mode === 'register' && !(c && c.state === 'ready') ? 'Create your ' + (asName && as !== 'admin' && as !== 'hr' ? asName.toLowerCase() + ' ' : '') + 'account' : asName && as !== 'admin' && as !== 'hr' ? asName + ' log in' : 'Log in'}</h2>${body}</div>
   </div>`;
@@ -675,7 +684,7 @@ function LoginPage({ q }) {
 const FaqPage = () => html`<${Fragment}>
   <${PageHead} title="Frequently asked questions" intro="Straight answers about how we staff, build and bill. Anything missing? Ask the assistant in the corner, or contact the team." />
   <section className="sec"><div className="wrap"><div className="faqs" style=${{ maxWidth: 820 }}>${FAQS.map(([q, a]) => html`<details key=${q} className="faq"><summary>${q}</summary><p>${a}</p></details>`)}</div>
-    <div className="actions" style=${{ marginTop: 36 }}><a className="btn" href="#/contact">Contact us</a><button className="btn ghost" onClick=${() => dispatchEvent(new CustomEvent('edge-open'))}><${Icon} n="chat" />Ask the assistant</button></div></div></section>
+    <div className="actions" style=${{ marginTop: 36 }}><a className="btn" href="#/contact">Contact us</a><button type="button" className="btn ghost" onClick=${() => dispatchEvent(new CustomEvent('edge-open'))}><${Icon} n="chat" />Ask the assistant</button></div></div></section>
 <//>`;
 function RequestTalent({ q }) {
   const toast = useToast();
@@ -722,7 +731,7 @@ function RequestTalent({ q }) {
 function ThemeToggle() {
   const [t, setT] = useState(themeNow());
   const flip = () => { const n = t === 'dark' ? 'light' : 'dark'; setTheme(n); setT(n); };
-  return html`<button className="btn ghost icon" onClick=${flip} aria-label=${t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title=${t === 'dark' ? 'Light mode' : 'Dark mode'}><${Icon} n=${t === 'dark' ? 'sun' : 'moon'} /></button>`;
+  return html`<button type="button" className="btn ghost icon" onClick=${flip} aria-label=${t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title=${t === 'dark' ? 'Light mode' : 'Dark mode'}><${Icon} n=${t === 'dark' ? 'sun' : 'moon'} /></button>`;
 }
 
 /* ================= Edge, the 3D assistant ================= */
@@ -772,12 +781,12 @@ function EdgeBot() {
   return html`<${Fragment}>
     ${open && html`<section className="edge" role="dialog" aria-label="Chat with the StratEdge assistant">
       <div className="edge-h"><${Bot} small talking=${busy || talk} /><div style=${{ flex: 1, minWidth: 0 }}><b>StratEdge</b><span>AI assistant</span></div>
-        <button className="btn ghost icon" onClick=${() => { setMsgs([EDGE_HELLO]); setSugs(EDGE_SUGS); }} aria-label="Start over" title="Start over"><${Icon} n="trash" /></button>
-        <button className="btn ghost icon" onClick=${() => setOpen(false)} aria-label="Close chat"><${Icon} n="x" /></button></div>
+        <button type="button" className="btn ghost icon" onClick=${() => { setMsgs([EDGE_HELLO]); setSugs(EDGE_SUGS); }} aria-label="Start over" title="Start over"><${Icon} n="trash" /></button>
+        <button type="button" className="btn ghost icon" onClick=${() => setOpen(false)} aria-label="Close chat"><${Icon} n="x" /></button></div>
       <div className="edge-m" ref=${box} aria-live="polite">${msgs.map((m, i) => html`<div key=${i} className=${'msg ' + (m.role === 'user' ? 'u' : 'b')}>${m.content}</div>`)}
         ${busy && html`<div className="msg b typing"><i /><i /><i /></div>`}</div>
       ${!busy && html`<div className="sugs">${sugs.slice(0, 4).map(s => html`<button key=${s} type="button" onClick=${() => ask(s)}>${s}</button>`)}</div>`}
-      <div className="quick"><a href="#/request-talent" onClick=${() => setOpen(false)}><${Icon} n="users" />Request talent</a><a href="#/login?as=consultant" onClick=${() => setOpen(false)}><${Icon} n="user" />Consultant portal</a><a href="#/login?as=employee" onClick=${() => setOpen(false)}><${Icon} n="users" />Employee portal</a><a href=${'tel:' + CO.tel}><${Icon} n="phone" />Call us</a></div>
+      <div className="quick"><a href="#/request-talent" onClick=${() => setOpen(false)}><${Icon} n="users" />Request talent</a><a href="#/login?as=consultant" onClick=${() => setOpen(false)}><${Icon} n="user" />Consultant portal</a><a href="#/login?as=employee" onClick=${() => setOpen(false)}><${Icon} n="users" />Employee portal</a><a href="#/login?as=bench" onClick=${() => setOpen(false)}><${Icon} n="search" />Bench sales portal</a><a href=${'tel:' + CO.tel}><${Icon} n="phone" />Call us</a></div>
       <form className="edge-f" onSubmit=${e => { e.preventDefault(); ask(); }}>
         <input ref=${inp} value=${text} onInput=${e => setText(e.target.value)} placeholder="Ask about services, timesheets, careers…" maxLength="1500" aria-label="Your question" />
         <button className="btn icon" aria-label="Send" disabled=${busy || !text.trim()}><${Icon} n="send" /></button></form>
@@ -785,7 +794,7 @@ function EdgeBot() {
     </section>`}
     <div className="edge-launch">
       ${tip && !open && html`<div className="edge-tip" role="status" key=${tipI}>${["Hi, I'm the StratEdge assistant. Ask me anything.", ...EDGE_PROMPTS][tipI % (EDGE_PROMPTS.length + 1)]}</div>`}
-      <button className="edge-btn" onClick=${() => setOpen(o => !o)} aria-label=${open ? 'Close chat' : 'Chat with the StratEdge assistant'} aria-expanded=${open}><span className="sonar" /><${Bot} talking=${busy || talk} /></button>
+      <button type="button" className="edge-btn" onClick=${() => setOpen(o => !o)} aria-label=${open ? 'Close chat' : 'Chat with the StratEdge assistant'} aria-expanded=${open}><span className="sonar" /><${Bot} talking=${busy || talk} /></button>
     </div>
   <//>`;
 }

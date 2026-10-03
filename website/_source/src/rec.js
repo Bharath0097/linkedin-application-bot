@@ -25,7 +25,7 @@ function CandModal({ c, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} wide title=${c ? c.n : 'Add a consultant'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button>${mine && html`<button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : c ? 'Save changes' : 'Add consultant'}</button>`}`}>
+  return html`<${Modal} wide title=${c ? c.n : 'Add a consultant'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button>${mine && html`<button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : c ? 'Save changes' : 'Add consultant'}</button>`}`}>
     <div className="form">
       <div className="row3"><${Field} label="Full name"><input value=${f.n} onInput=${up('n')} disabled=${!mine} /><//><${Field} label="Title / role"><input value=${f.ti} onInput=${up('ti')} placeholder="e.g. SAP PP/QM Consultant" disabled=${!mine} /><//><${Field} label="Status"><select value=${f.st} onChange=${up('st')} disabled=${!mine}>${Object.entries(CAND_STATUS).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//></div>
       <div className="row3"><${Field} label="Email"><input type="email" value=${f.e} onInput=${up('e')} disabled=${!mine} /><//><${Field} label="Phone"><input type="tel" value=${f.ph} onInput=${up('ph')} disabled=${!mine} /><//><${Field} label="LinkedIn"><input value=${f.li} onInput=${up('li')} placeholder="https://" disabled=${!mine} /><//></div>
@@ -46,7 +46,7 @@ function CandModal({ c, onClose }) {
       ${c && html`<p className="muted small">Added by ${c.byn || 'a recruiter'} ${fmtDay(c.at)}${c.u ? ', updated ' + fmtDay(c.u) + (c.un ? ' by ' + c.un : '') : ''}.</p>`}
       ${c && html`<div><span className="lbl">Activity for this consultant</span>
         ${subs.loading ? html`<${Spinner} />` : subs.docs.filter(s => s.cid === c.id).length ? html`<div className="tblwrap" style=${{ marginTop: 8 }}><table className="tbl"><thead><tr><th>Date</th><th>By</th><th>Requirement</th><th>Vendor / client</th><th>RTR</th><th>Status</th></tr></thead>
-          <tbody>${subs.docs.filter(s => s.cid === c.id).map(s => html`<tr key=${s.id}><td className="num nw">${fmtDate(s.d)}</td><td><b style=${{ fontWeight: 600 }}>${s.byn || '—'}</b></td><td>${s.req}${s.rate ? html`<div className="muted small">${s.rate}</div>` : ''}</td><td>${s.vn}${s.ec ? html`<div className="muted small">${s.ec}</div>` : ''}</td><td>${s.rtr ? html`<${Chip} s="ok">RTR ${fmtDate(s.rtrAt || s.d, { month: 'short', day: 'numeric' })}<//>` : html`<span className="muted small">No</span>`}</td><td><${Chip} s=${s.st === 'placed' ? 'ok' : s.st === 'rejected' || s.st === 'withdrawn' ? 'red' : s.st === 'interview' || s.st === 'offer' ? 'new' : 'amber'}>${SUB_ST[s.st] || s.st}<//></td></tr>`)}</tbody></table></div>`
+          <tbody>${subs.docs.filter(s => s.cid === c.id).map(s => html`<tr key=${s.id}><td className="num nw">${fmtDate(s.d)}</td><td><b style=${{ fontWeight: 600 }}>${s.byn || '—'}</b></td><td>${s.req}${s.rate ? html`<div className="muted small">${s.rate}</div>` : ''}</td><td>${s.vn}${s.ec ? html`<div className="muted small">${s.ec}</div>` : ''}${s.vw && /^https?:\/\//i.test(s.vw) ? html`<div className="small"><a href=${s.vw} target="_blank" rel="noopener noreferrer" onClick=${e => e.stopPropagation()}>Posting</a></div>` : ''}</td><td>${s.rtr ? html`<${Chip} s="ok">RTR ${fmtDate(s.rtrAt || s.d, { month: 'short', day: 'numeric' })}<//>` : html`<span className="muted small">No</span>`}</td><td><${Chip} s=${s.st === 'placed' ? 'ok' : s.st === 'rejected' || s.st === 'withdrawn' ? 'red' : s.st === 'interview' || s.st === 'offer' ? 'new' : 'amber'}>${SUB_ST[s.st] || s.st}<//></td></tr>`)}</tbody></table></div>`
           : html`<p className="muted small" style=${{ marginTop: 6 }}>No RTRs or submissions logged for this consultant yet. Anyone on the team can log one under RTRs & submissions.</p>`}</div>`}
     </div><//>`;
 }
@@ -60,14 +60,14 @@ function RecConsultants() {
   return html`<div className="stack">
     <div className="toolbar"><input type="search" style=${{ maxWidth: 320 }} placeholder="Search name, skills, location" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search consultants" />
       <label className="check" style=${{ fontSize: 14 }}><input type="checkbox" checked=${mine} onChange=${e => setMine(e.target.checked)} /><span>Only mine</span></label>
-      <div className="push"><button className="btn" onClick=${() => setOpen(null)}><${Icon} n="plus" />Add consultant</button></div></div>
+      <div className="push"><button type="button" className="btn" onClick=${() => setOpen(null)}><${Icon} n="plus" />Add consultant</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${cands.loading ? html`<${Spinner} />` : list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Consultant</th><th>Skills</th><th>Authorization</th><th>Location</th><th>Rate</th><th>Status</th><th>Activity</th><th>Added by</th></tr></thead>
         <tbody>${list.map(c => { const mine = subs.docs.filter(s => s.cid === c.id); const rtr = mine.filter(s => s.rtr).length; const who = [...new Set(mine.map(s => s.byn).filter(Boolean))]; return html`<tr key=${c.id} className="click" tabIndex="0" onClick=${() => setOpen(c.id)} onKeyDown=${e => { if (e.key === 'Enter') setOpen(c.id); }}>
           <td><b style=${{ fontWeight: 600 }}>${c.n}</b><div className="muted small">${c.ti}${c.exp ? `, ${c.exp} yrs` : ''}${c.emp ? ` · ${c.emp}` : ''}</div></td><td className="small">${c.sk || '—'}</td><td>${c.auth || '—'}</td><td>${c.loc || '—'}${c.reloc && c.reloc !== 'Open' ? html`<div className="muted small">${c.reloc}</div>` : ''}</td><td>${c.rate || '—'}</td>
           <td><${Chip} s=${c.st === 'placed' ? 'ok' : c.st === 'inactive' ? '' : c.st === 'working' ? 'new' : c.st === 'hold' ? 'amber' : 'ok'}>${CAND_STATUS[c.st] || c.st}<//></td>
           <td className="small">${mine.length ? html`<b>${rtr}</b> RTR · <b>${mine.length}</b> sub${who.length ? html`<div className="muted small">by ${who.join(', ')}</div>` : ''}` : html`<span className="muted">None yet</span>`}</td><td className="small">${c.byn || ''}</td></tr>`; })}</tbody></table></div>`
-        : html`<${Empty} title=${ql ? 'No matches' : 'No consultants yet'} action=${html`<button className="btn" onClick=${() => setOpen(null)}>Add the first consultant</button>`}>Keep every consultant you work with here: skills, authorization, location, rate and resume, so submissions and RTRs can be verified against one record.<//>`}
+        : html`<${Empty} title=${ql ? 'No matches' : 'No consultants yet'} action=${html`<button type="button" className="btn" onClick=${() => setOpen(null)}>Add the first consultant</button>`}>Keep every consultant you work with here: skills, authorization, location, rate and resume, so submissions and RTRs can be verified against one record.<//>`}
     </section>
     ${open !== undefined && (open === null || cur) && html`<${CandModal} key=${open || 'new'} c=${cur || null} onClose=${() => setOpen(undefined)} />`}
   </div>`;
@@ -92,7 +92,7 @@ function SubModal({ s, cands, onClose }) {
     } catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} wide title=${s ? 'Edit submission' : 'Log a submission'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button>${mine && html`<button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : s ? 'Save' : 'Log it'}</button>`}`}>
+  return html`<${Modal} wide title=${s ? 'Edit submission' : 'Log a submission'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button>${mine && html`<button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : s ? 'Save' : 'Log it'}</button>`}`}>
     <div className="form">
       <div className="row2"><${Field} label="Date"><input type="date" value=${f.d} max=${dkey()} onInput=${up('d')} disabled=${!mine} /><//>
         <${Field} label="Consultant">${cands.length ? html`<select value=${f.cid} onChange=${up('cid')} disabled=${!mine}><option value="">Type a name below…</option>${cands.map(c => html`<option key=${c.id} value=${c.id}>${c.n}, ${c.ti}</option>`)}</select>` : html`<input value=${f.cn} onInput=${up('cn')} placeholder="Consultant name" disabled=${!mine} />`}<//></div>
@@ -132,14 +132,14 @@ function RecSubmissions() {
       <a><b>${m.rtr}<span style=${{ fontSize: 16, fontWeight: 600 }}> RTR / ${m.subs} sub</span></b><span>This month, ${m.intv} interview${m.intv === 1 ? '' : 's'}, ${m.placed} placed</span></a></div>
     <div className="toolbar"><input type="search" style=${{ maxWidth: 300 }} placeholder="Search consultant, role, vendor" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search submissions" />
       <label className="check" style=${{ fontSize: 14 }}><input type="checkbox" checked=${mine} onChange=${e => setMine(e.target.checked)} /><span>Only mine</span></label>
-      <div className="push"><button className="btn" onClick=${() => setOpen(null)}><${Icon} n="plus" />Log submission</button></div></div>
+      <div className="push"><button type="button" className="btn" onClick=${() => setOpen(null)}><${Icon} n="plus" />Log submission</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${subs.loading ? html`<${Spinner} />` : list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Date</th><th>Consultant</th><th>Requirement</th><th>Vendor / client</th><th>RTR</th><th>Status</th><th>Recruiter</th></tr></thead>
         <tbody>${list.map(s => html`<tr key=${s.id} className="click" tabIndex="0" onClick=${() => setOpen(s.id)} onKeyDown=${e => { if (e.key === 'Enter') setOpen(s.id); }}>
-          <td className="num nw">${fmtDate(s.d)}</td><td><b style=${{ fontWeight: 600 }}>${s.cn}</b></td><td>${s.req}${s.rate ? html`<div className="muted small">${s.rate}</div>` : ''}</td><td>${s.vn}${s.ec ? html`<div className="muted small">${s.ec}</div>` : ''}${s.rn || s.rp ? html`<div className="muted small">${[s.rn, s.rp].filter(Boolean).join(' · ')}</div>` : ''}</td>
+          <td className="num nw">${fmtDate(s.d)}</td><td><b style=${{ fontWeight: 600 }}>${s.cn}</b></td><td>${s.req}${s.rate ? html`<div className="muted small">${s.rate}</div>` : ''}</td><td>${s.vn}${s.ec ? html`<div className="muted small">${s.ec}</div>` : ''}${s.rn || s.rp ? html`<div className="muted small">${[s.rn, s.rp].filter(Boolean).join(' · ')}</div>` : ''}${s.vw && /^https?:\/\//i.test(s.vw) ? html`<div className="small"><a href=${s.vw} target="_blank" rel="noopener noreferrer" onClick=${e => e.stopPropagation()}>Posting</a></div>` : ''}</td>
           <td>${s.rtr ? html`<${Chip} s="ok">RTR ${fmtDate(s.rtrAt || s.d, { month: 'short', day: 'numeric' })}<//>` : html`<span className="muted small">No</span>`}</td>
           <td><${Chip} s=${s.st === 'placed' ? 'ok' : s.st === 'rejected' || s.st === 'withdrawn' ? 'red' : s.st === 'interview' || s.st === 'offer' ? 'new' : 'amber'}>${SUB_ST[s.st] || s.st}<//>${s.intv ? html`<div className="muted small">Interview ${fmtDate(s.intv)}</div>` : ''}</td><td className="small">${s.byn || ''}</td></tr>`)}</tbody></table></div>`
-        : html`<${Empty} title="No submissions logged" action=${html`<button className="btn" onClick=${() => setOpen(null)}>Log the first submission</button>`}>Log each submission with its requirement, vendor and whether the RTR was received. Counts roll up here and into your daily report.<//>`}
+        : html`<${Empty} title="No submissions logged" action=${html`<button type="button" className="btn" onClick=${() => setOpen(null)}>Log the first submission</button>`}>Log each submission with its requirement, vendor and whether the RTR was received. Counts roll up here and into your daily report.<//>`}
     </section>
     ${open !== undefined && (open === null || cur) && html`<${SubModal} key=${open || 'new'} s=${cur || null} cands=${cands.docs} onClose=${() => setOpen(undefined)} />`}
   </div>`;
@@ -182,7 +182,7 @@ function RecEOD() {
         : html`<p className="muted small">No submissions logged for this day yet. Log them under RTRs & submissions and they appear here automatically.</p>`}
       <${Field} label="Highlights and blockers"><textarea value=${note} onInput=${e => setNote(e.target.value)} placeholder="Interviews lined up, vendors to chase tomorrow, anything HR should know" /><//>
       ${existing && html`<div className="note info"><span>You already sent a report for this day at ${fmtTime(existing.at)}. Sending again replaces it.</span></div>`}
-      <div className="actions"><button className="btn lg go" disabled=${busy} onClick=${send}><${Icon} n="send" />${busy ? 'Sending…' : existing ? 'Send again' : 'Send to HR and admin'}</button><span className="muted small">One click: saved to the HR and admin portals${P.settings.eodMail ? ' and emailed' : ''}.</span></div>
+      <div className="actions"><button type="button" className="btn lg go" disabled=${busy} onClick=${send}><${Icon} n="send" />${busy ? 'Sending…' : existing ? 'Send again' : 'Send to HR and admin'}</button><span className="muted small">One click: saved to the HR and admin portals${P.settings.eodMail ? ' and emailed' : ''}.</span></div>
     </section>
     <section className="panel"><h2 className="ph" style=${{ marginBottom: 8 }}>Your recent reports</h2>
       ${reports.length ? html`<ul className="list">${reports.slice(0, 20).map(r => html`<li key=${r.id}><div><div className="t">${fmtDate(r.d, { weekday: 'short', month: 'short', day: 'numeric' })}</div><div className="m">${r.rtr} RTR, ${r.subs} submissions, ${r.cands} consultants added${r.intv ? `, ${r.intv} interviews` : ''}${r.note ? '. ' + r.note.slice(0, 80) : ''}</div></div><span className="muted small num">${fmtTime(r.at)}</span></li>`)}</ul>`

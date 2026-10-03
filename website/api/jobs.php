@@ -13,7 +13,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/textract.php';
 
 const JOB_STATES = ['new', 'saved', 'applied', 'dismissed'];
-const JOB_SCHEMA = 1;
+const APP_STATES = ['applied', 'interview', 'offer', 'placed', 'rejected', 'withdrawn']; // one-click applications (job_apps.status)
+const JOB_SCHEMA = 2; // 2: job_resumes (several resumes per consultant) and job_apps (one-click applications)
+const JOB_MAX_RESUMES = 10;
+// Job grabber actions a bench sales recruiter may use; everything else (sources, keys, settings, cron, starting the scheduled collection) is staff only.
+const JOBS_BENCH_OPS = ['overview', 'grab', 'run_jobs', 'jobs', 'runs', 'run_log', 'step', 'stop', 'publish', 'unpublish', 'consultants', 'matches', 'resumes', 'apps'];
 const JOB_TYPES = ['Contract', 'C2C', 'W2', '1099', 'Contract-to-hire', 'Full-time', 'Part-time'];
 const JOB_CONTRACT_TYPES = ['Contract', 'C2C', 'W2', '1099', 'Contract-to-hire'];
 const JOB_ROLE_TOKENS = ['developer', 'engineer', 'programmer', 'consultant', 'analyst', 'architect', 'administrator', 'manager', 'lead', 'specialist', 'qa', 'scientist', 'designer', 'nurse', 'accountant', 'coordinator', 'technician', 'director', 'owner', 'master', 'dba', 'sre', 'auditor', 'controller', 'bookkeeper', 'recruiter', 'officer', 'expert', 'associate', 'support', 'representative', 'assistant', 'clerk', 'intern', 'head', 'practitioner', 'therapist', 'pharmacist', 'technologist', 'executive'];
@@ -35,7 +39,10 @@ function jdb(): PDO {
     $p->exec("CREATE TABLE IF NOT EXISTS job_people (uid VARCHAR(40) PRIMARY KEY, name VARCHAR(190) NOT NULL, email VARCHAR(190) NOT NULL, resume_name VARCHAR(200) NOT NULL, resume_fid VARCHAR(64) NOT NULL, resume_at BIGINT NOT NULL, resume_text LONGTEXT NOT NULL, profile TEXT NOT NULL, prefs TEXT NOT NULL, updated_at BIGINT NOT NULL, matched_at BIGINT NOT NULL)");
     $p->exec("CREATE TABLE IF NOT EXISTS job_kv (k VARCHAR(40) PRIMARY KEY, v LONGTEXT NOT NULL)");
     $p->exec("CREATE TABLE IF NOT EXISTS job_lock (k VARCHAR(20) PRIMARY KEY, until_ms BIGINT NOT NULL)");
-    foreach (['CREATE UNIQUE INDEX job_posts_k ON job_posts (k)', 'CREATE INDEX job_posts_fp ON job_posts (fp)', 'CREATE INDEX job_posts_seen ON job_posts (last_seen)', 'CREATE INDEX job_matches_uid ON job_matches (uid, state)', 'CREATE INDEX job_matches_job ON job_matches (job_id)', 'CREATE INDEX job_runs_status ON job_runs (status)'] as $q) { try { $p->exec($q); } catch (Throwable $e) { /* exists */ } }
+    // schema 2: every resume a consultant keeps (one is primary = used for matching), and one-click applications / bench submissions
+    $p->exec("CREATE TABLE IF NOT EXISTS job_resumes (id $id, uid VARCHAR(40) NOT NULL, fid VARCHAR(64) NOT NULL, name VARCHAR(200) NOT NULL, label VARCHAR(80) NOT NULL, ext VARCHAR(8) NOT NULL, size INT NOT NULL, text LONGTEXT NOT NULL, profile TEXT NOT NULL, is_primary INT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)");
+    $p->exec("CREATE TABLE IF NOT EXISTS job_apps (id $id, uid VARCHAR(40) NOT NULL, job_id INT NOT NULL, resume_id INT NOT NULL, resume_name VARCHAR(200) NOT NULL, by_uid VARCHAR(40) NOT NULL, by_name VARCHAR(190) NOT NULL, kind VARCHAR(8) NOT NULL, status VARCHAR(12) NOT NULL, to_email VARCHAR(190) NOT NULL, mailed INT NOT NULL, note TEXT NOT NULL, title VARCHAR(300) NOT NULL, company VARCHAR(200) NOT NULL, location VARCHAR(200) NOT NULL, url VARCHAR(1000) NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)");
+    foreach (['CREATE UNIQUE INDEX job_posts_k ON job_posts (k)', 'CREATE INDEX job_posts_fp ON job_posts (fp)', 'CREATE INDEX job_posts_seen ON job_posts (last_seen)', 'CREATE INDEX job_matches_uid ON job_matches (uid, state)', 'CREATE INDEX job_matches_job ON job_matches (job_id)', 'CREATE INDEX job_runs_status ON job_runs (status)', 'CREATE INDEX job_resumes_uid ON job_resumes (uid)', 'CREATE INDEX job_apps_uid ON job_apps (uid, created_at)', 'CREATE INDEX job_apps_job ON job_apps (job_id)'] as $q) { try { $p->exec($q); } catch (Throwable $e) { /* exists */ } }
     try { $p->exec("INSERT INTO job_lock (k, until_ms) VALUES ('run', 0)"); } catch (Throwable $e) { /* exists */ }
     try { if ($cur) $p->prepare("UPDATE meta SET v = ? WHERE k = 'jobs_schema'")->execute([JOB_SCHEMA]); else $p->prepare("INSERT INTO meta (k, v) VALUES ('jobs_schema', ?)")->execute([JOB_SCHEMA]); } catch (Throwable $e) { /* concurrent setup */ }
   }
@@ -836,7 +843,9 @@ function jobsPrefs(array $in, ?stdClass $prof): array {
   $list = function ($v, int $n = 12) { if (is_string($v)) $v = preg_split('/[,;\n]/', $v); if (!is_array($v)) return []; $o = []; foreach ($v as $x) { if (!is_scalar($x)) continue; $x = mb_substr(trim((string) $x), 0, 80); if ($x !== '' && !in_array($x, $o, true)) $o[] = $x; if (count($o) >= $n) break; } return $o; };
   $remote = in_array($in['remote'] ?? '', ['any', 'remote', 'onsite', 'hybrid'], true) ? $in['remote'] : 'any';
   return ['titles' => $list($in['titles'] ?? []), 'skills' => $list($in['skills'] ?? [], 40), 'locations' => $list($in['locations'] ?? []), 'keywords' => $list($in['keywords'] ?? []), 'exclude' => $list($in['exclude'] ?? []), 'job_types' => array_values(array_intersect($list($in['job_types'] ?? [], 8), JOB_TYPES)), 'remote' => $remote,
-    'title' => mb_substr(trim((string) ($prof->ti ?? '')), 0, 80), 'location' => mb_substr(trim((string) ($prof->loc ?? '')), 0, 80)];
+    'title' => mb_substr(trim((string) ($prof->ti ?? '')), 0, 80), 'location' => mb_substr(trim((string) ($prof->loc ?? '')), 0, 80),
+    // one-click apply: an optional cover note (placeholders {name} {title} {job} {company} {years} {skills} {location} {phone} {email} {signature}) and whether to email the resume to a contact address found in the posting
+    'apply_note' => mb_substr(trim(is_scalar($in['apply_note'] ?? null) ? (string) $in['apply_note'] : ''), 0, 1500), 'apply_email' => array_key_exists('apply_email', $in) ? (bool) $in['apply_email'] : true];
 }
 function jobPersonTerms(array $p): array { // what to search for, for one person
   $prof = jdec($p['profile']); $pref = jdec($p['prefs']);
@@ -1084,9 +1093,10 @@ function jobSaveMatches(string $uid, array $final): void {
 function jobMatchCounts(string $uid): array { $c = ['new' => 0, 'saved' => 0, 'applied' => 0, 'dismissed' => 0]; $s = jdb()->prepare('SELECT state, COUNT(*) AS n FROM job_matches WHERE uid = ? GROUP BY state'); $s->execute([$uid]); foreach ($s->fetchAll() as $r) $c[$r['state']] = (int) $r['n']; return $c; }
 
 /* ---------- output shapes ---------- */
-function jobOut(array $r, ?array $m = null, bool $withDesc = false): array {
-  $posted = (int) $r['posted']; $o = ['id' => (int) $r['id'], 'title' => $r['title'], 'company' => $r['company'], 'location' => $r['location'], 'remote' => $r['remote'], 'job_type' => $r['job_type'], 'salary' => $r['salary'], 'url' => $r['url'], 'portal' => $r['pub'], 'source' => $r['src'], 'source_name' => jobSourceName((string) $r['src']), 'also' => array_values(array_map(fn($b) => ['portal' => (string) $b['p'], 'url' => (string) $b['u']], jdec($r['boards']))), 'summary' => $r['summary'], 'posted_at' => $posted ?: (int) $r['first_seen'], 'posted' => $posted ? 'Posted ' . jago($posted) : 'Found ' . jago((int) $r['first_seen']), 'published' => (int) $r['published'] > 0, 'skills' => array_slice(jdec($r['skills']), 0, 12)];
-  if ($withDesc) $o['description'] = $r['description'];
+function jobOut(array $r, ?array $m = null, bool $withDesc = false, bool $priv = false): array { // $priv: the caller is staff or a bench recruiter (may see the contact address)
+  $posted = (int) $r['posted']; $contact = jobContactEmail($r);
+  $o = ['id' => (int) $r['id'], 'title' => $r['title'], 'company' => $r['company'], 'location' => $r['location'], 'remote' => $r['remote'], 'job_type' => $r['job_type'], 'salary' => $r['salary'], 'url' => $r['url'], 'portal' => $r['pub'], 'source' => $r['src'], 'source_name' => jobSourceName((string) $r['src']), 'also' => array_values(array_map(fn($b) => ['portal' => (string) $b['p'], 'url' => (string) $b['u']], jdec($r['boards']))), 'summary' => $r['summary'], 'posted_at' => $posted ?: (int) $r['first_seen'], 'posted' => $posted ? 'Posted ' . jago($posted) : 'Found ' . jago((int) $r['first_seen']), 'published' => (int) $r['published'] > 0, 'skills' => array_slice(jdec($r['skills']), 0, 12), 'contact_email' => $contact !== ''];
+  if ($withDesc) { $o['description'] = $r['description']; $o['contact'] = $priv ? $contact : ''; }
   if ($m) { $o['score'] = (int) $m['score']; $o['reasons'] = jdec($m['reasons']); $o['state'] = (string) $m['state']; }
   return $o;
 }
@@ -1098,8 +1108,8 @@ function jobRunOut(?array $r, bool $withLog = false, bool $brief = false): ?arra
   return $o + ['trigger_by' => $r['trigger_by'], 'errors' => jdec($r['errors']), 'search' => jdec($r['search']), 'log' => $withLog ? $log : implode("\n", array_slice(explode("\n", $log), -6))];
 }
 function jobPersonOut(string $uid): ?array {
-  $p = jobPerson($uid); if (!$p) return null; $last = jobRunLast();
-  return ['uid' => $uid, 'name' => $p['name'], 'email' => $p['email'], 'has_resume' => $p['resume_name'] !== '', 'resume_name' => $p['resume_name'], 'resume_at' => (int) $p['resume_at'], 'profile' => jdec($p['profile']) + ['titles' => [], 'skills' => [], 'years' => null, 'seniority' => '', 'location' => ''], 'prefs' => jdec($p['prefs']), 'match_counts' => jobMatchCounts($uid), 'matched_at' => (int) $p['matched_at'], 'last_run' => $last ? ['started_at' => (int) $last['started_at'], 'finished_at' => (int) $last['finished_at'], 'jobs_new' => (int) $last['jobs_new'], 'status' => $last['status']] : null];
+  $p = jobPerson($uid); if (!$p) return null; $last = jobRunLast(); $resumes = array_map('jobResumeOut', jobResumeList($uid));
+  return ['uid' => $uid, 'name' => $p['name'], 'email' => $p['email'], 'has_resume' => $p['resume_name'] !== '', 'resume_name' => $p['resume_name'], 'resume_at' => (int) $p['resume_at'], 'resumes' => $resumes, 'resume_count' => count($resumes), 'profile' => jdec($p['profile']) + ['titles' => [], 'skills' => [], 'years' => null, 'seniority' => '', 'location' => ''], 'prefs' => jdec($p['prefs']), 'match_counts' => jobMatchCounts($uid), 'matched_at' => (int) $p['matched_at'], 'last_run' => $last ? ['started_at' => (int) $last['started_at'], 'finished_at' => (int) $last['finished_at'], 'jobs_new' => (int) $last['jobs_new'], 'status' => $last['status']] : null];
 }
 function jobMatchesOut(string $uid, string $state, int $limit = 200): array {
   $sql = 'SELECT jp.*, jm.score, jm.reasons, jm.state FROM job_matches jm JOIN job_posts jp ON jp.id = jm.job_id WHERE jm.uid = ?' . ($state !== '' ? ' AND jm.state = ?' : '') . ' ORDER BY jm.score DESC, jp.posted DESC LIMIT ' . $limit;
@@ -1108,21 +1118,101 @@ function jobMatchesOut(string $uid, string $state, int $limit = 200): array {
   return $out;
 }
 
-/* ---------- resume upload ---------- */
-function jobResumeSave(array $u, array $f, string $clientText): array {
+/* ---------- resumes: a consultant keeps several; the primary one feeds job_people and the matching ---------- */
+function jobUserRow(string $uid): ?array { if (!preg_match('/^u_[a-f0-9]+$/', $uid)) return null; $s = db()->prepare('SELECT id, email, name, role, status FROM users WHERE id = ?'); $s->execute([$uid]); $r = $s->fetch(); return $r ?: null; }
+function jobsCallerIsStaffOrBench(): bool { $u = currentUser(); return $u !== null && (userLevel($u) >= 2 || isBench($u['id'])); }
+function jobResumeList(string $uid): array { // primary first, then newest first
+  $p = jdb(); $s = $p->prepare('SELECT * FROM job_resumes WHERE uid = ? ORDER BY is_primary DESC, created_at DESC, id DESC'); $s->execute([$uid]); $rows = $s->fetchAll();
+  if (!$rows) { // older installs kept one resume on job_people: move it into the list once
+    $jp = jobPerson($uid);
+    if ($jp && (string) $jp['resume_fid'] !== '') {
+      $fd = docGet("u/$uid/f/{$jp['resume_fid']}"); $name = (string) $jp['resume_name'];
+      $p->prepare('INSERT INTO job_resumes (uid, fid, name, label, ext, size, text, profile, is_primary, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$uid, (string) $jp['resume_fid'], $name, '', strtolower(pathinfo($name, PATHINFO_EXTENSION)), (int) ($fd->sz ?? 0), (string) $jp['resume_text'], (string) ($jp['profile'] ?: '{}'), 1, (int) $jp['resume_at'] ?: now(), now()]);
+      $s->execute([$uid]); $rows = $s->fetchAll();
+    }
+  }
+  return $rows;
+}
+function jobResumeGet(string $uid, int $id): ?array { $s = jdb()->prepare('SELECT * FROM job_resumes WHERE id = ? AND uid = ?'); $s->execute([$id, $uid]); $r = $s->fetch(); return $r ?: null; }
+function jobResumePrimary(string $uid): ?array { foreach (jobResumeList($uid) as $r) if ((int) $r['is_primary'] === 1) return $r; return null; }
+function jobResumeOut(array $r): array {
+  $pr = jdec($r['profile']); $skills = array_values(array_filter((array) ($pr['skills'] ?? []), 'is_string'));
+  return ['id' => (int) $r['id'], 'fid' => $r['fid'], 'name' => $r['name'], 'label' => $r['label'], 'ext' => $r['ext'], 'size' => (int) $r['size'], 'at' => (int) $r['created_at'], 'primary' => (int) $r['is_primary'] === 1,
+    'profile' => ['titles' => array_values(array_filter((array) ($pr['titles'] ?? []), 'is_string')), 'skills' => array_slice($skills, 0, 12), 'skills_n' => count($skills), 'years' => $pr['years'] ?? null, 'seniority' => (string) ($pr['seniority'] ?? ''), 'location' => (string) ($pr['location'] ?? '')]];
+}
+function jobResumeProfileOf(array $r, string $uid): array { // the stored profile, recomputed from the text when it is empty
+  $pr = jdec($r['profile']);
+  if (empty($pr['titles']) && empty($pr['skills'])) { $root = docGet("u/$uid"); $pp = $root->p ?? null; $pr = resumeProfile((string) $r['text'], (string) ($pp->loc ?? '')); if (!$pr['titles'] && !empty($pp->ti)) $pr['titles'] = [(string) $pp->ti]; jdb()->prepare('UPDATE job_resumes SET profile = ? WHERE id = ?')->execute([jenc($pr), (int) $r['id']]); }
+  return $pr;
+}
+function jobResumeMakePrimary(array $u, int $id): int { // $u = the consultant's user row; returns the number of matches after rematching
+  $r = jobResumeGet($u['id'], $id); if (!$r) fail(404, 'not_found', 'No such resume.');
+  $now = now(); jdb()->prepare('UPDATE job_resumes SET is_primary = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = ? WHERE uid = ?')->execute([$id, $now, $u['id']]);
+  $profile = jobResumeProfileOf($r, $u['id']);
+  jobPersonSave($u, ['resume_name' => $r['name'], 'resume_fid' => $r['fid'], 'resume_at' => (int) $r['created_at'], 'resume_text' => mb_substr((string) $r['text'], 0, 200000), 'profile' => jenc($profile)]);
+  $root = docGet("u/{$u['id']}") ?? new stdClass(); $root->resume = (object) ['fid' => $r['fid'], 'n' => $r['name'], 'at' => (int) $r['created_at']]; docSet("u/{$u['id']}", $root);
+  return jobMatchPerson($u['id']);
+}
+function jobResumeClearPrimary(array $u): int { // no resume left: job_people forgets the resume (preferences stay) and the matches are refreshed
+  jobPersonSave($u, ['resume_name' => '', 'resume_fid' => '', 'resume_at' => 0, 'resume_text' => '', 'profile' => '{}']);
+  $root = docGet("u/{$u['id']}"); if ($root && isset($root->resume)) { unset($root->resume); docSet("u/{$u['id']}", $root); }
+  return jobMatchPerson($u['id']);
+}
+function jobResumeSave(array $u, array $f, string $clientText, string $label = '', ?bool $primary = null): array { // adds a resume; it becomes the primary one when asked or when it is the first
   if (($f['error'] ?? 1) !== UPLOAD_ERR_OK) fail(400, 'bad_request', 'Choose your resume (PDF, Word or text).');
   $name = mb_substr(basename((string) $f['name']), 0, 180); $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
   if (!in_array($ext, ['pdf', 'docx', 'txt'], true)) fail(400, 'bad_request', 'Upload your resume as PDF, Word (.docx) or plain text.');
+  $existing = jobResumeList($u['id']); if (count($existing) >= JOB_MAX_RESUMES) fail(400, 'invalid_argument', 'Up to ' . JOB_MAX_RESUMES . ' resumes can be kept. Delete one first.');
   $text = cleanText($clientText); $how = 'browser';
   if (mb_strlen($text) < 120) { $text = textFromFile((string) $f['tmp_name'], $ext); $how = 'server'; }
+  $text = mb_substr($text, 0, 200000);
   $root = docGet("u/{$u['id']}") ?? new stdClass(); $pp = $root->p ?? null;
   $profile = resumeProfile($text, (string) ($pp->loc ?? ''));
   if (!$profile['titles'] && !empty($pp->ti)) $profile['titles'] = [(string) $pp->ti];
-  $doc = storeUpload($f, "u/{$u['id']}", ['c' => 'resume']);
-  $root->resume = (object) ['fid' => $doc['id'], 'n' => $doc['n'], 'at' => now()]; docSet("u/{$u['id']}", $root);
-  jobPersonSave($u, ['resume_name' => $name, 'resume_fid' => $doc['id'], 'resume_at' => now(), 'resume_text' => mb_substr($text, 0, 200000), 'profile' => jenc($profile)]);
-  return ['doc' => $doc, 'profile' => $profile, 'read' => ['chars' => mb_strlen($text), 'how' => $how]];
+  $doc = storeUpload($f, "u/{$u['id']}", ['c' => 'resume']); $now = now(); $makePrimary = $primary === true || !$existing;
+  $p = jdb(); $p->prepare('INSERT INTO job_resumes (uid, fid, name, label, ext, size, text, profile, is_primary, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    ->execute([$u['id'], $doc['id'], $name, mb_substr(trim($label), 0, 80), $ext, (int) $doc['sz'], $text, jenc($profile), $makePrimary ? 1 : 0, $now, $now]);
+  $id = (int) $p->lastInsertId();
+  if ($makePrimary) {
+    $p->prepare('UPDATE job_resumes SET is_primary = 0 WHERE uid = ? AND id <> ?')->execute([$u['id'], $id]);
+    $root->resume = (object) ['fid' => $doc['id'], 'n' => $doc['n'], 'at' => $now]; docSet("u/{$u['id']}", $root);
+    jobPersonSave($u, ['resume_name' => $name, 'resume_fid' => $doc['id'], 'resume_at' => $now, 'resume_text' => $text, 'profile' => jenc($profile)]);
+  } elseif (!jobPerson($u['id'])) jobPersonSave($u, null);
+  return ['doc' => $doc, 'profile' => $profile, 'read' => ['chars' => mb_strlen($text), 'how' => $how], 'resume' => jobResumeGet($u['id'], $id), 'primary' => $makePrimary];
 }
+function jobResumeDelete(array $u, int $id): void { // removes the row, the file record and the file; promotes the newest remaining resume when the primary one goes
+  $r = jobResumeGet($u['id'], $id); if (!$r) fail(404, 'not_found', 'No such resume.');
+  jdb()->prepare('DELETE FROM job_resumes WHERE id = ? AND uid = ?')->execute([$id, $u['id']]);
+  $path = "u/{$u['id']}/f/{$r['fid']}"; if (docGet($path)) docDelete($path); $f = cfg('files_dir') . '/' . $r['fid']; if (preg_match('/^[a-f0-9]{32}$/', (string) $r['fid']) && is_file($f)) @unlink($f);
+  if ((int) $r['is_primary'] === 1) {
+    $jp = jobPerson($u['id']); if ($jp && $jp['resume_fid'] === $r['fid']) jobPersonSave($u, ['resume_name' => '', 'resume_fid' => '', 'resume_at' => 0, 'resume_text' => '', 'profile' => '{}']); // so the list does not re-create it
+    $rest = jobResumeList($u['id']); if ($rest) jobResumeMakePrimary($u, (int) $rest[0]['id']); else jobResumeClearPrimary($u);
+  }
+}
+
+/* ---------- one-click apply ---------- */
+function jobContactEmail(array $job): string { // the first plausible contact address in the posting, preferring one near "send/email/resume/reach/contact/apply"
+  $d = (string) ($job['description'] ?? ''); if ($d === '' || !str_contains($d, '@')) return '';
+  if (!preg_match_all('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', $d, $m, PREG_OFFSET_CAPTURE)) return '';
+  $skip = ['noreply', 'no-reply', 'donotreply', 'unsubscribe', 'privacy', 'support@', 'abuse@', 'postmaster', 'example.com'];
+  $cands = []; foreach ($m[0] as [$e, $off]) { $e = rtrim($e, '.'); $l = strtolower($e); foreach ($skip as $x) if (str_contains($l, $x)) continue 2; if (!filter_var($e, FILTER_VALIDATE_EMAIL)) continue; $cands[] = [$e, $off]; }
+  if (!$cands) return '';
+  foreach ($cands as [$e, $off]) { $before = strtolower(substr($d, max(0, $off - 120), min(120, $off))); if (preg_match('/\b(send|email|e-mail|resume|resumes|reach|contact|apply)\b/', $before)) return $e; }
+  return $cands[0][0];
+}
+function jobAppOut(array $r, bool $priv): array { // $priv: staff or bench recruiter (sees the address even on bench submissions)
+  return ['id' => (int) $r['id'], 'job_id' => (int) $r['job_id'], 'title' => (string) ($r['ptitle'] ?? '') !== '' ? $r['ptitle'] : $r['title'], 'company' => (string) ($r['pcompany'] ?? '') !== '' ? $r['pcompany'] : $r['company'], 'location' => (string) ($r['plocation'] ?? '') !== '' ? $r['plocation'] : $r['location'], 'url' => (string) ($r['purl'] ?? '') !== '' ? $r['purl'] : $r['url'], 'portal' => (string) ($r['pub'] ?? ''),
+    'resume_id' => (int) $r['resume_id'], 'resume_name' => $r['resume_name'], 'status' => $r['status'], 'mailed' => (int) $r['mailed'] === 1, 'to' => $priv || $r['kind'] === 'self' ? $r['to_email'] : '', 'kind' => $r['kind'], 'by_name' => $r['by_name'], 'note' => $r['note'], 'at' => (int) $r['created_at'], 'u' => (int) $r['updated_at']];
+}
+function jobAppsOut(string $uid, bool $priv): array {
+  $s = jdb()->prepare('SELECT a.*, jp.title AS ptitle, jp.company AS pcompany, jp.location AS plocation, jp.url AS purl, jp.pub FROM job_apps a LEFT JOIN job_posts jp ON jp.id = a.job_id WHERE a.uid = ? ORDER BY a.created_at DESC LIMIT 400'); $s->execute([$uid]);
+  $apps = []; $counts = array_fill_keys(APP_STATES, 0);
+  while ($r = $s->fetch()) { $apps[] = jobAppOut($r, $priv); if (isset($counts[$r['status']])) $counts[$r['status']]++; }
+  return ['apps' => $apps, 'counts' => $counts];
+}
+function jobAppGet(int $id): ?array { $s = jdb()->prepare('SELECT a.*, jp.title AS ptitle, jp.company AS pcompany, jp.location AS plocation, jp.url AS purl, jp.pub FROM job_apps a LEFT JOIN job_posts jp ON jp.id = a.job_id WHERE a.id = ?'); $s->execute([$id]); $r = $s->fetch(); return $r ?: null; }
+function jobApplyNote(string $tpl, array $vars): string { $o = $tpl; foreach ($vars as $k => $v) $o = str_replace('{' . $k . '}', (string) $v, $o); return trim(preg_replace("/\n{3,}/", "\n\n", $o) ?? $o); }
 
 /* ---------- routes ---------- */
 function jobsRoute(string $r, string $method, array $b): void {
@@ -1138,12 +1228,29 @@ function jobsRoute(string $r, string $method, array $b): void {
       if ($changed || $n === 0) $run = jobStartPerson($set, $u, 'preferences (' . $u['name'] . ')');
       ok(['consultant' => jobPersonOut($u['id']), 'matches' => $n, 'run' => jobRunOut($run ?? jobRunActive(), false, true)]);
     }
-    case 'jobs_resume': {
+    case 'jobs_resume': { // adds a resume (multipart: file, optional text read in the browser, label, primary '1'|'0')
       $u = requireUser(); if (!isset($_FILES['file'])) fail(400, 'bad_request', 'Choose your resume (PDF, Word or text).');
       $set = jobSettings(); session_write_close(); @set_time_limit(90);
-      $res = jobResumeSave($u, $_FILES['file'], (string) ($_POST['text'] ?? ''));
-      $n = jobMatchPerson($u['id'], $set); $run = jobStartPerson($set, $u, 'resume (' . $u['name'] . ')');
-      ok(['doc' => $res['doc'], 'consultant' => jobPersonOut($u['id']), 'matches' => $n, 'read' => $res['read'], 'run' => jobRunOut($run ?? jobRunActive(), false, true)]);
+      $primary = isset($_POST['primary']) ? ((string) $_POST['primary'] === '1') : null;
+      $res = jobResumeSave($u, $_FILES['file'], (string) ($_POST['text'] ?? ''), (string) ($_POST['label'] ?? ''), $primary);
+      $run = null;
+      if ($res['primary']) { $n = jobMatchPerson($u['id'], $set); $run = jobStartPerson($set, $u, 'resume (' . $u['name'] . ')'); }
+      else { $c = jobMatchCounts($u['id']); $n = $c['new'] + $c['saved'] + $c['applied']; }
+      ok(['doc' => $res['doc'], 'resume' => jobResumeOut($res['resume']), 'resumes' => array_map('jobResumeOut', jobResumeList($u['id'])), 'consultant' => jobPersonOut($u['id']), 'matches' => $n, 'read' => $res['read'], 'run' => jobRunOut($run ?? jobRunActive(), false, true)]);
+    }
+    case 'jobs_resumes': { $u = requireUser(); $list = jobResumeList($u['id']); $prim = null; foreach ($list as $r) if ((int) $r['is_primary'] === 1) $prim = (int) $r['id']; ok(['resumes' => array_map('jobResumeOut', $list), 'primary_id' => $prim]); }
+    case 'jobs_resume_set': { // rename and/or make primary
+      $u = requireUser(); $id = (int) ($b['id'] ?? 0); $r = $id > 0 ? jobResumeGet($u['id'], $id) : null; if (!$r) fail(404, 'not_found', 'No such resume.');
+      $n = null; session_write_close();
+      if (array_key_exists('label', $b)) jdb()->prepare('UPDATE job_resumes SET label = ?, updated_at = ? WHERE id = ?')->execute([str($b, 'label', 80), now(), $id]);
+      if (!empty($b['primary']) && (int) $r['is_primary'] !== 1) $n = jobResumeMakePrimary($u, $id);
+      if ($n === null) { $c = jobMatchCounts($u['id']); $n = $c['new'] + $c['saved'] + $c['applied']; }
+      ok(['resumes' => array_map('jobResumeOut', jobResumeList($u['id'])), 'consultant' => jobPersonOut($u['id']), 'matches' => $n]);
+    }
+    case 'jobs_resume_delete': {
+      $u = requireUser(); $id = (int) ($b['id'] ?? 0); if ($id <= 0) fail(400, 'bad_request', 'Bad resume.');
+      session_write_close(); jobResumeDelete($u, $id);
+      ok(['resumes' => array_map('jobResumeOut', jobResumeList($u['id'])), 'consultant' => jobPersonOut($u['id'])]);
     }
     case 'jobs_matches': { $u = requireUser(); $st = str($_GET, 'state', 12); if (!in_array($st, JOB_STATES, true)) $st = ''; ok(['matches' => jobMatchesOut($u['id'], $st), 'counts' => jobMatchCounts($u['id'])]); }
     case 'jobs_mark': {
@@ -1155,7 +1262,25 @@ function jobsRoute(string $r, string $method, array $b): void {
       ok(['ok' => true, 'counts' => jobMatchCounts($u['id'])]);
     }
     case 'jobs_rematch': { $u = requireUser(); session_write_close(); ok(['matches' => jobMatchPerson($u['id']), 'counts' => jobMatchCounts($u['id'])]); }
-    case 'jobs_job': { requireUser(); $s = jdb()->prepare('SELECT * FROM job_posts WHERE id = ?'); $s->execute([(int) ($_GET['id'] ?? 0)]); $j = $s->fetch(); if (!$j) fail(404, 'not_found', 'No such job.'); ok(['job' => jobOut($j, null, true)]); }
+    case 'jobs_job': { requireUser(); $s = jdb()->prepare('SELECT * FROM job_posts WHERE id = ?'); $s->execute([(int) ($_GET['id'] ?? 0)]); $j = $s->fetch(); if (!$j) fail(404, 'not_found', 'No such job.'); ok(['job' => jobOut($j, null, true, jobsCallerIsStaffOrBench())]); }
+    case 'jobs_apply': jobsApply($b);
+    case 'jobs_apps': { // a consultant's applications; staff and bench recruiters may pass uid
+      $me = requireUser(); $priv = jobsCallerIsStaffOrBench(); $uid = str($_GET, 'uid', 40);
+      if ($uid !== '' && $uid !== $me['id']) { if (!$priv) fail(403, 'invalid_argument', 'You can only see your own applications.'); if (!jobUserRow($uid)) fail(404, 'not_found', 'No such consultant.'); } else $uid = $me['id'];
+      ok(jobAppsOut($uid, $priv));
+    }
+    case 'jobs_app_set': { // the consultant, staff, or the recruiter who submitted it may change the status and note
+      $me = requireUser(); $id = (int) ($b['id'] ?? 0); $a = $id > 0 ? jobAppGet($id) : null; if (!$a) fail(404, 'not_found', 'No such application.');
+      $staff = userLevel($me) >= 2; if (!($a['uid'] === $me['id'] || $staff || $a['by_uid'] === $me['id'])) fail(403, 'invalid_argument', 'You can\'t change this application.');
+      $st = str($b, 'status', 12); if (!in_array($st, APP_STATES, true)) fail(400, 'bad_request', 'Bad status.');
+      $note = array_key_exists('note', $b) ? str($b, 'note', 1000) : (string) $a['note'];
+      jdb()->prepare('UPDATE job_apps SET status = ?, note = ?, updated_at = ? WHERE id = ?')->execute([$st, $note, now(), $id]);
+      if ($a['kind'] === 'bench') { // keep the RTR / submissions log in step
+        $q = db()->prepare("SELECT path, data FROM docs WHERE col = 'rec/sub/items'"); $q->execute();
+        while ($row = $q->fetch()) { $d = json_decode($row['data']); if ($d instanceof stdClass && (int) ($d->app_id ?? 0) === $id) { $d->st = $st; $d->u = now(); $d->un = $me['name']; docSet($row['path'], $d); break; } }
+      }
+      ok(['app' => jobAppOut(jobAppGet($id), $staff || isBench($me['id']) || $a['kind'] === 'self')]);
+    }
     case 'jobs_tick': {
       $u = requireUser(); session_write_close(); @set_time_limit(60); ignore_user_abort(true);
       $worked = jobStep(8000); $want = (int) ($b['id'] ?? 0); $out = $want ? jobRunGet($want) : ($worked ?? jobRunActive());
@@ -1172,15 +1297,22 @@ function jobsRoute(string $r, string $method, array $b): void {
   fail(404, 'not_found', 'Unknown route.');
 }
 function jobsAdmin(string $method, array $b): void {
-  $me = requireAdmin(); $src = $method === 'POST' ? $b : $_GET; $op = str($src, 'op', 24); $set = jobSettings();
+  // Staff (admin, HR, accounting) may do everything. Bench sales recruiters get the grabber, runs, collected jobs, consultants, matches, resumes and applications; never sources, keys, settings or the cron URL.
+  $me = requireUser(); $staff = userLevel($me) >= 2; $bench = !$staff && isBench($me['id']);
+  if (!$staff && !$bench) fail(403, 'invalid_argument', 'Only StratEdge staff and bench sales recruiters can use the job grabber.');
+  $src = $method === 'POST' ? $b : $_GET; $op = str($src, 'op', 24); $set = jobSettings();
+  if ($bench && !in_array($op, JOBS_BENCH_OPS, true)) fail(403, 'invalid_argument', 'That part of the job grabber is for StratEdge staff.');
   switch ($op) {
     case 'overview': {
       $p = jdb(); $jobs = (int) $p->query('SELECT COUNT(*) FROM job_posts')->fetchColumn(); $w = $p->prepare('SELECT COUNT(*) FROM job_posts WHERE first_seen >= ?'); $w->execute([now() - 7 * 86400000]);
       $people = (int) $p->query("SELECT COUNT(*) FROM job_people WHERE resume_name <> ''")->fetchColumn(); $active = jobRunActive(); $last = jobRunLast(); $lastAll = (int) $p->query("SELECT MAX(started_at) FROM job_runs WHERE kind = 'all'")->fetchColumn();
       $st = (array) jkvGet('srcstat', []); $list = [];
-      foreach (jobSources() as $k => $m) { $c = $set['sources'][$k]; $list[] = ['key' => $k, 'name' => $m['name'], 'kind' => $m['kind'], 'remote' => !empty($m['remote']), 'on' => !empty($c['on']), 'ready' => jobReady($k, $c), 'status' => $st[$k] ?? null]; }
-      foreach ($set['feeds'] as $f) $list[] = ['key' => 'feed:' . $f['id'], 'name' => (string) $f['name'], 'kind' => str_contains((string) $f['url'], '{keywords}') ? 'search' : 'feed', 'remote' => false, 'on' => !empty($f['on']), 'ready' => true, 'status' => $st['feed:' . $f['id']] ?? null];
-      ok(['sources' => $list, 'sources_on' => jobSourcesOn($set), 'jobs' => $jobs, 'jobs_7d' => (int) $w->fetchColumn(), 'consultants_with_resume' => $people, 'running' => $active !== null, 'run' => jobRunOut($active), 'last_run' => jobRunOut($last), 'schedule_hours' => (float) $set['schedule_hours'], 'next_run_at' => $set['schedule_hours'] > 0 && $lastAll ? (int) ($lastAll + $set['schedule_hours'] * 3600000) : 0, 'settings' => ['schedule_hours' => $set['schedule_hours'], 'max_age_days' => $set['max_age_days'], 'keep_days' => $set['keep_days'], 'max_searches' => $set['max_searches'], 'min_score' => $set['min_score']], 'cron' => jobCronInfo()]);
+      foreach (jobSources() as $k => $m) { $c = $set['sources'][$k]; $list[] = ['key' => $k, 'name' => $m['name'], 'kind' => $m['kind'], 'remote' => !empty($m['remote']), 'on' => !empty($c['on']), 'ready' => jobReady($k, $c), 'status' => $staff ? ($st[$k] ?? null) : null]; }
+      foreach ($set['feeds'] as $f) $list[] = ['key' => 'feed:' . $f['id'], 'name' => (string) $f['name'], 'kind' => str_contains((string) $f['url'], '{keywords}') ? 'search' : 'feed', 'remote' => false, 'on' => !empty($f['on']), 'ready' => true, 'status' => $staff ? ($st['feed:' . $f['id']] ?? null) : null];
+      $apps = (int) $p->query('SELECT COUNT(*) FROM job_apps')->fetchColumn(); $aw = $p->prepare('SELECT COUNT(*) FROM job_apps WHERE created_at >= ?'); $aw->execute([now() - 7 * 86400000]);
+      $o = ['sources' => $list, 'sources_on' => jobSourcesOn($set), 'jobs' => $jobs, 'jobs_7d' => (int) $w->fetchColumn(), 'consultants_with_resume' => $people, 'apps' => $apps, 'apps_7d' => (int) $aw->fetchColumn(), 'running' => $active !== null, 'run' => jobRunOut($active), 'last_run' => jobRunOut($last), 'schedule_hours' => (float) $set['schedule_hours'], 'next_run_at' => $set['schedule_hours'] > 0 && $lastAll ? (int) ($lastAll + $set['schedule_hours'] * 3600000) : 0];
+      if ($staff) { $o['settings'] = ['schedule_hours' => $set['schedule_hours'], 'max_age_days' => $set['max_age_days'], 'keep_days' => $set['keep_days'], 'max_searches' => $set['max_searches'], 'min_score' => $set['min_score']]; $o['cron'] = jobCronInfo(); }
+      ok($o);
     }
     case 'sources': {
       $st = (array) jkvGet('srcstat', []); $out = []; $use = (array) jkvGet('jsearch_month', []);
@@ -1243,10 +1375,12 @@ function jobsAdmin(string $method, array $b): void {
       ok(['jobs' => $jobs, 'total' => (int) $c->fetchColumn()]);
     }
     case 'consultants': {
-      $out = []; foreach (jdb()->query('SELECT jp.*, u.status FROM job_people jp JOIN users u ON u.id = jp.uid ORDER BY jp.updated_at DESC')->fetchAll() as $p) $out[] = ['uid' => $p['uid'], 'name' => $p['name'], 'email' => $p['email'], 'status' => $p['status'], 'has_resume' => $p['resume_name'] !== '', 'resume_name' => $p['resume_name'], 'resume_at' => (int) $p['resume_at'], 'profile' => jdec($p['profile']) + ['titles' => [], 'location' => '', 'skills' => []], 'prefs' => jdec($p['prefs']), 'match_counts' => jobMatchCounts((string) $p['uid']), 'matched_at' => (int) $p['matched_at']];
+      $out = []; foreach (jdb()->query('SELECT jp.*, u.status FROM job_people jp JOIN users u ON u.id = jp.uid ORDER BY jp.updated_at DESC')->fetchAll() as $p) $out[] = ['uid' => $p['uid'], 'name' => $p['name'], 'email' => $p['email'], 'status' => $p['status'], 'has_resume' => $p['resume_name'] !== '', 'resume_name' => $p['resume_name'], 'resume_at' => (int) $p['resume_at'], 'resume_count' => count(jobResumeList((string) $p['uid'])), 'profile' => jdec($p['profile']) + ['titles' => [], 'location' => '', 'skills' => []], 'prefs' => jdec($p['prefs']), 'match_counts' => jobMatchCounts((string) $p['uid']), 'matched_at' => (int) $p['matched_at']];
       ok(['consultants' => $out]);
     }
-    case 'matches': { $uid = str($_GET, 'uid', 40); ok(['matches' => jobMatchesOut($uid, str($_GET, 'state', 12) ?: ''), 'counts' => jobMatchCounts($uid)]); }
+    case 'matches': { $uid = str($_GET, 'uid', 40); if (!preg_match('/^u_[a-f0-9]+$/', $uid)) fail(400, 'bad_request', 'Bad consultant.'); ok(['matches' => jobMatchesOut($uid, str($_GET, 'state', 12) ?: ''), 'counts' => jobMatchCounts($uid)]); }
+    case 'resumes': { $uid = str($_GET, 'uid', 40); $cu = jobUserRow($uid); if (!$cu) fail(404, 'not_found', 'No such consultant.'); ok(['resumes' => array_map('jobResumeOut', jobResumeList($uid)), 'name' => $cu['name'], 'email' => $cu['email']]); }
+    case 'apps': { $uid = str($_GET, 'uid', 40); if (!jobUserRow($uid)) fail(404, 'not_found', 'No such consultant.'); ok(jobAppsOut($uid, true)); }
     case 'rematch_all': { session_write_close(); @set_time_limit(120); $n = 0; foreach (jobPeopleActive() as $p) { jobMatchPerson((string) $p['uid'], $set); $n++; } ok(['people' => $n]); }
     case 'grab': {
       $kws = array_values(array_filter(array_map(fn($x) => is_scalar($x) ? mb_substr(trim((string) $x), 0, 80) : '', (array) ($b['keywords'] ?? [])), fn($x) => $x !== '')); $kws = array_slice($kws, 0, 10);
@@ -1273,4 +1407,59 @@ function jobsAdmin(string $method, array $b): void {
     case 'unpublish': { $jid = (int) ($b['job_id'] ?? 0); if (docGet("org/site/jobs/g$jid")) docDelete("org/site/jobs/g$jid"); jdb()->prepare('UPDATE job_posts SET published = 0 WHERE id = ?')->execute([$jid]); ok(['ok' => true]); }
     default: fail(400, 'bad_request', 'Unknown job action.');
   }
+}
+
+/* ---------- one-click apply: log the application, mark the match applied, email the resume to the posting's contact, and for bench recruiters log the submission ---------- */
+function jobsApply(array $b): void {
+  $me = requireUser(); $staff = userLevel($me) >= 2; $priv = $staff || isBench($me['id']);
+  $uid = str($b, 'uid', 40); $kind = 'self';
+  if ($uid !== '' && $uid !== $me['id']) { if (!$priv) fail(403, 'invalid_argument', 'Only StratEdge staff and bench sales recruiters can submit someone else.'); $kind = 'bench'; }
+  else $uid = $me['id'];
+  $cu = $kind === 'self' ? $me : jobUserRow($uid); if (!$cu || $cu['status'] !== 'active') fail(404, 'not_found', 'No such consultant.');
+  if (throttleHit('apply:' . $me['id'], 60, 3600)) fail(429, 'rate_limited', 'That is a lot of applications for one hour. Try again later.');
+  $jid = (int) ($b['job_id'] ?? 0); $s = jdb()->prepare('SELECT * FROM job_posts WHERE id = ?'); $s->execute([$jid]); $job = $s->fetch(); if (!$job) fail(404, 'not_found', 'That job is no longer available.');
+  $rid = (int) ($b['resume_id'] ?? 0); $resume = $rid > 0 ? jobResumeGet($uid, $rid) : jobResumePrimary($uid);
+  if ($rid > 0 && !$resume) fail(400, 'bad_request', 'That resume does not belong to this consultant.');
+  if (!$resume) fail(400, 'bad_request', $kind === 'self' ? 'Upload a resume first.' : 'This consultant has no resume in the portal yet.');
+  $note = str($b, 'note', 1500); $jp = jobPerson($uid); $pref = $jp ? jdec($jp['prefs']) : []; $root = docGet("u/$uid"); $pp = $root->p ?? null;
+  // where to send: staff / bench recruiters choose (the address they typed; an empty 'to' means log only), consultants use the address found in the posting
+  if ($priv && array_key_exists('to', $b)) { $to = strtolower(str($b, 'to', 190)); if ($to !== '' && !filter_var($to, FILTER_VALIDATE_EMAIL)) fail(400, 'bad_request', 'Enter a valid email address to send the resume to, or leave it empty.'); }
+  else $to = jobContactEmail($job);
+  if ($kind === 'self' && ($pref['apply_email'] ?? true) === false) $to = '';
+  // the cover note
+  $profile = jobResumeProfileOf($resume, $uid) + ['titles' => [], 'skills' => [], 'years' => null, 'location' => ''];
+  $title = (string) (($pref['titles'][0] ?? '') ?: ($profile['titles'][0] ?? '') ?: ($pp->ti ?? '') ?: 'consultant');
+  $skills = array_slice(array_values(array_filter((array) $profile['skills'], 'is_string')), 0, 6); if (!$skills) $skills = array_slice((array) ($pref['skills'] ?? []), 0, 6);
+  $years = $profile['years'] !== null ? $profile['years'] . ' years' : 'several years';
+  $loc = (string) (($pref['locations'][0] ?? '') ?: $profile['location'] ?: ($pp->loc ?? '') ?: 'the US');
+  $types = array_values(array_intersect((array) ($pref['job_types'] ?? []), JOB_TYPES)); $typesText = $types ? implode(', ', $types) : 'contract or full-time roles';
+  $phone = (string) ($pp->ph ?? ''); $email = (string) $cu['email'];
+  $signature = $kind === 'self' ? implode("\n", array_values(array_filter([$cu['name'], $phone, $email]))) : $me['name'] . ", StratEdge IT Consulting\n" . $me['email'];
+  $tpl = trim((string) ($pref['apply_note'] ?? ''));
+  if ($tpl === '') $tpl = "Hello,\n\nPlease consider {name} for the {job} role" . ($job['company'] !== '' ? ' at {company}' : '') . ". {name} is a {title} with {years} of experience in {skills}, based in {location}, available for {types}.\n\nThe resume is attached. Reply to this email to schedule a call.\n\n{signature}";
+  $vars = ['name' => $cu['name'], 'title' => $title, 'job' => $job['title'], 'company' => $job['company'], 'years' => $years, 'skills' => $skills ? implode(', ', $skills) : $title, 'location' => $loc, 'types' => $typesText, 'phone' => $phone, 'email' => $email, 'signature' => $signature, 'recruiter' => $me['name']];
+  $text = jobApplyNote($tpl, $vars); if (!str_contains($tpl, '{signature}')) $text .= "\n\n" . $signature;
+  // email, only when an address is known and the resume file is still there
+  $mailed = false; $subject = 'Application: ' . $job['title'] . ' – ' . $cu['name'];
+  if ($to !== '') {
+    $f = cfg('files_dir') . '/' . $resume['fid']; $data = preg_match('/^[a-f0-9]{32}$/', (string) $resume['fid']) ? @file_get_contents($f) : false;
+    if ($data === false) fail(400, 'bad_request', 'The resume file is missing. Upload it again.');
+    $att = [['name' => (string) $resume['name'], 'type' => MIME[$resume['ext']] ?? 'application/octet-stream', 'data' => $data]];
+    $foot = ($kind === 'self' ? 'Sent by ' . $cu['name'] : 'Sent by ' . $me['name'] . ' at StratEdge IT Consulting') . ' through the StratEdge portal. Reply to this email to reach them.';
+    $mailed = sendMail($to, '', $subject, $text, emailHtml($subject, preg_split('/\n{2,}/', $text) ?: [$text], null, $foot), $att, (string) $me['email']);
+  }
+  // record it
+  $now = now(); $p = jdb();
+  $p->prepare('INSERT INTO job_apps (uid, job_id, resume_id, resume_name, by_uid, by_name, kind, status, to_email, mailed, note, title, company, location, url, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    ->execute([$uid, $jid, (int) $resume['id'], (string) $resume['name'], $me['id'], $me['name'], $kind, 'applied', $to, $mailed ? 1 : 0, $note, (string) $job['title'], (string) $job['company'], (string) $job['location'], (string) $job['url'], $now, $now]);
+  $appId = (int) $p->lastInsertId();
+  $m = $p->prepare('SELECT 1 FROM job_matches WHERE uid = ? AND job_id = ?'); $m->execute([$uid, $jid]);
+  if ($m->fetchColumn()) $p->prepare('UPDATE job_matches SET state = ?, updated_at = ? WHERE uid = ? AND job_id = ?')->execute(['applied', $now, $uid, $jid]);
+  else $p->prepare('INSERT INTO job_matches (uid, job_id, score, reasons, state, created_at, updated_at) VALUES (?,?,?,?,?,?,?)')->execute([$uid, $jid, 0, '[]', 'applied', $now, $now]);
+  if ($kind === 'bench') { // the recruiting workspace sees it under RTRs & submissions
+    $nid = bin2hex(random_bytes(6)); $loc2 = (string) $job['location'];
+    docSet("rec/sub/items/$nid", (object) ['d' => date('Y-m-d'), 'cid' => '', 'cn' => $cu['name'], 'req' => $job['title'] . ($loc2 !== '' ? ', ' . $loc2 : ''), 'vn' => $job['company'] !== '' ? $job['company'] : (string) $job['pub'], 'vw' => (string) $job['url'], 'rn' => '', 'rp' => '', 're' => $to, 'ec' => '', 'mn' => '', 'mp' => '', 'mem' => '', 'rate' => '', 'rtr' => false, 'rtrAt' => '', 'st' => 'submitted', 'intv' => '',
+      'notes' => 'One-click submit from the job grabber' . ($note !== '' ? ': ' . $note : ''), 'by' => $me['id'], 'byn' => $me['name'], 'at' => $now, 'u' => $now, 'un' => $me['name'], 'job_id' => $jid, 'app_id' => $appId]);
+  }
+  ok(['app' => jobAppOut(jobAppGet($appId), $priv), 'mailed' => $mailed, 'to' => $priv ? $to : '', 'url' => (string) $job['url'], 'counts' => jobMatchCounts($uid)]);
 }

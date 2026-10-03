@@ -34,10 +34,10 @@ function ClientTsReview({ d, onClose }) {
   };
   const days = weekDays(live.w); const rows = live.rows || [];
   const dayT = DOW.map((_, i) => rows.reduce((a, r) => a + (r.h[i] || 0), 0));
-  const foot = st === 'pending' ? html`<button className="btn danger" disabled=${busy} onClick=${() => decide('returned')}>Return with note</button><button className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve hours</button>`
-    : st === 'approved' ? html`<button className="btn ghost" disabled=${busy} onClick=${() => decide('returned')}>Undo and return</button><button className="btn ghost" onClick=${onClose}>Close</button>`
-    : st === 'returned' ? html`<button className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve after all</button><button className="btn ghost" onClick=${onClose}>Close</button>`
-    : html`<button className="btn ghost" onClick=${onClose}>Close</button>`;
+  const foot = st === 'pending' ? html`<button type="button" className="btn danger" disabled=${busy} onClick=${() => decide('returned')}>Return with note</button><button type="button" className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve hours</button>`
+    : st === 'approved' ? html`<button type="button" className="btn ghost" disabled=${busy} onClick=${() => decide('returned')}>Undo and return</button><button type="button" className="btn ghost" onClick=${onClose}>Close</button>`
+    : st === 'returned' ? html`<button type="button" className="btn go" disabled=${busy} onClick=${() => decide('approved')}>Approve after all</button><button type="button" className="btn ghost" onClick=${onClose}>Close</button>`
+    : html`<button type="button" className="btn ghost" onClick=${onClose}>Close</button>`;
   return html`<${Modal} wide title=${`${live.n || 'Consultant'}: ${weekLabel(live.w)}`} onClose=${onClose} foot=${foot}>
     <div className="stack">
       <div className="actions"><${Chip} s=${cdChip(st)}>${CD_LABEL[st]}<//><span className="muted small">${live.sa ? 'Submitted ' + fmtTs(live.sa) : ''}</span></div>
@@ -69,7 +69,7 @@ function ClientDashboard() {
     </div>
     <div className="g2" style=${{ alignItems: 'start' }}>
       <section className="panel"><div className="ph-row"><h2 className="ph">Timesheets waiting for you</h2><a className="small" href="#/portal/timesheets">All timesheets</a></div>
-        ${C.pending.length ? html`<ul className="list">${C.pending.slice(0, 6).map(x => html`<li key=${x.id}><div><div className="t">${x.n}</div><div className="m">${weekLabel(x.w)}, ${h1(x.t)} hours</div></div><button className="btn sm" onClick=${() => setRv(x)}>Review</button></li>`)}</ul>`
+        ${C.pending.length ? html`<ul className="list">${C.pending.slice(0, 6).map(x => html`<li key=${x.id}><div><div className="t">${x.n}</div><div className="m">${weekLabel(x.w)}, ${h1(x.t)} hours</div></div><button type="button" className="btn sm" onClick=${() => setRv(x)}>Review</button></li>`)}</ul>`
           : html`<${Empty} title="Nothing to approve">Consultants' weekly hours appear here as soon as they submit.<//>`}</section>
       <section className="panel"><div className="ph-row"><h2 className="ph">On the clock now</h2><a className="small" href="#/portal/attendance">Attendance</a></div>
         ${C.onClock.length ? html`<ul className="list">${C.onClock.map(l => html`<li key=${l.id}><div><div className="t">${l.n}</div><div className="m">Since ${fmtTime(l.i)}${l.d !== dkey() ? ', ' + fmtDate(l.d) : ''}</div></div><${Chip} s="ok">${MODES[l.m] || 'Working'}<//></li>`)}</ul>`
@@ -89,11 +89,11 @@ function ClientTimesheets() {
   const list = C.sheets.filter(x => tab === 'all' || x.st === tab);
   const counts = { pending: C.pending.length, approved: C.sheets.filter(x => x.st === 'approved').length, returned: C.sheets.filter(x => x.st === 'returned').length };
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['pending', 'To approve'], ['approved', 'Approved'], ['returned', 'Returned'], ['all', 'All']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${counts[k] != null && html`<span className=${'chip' + (k === 'pending' && counts[k] ? ' amber' : '')}>${counts[k]}</span>`}</button>`)}</div>
+    <div className="tabs" role="tablist">${[['pending', 'To approve'], ['approved', 'Approved'], ['returned', 'Returned'], ['all', 'All']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${counts[k] != null && html`<span className=${'chip' + (k === 'pending' && counts[k] ? ' amber' : '')}>${counts[k]}</span>`}</button>`)}</div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Consultant</th><th>Week</th><th className="r">Hours</th><th>Status</th><th>Submitted</th><th /></tr></thead>
         <tbody>${list.map(x => html`<tr key=${x.id}><td><b style=${{ fontWeight: 600 }}>${x.n}</b></td><td className="nw">${weekLabel(x.w)}</td><td className="r num"><b>${h1(x.t)}</b></td><td><${Chip} s=${cdChip(x.st)}>${CD_LABEL[x.st]}<//></td><td className="num muted">${x.sa ? fmtTs(x.sa) : '—'}</td>
-          <td className="r"><button className=${'btn sm' + (x.st === 'pending' ? '' : ' ghost')} onClick=${() => setRv(x)}>${x.st === 'pending' ? 'Review' : 'Open'}</button></td></tr>`)}</tbody></table></div>`
+          <td className="r"><button type="button" className=${'btn sm' + (x.st === 'pending' ? '' : ' ghost')} onClick=${() => setRv(x)}>${x.st === 'pending' ? 'Review' : 'Open'}</button></td></tr>`)}</tbody></table></div>`
         : html`<${Empty} title=${tab === 'pending' ? 'No timesheets waiting' : 'Nothing here yet'}>Your consultants' weekly timesheets arrive here when they submit them. Approve them to confirm the hours before StratEdge invoices.<//>`}
     </section>
     ${rv && html`<${ClientTsReview} d=${rv} onClose=${() => setRv(null)} />`}
@@ -145,10 +145,10 @@ function ClientAttendance() {
   };
   return html`<div className="stack">
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous week" onClick=${() => setWs(addDays(ws, -7))}><${Icon} n="left" /></button><b>${weekLabel(ws)}</b>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous week" onClick=${() => setWs(addDays(ws, -7))}><${Icon} n="left" /></button><b>${weekLabel(ws)}</b>
         <button className="btn ghost icon" aria-label="Next week" disabled=${ws >= weekStart()} onClick=${() => setWs(addDays(ws, 7))}><${Icon} n="right" /></button></div>
-      ${ws !== weekStart() && html`<button className="btn ghost sm" onClick=${() => setWs(weekStart())}>This week</button>`}
-      <div className="push"><button className="btn ghost" disabled=${!data || !C.active.length} onClick=${exp}><${Icon} n="down" />Export week</button></div>
+      ${ws !== weekStart() && html`<button type="button" className="btn ghost sm" onClick=${() => setWs(weekStart())}>This week</button>`}
+      <div className="push"><button type="button" className="btn ghost" disabled=${!data || !C.active.length} onClick=${exp}><${Icon} n="down" />Export week</button></div>
     </div>
     ${C.onClock.length > 0 && html`<div className="note ok"><span><b>On the clock now:</b> ${C.onClock.map(l => `${l.n} (since ${fmtTime(l.i)})`).join(', ')}</span></div>`}
     <section className="panel" style=${{ padding: '6px 8px' }}>
@@ -173,7 +173,7 @@ function ReqForm({ onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title="Post a staffing requirement" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Sending…' : 'Send to StratEdge'}</button>`}>
+  return html`<${Modal} title="Post a staffing requirement" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Sending…' : 'Send to StratEdge'}</button>`}>
     <div className="form">
       <div className="row2"><${Field} label="Role"><input value=${f.ti} onInput=${up('ti')} placeholder="e.g. SAP PP/QM Analyst" /><//><${Field} label="How many"><input type="number" min="1" value=${f.n} onInput=${up('n')} /><//></div>
       <div className="row3"><${Field} label="Location"><input value=${f.loc} onInput=${up('loc')} placeholder="City, state" /><//>
@@ -192,7 +192,7 @@ function ReqDetail({ r, onClose }) {
   const setSt = async st => { setBusy(true); try { await dbMerge(path, { st, uat: Date.now() }); toast(st === 'closed' ? 'Requirement closed.' : 'Requirement reopened.'); } catch (e) { toast(errText(e), true); } setBusy(false); };
   const cands = Object.entries(live.cands || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
   const closed = ['filled', 'closed'].includes(live.st);
-  return html`<${Modal} wide title=${live.ti} onClose=${onClose} foot=${html`${closed ? html`<button className="btn ghost" disabled=${busy} onClick=${() => setSt('open')}>Reopen</button>` : html`<button className="btn ghost" disabled=${busy} onClick=${() => setSt('closed')}>Close requirement</button>`}<button className="btn" onClick=${onClose}>Done</button>`}>
+  return html`<${Modal} wide title=${live.ti} onClose=${onClose} foot=${html`${closed ? html`<button type="button" className="btn ghost" disabled=${busy} onClick=${() => setSt('open')}>Reopen</button>` : html`<button type="button" className="btn ghost" disabled=${busy} onClick=${() => setSt('closed')}>Close requirement</button>`}<button type="button" className="btn" onClick=${onClose}>Done</button>`}>
     <div className="stack">
       <div className="actions"><${Chip} s=${live.st === 'filled' ? 'ok' : live.st === 'shared' ? 'new' : closed ? '' : 'amber'}>${REQ_ST[live.st || 'open']}<//><span className="muted small">Posted ${fmtDay(live.at)}</span></div>
       <dl className="kv"><dt>Need</dt><dd>${live.n || 1} ${(live.n || 1) > 1 ? 'people' : 'person'}${live.loc ? ', ' + live.loc : ''}${live.md ? ', ' + live.md : ''}${live.ty ? ', ' + live.ty : ''}${live.sd ? ', start ' + fmtDate(live.sd) : ''}</dd>
@@ -201,7 +201,7 @@ function ReqDetail({ r, onClose }) {
         ${cands.length ? html`<div className="cands">${cands.map(([id, x]) => html`<div key=${id} className="cand">
           <div className="ph-row" style=${{ marginBottom: 0 }}><h4>${x.n}, ${x.ti}</h4><${Chip} s=${x.st === 'hired' ? 'ok' : x.st === 'rejected' ? 'red' : x.st === 'shared' ? '' : 'new'}>${CAND_ST[x.st] || x.st}<//></div>
           ${x.sum && html`<p className="muted small" style=${{ whiteSpace: 'pre-wrap' }}>${x.sum}</p>`}${x.av && html`<p className="muted small">Available ${x.av}</p>`}
-          ${!closed && html`<div className="actions">${[['shortlist', 'Shortlist'], ['interview', 'Request interview'], ['hired', 'Hired'], ['rejected', 'Not a fit']].filter(([k]) => k !== x.st).map(([k, v]) => html`<button key=${k} className=${'btn sm ' + (k === 'rejected' ? 'danger' : k === 'hired' ? 'go' : 'ghost')} disabled=${busy} onClick=${() => setCand(id, k)}>${v}</button>`)}</div>`}
+          ${!closed && html`<div className="actions">${[['shortlist', 'Shortlist'], ['interview', 'Request interview'], ['hired', 'Hired'], ['rejected', 'Not a fit']].filter(([k]) => k !== x.st).map(([k, v]) => html`<button type="button" key=${k} className=${'btn sm ' + (k === 'rejected' ? 'danger' : k === 'hired' ? 'go' : 'ghost')} disabled=${busy} onClick=${() => setCand(id, k)}>${v}</button>`)}</div>`}
         </div>`)}</div>` : html`<p className="muted small">StratEdge is working on this. Candidates appear here as they're shared.</p>`}</div>
     </div><//>`;
 }
@@ -212,13 +212,13 @@ function ClientRequirements() {
   const list = C.reqs.filter(r => tab === 'all' || (tab === 'open' ? !['filled', 'closed'].includes(r.st || 'open') : ['filled', 'closed'].includes(r.st)));
   const cur = open && C.reqs.find(r => r.id === open);
   return html`<div className="stack">
-    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Filled or closed'], ['all', 'All']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
-      <div className="push"><button className="btn" onClick=${() => setNw(true)}><${Icon} n="plus" />Post a requirement</button></div></div>
+    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['done', 'Filled or closed'], ['all', 'All']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+      <div className="push"><button type="button" className="btn" onClick=${() => setNw(true)}><${Icon} n="plus" />Post a requirement</button></div></div>
     ${list.length ? html`<div className="jobs">${list.map(r => { const n = Object.keys(r.cands || {}).length; return html`<div key=${r.id} className="job" style=${{ cursor: 'pointer' }} onClick=${() => setOpen(r.id)}>
       <div><h3>${r.ti}</h3><div className="meta">${[`${r.n || 1} ${(r.n || 1) > 1 ? 'people' : 'person'}`, r.loc, r.ty, r.md, r.sk].filter(Boolean).map(t => html`<span key=${t} className="tag">${t}</span>`)}</div>
         <p className="muted small" style=${{ marginTop: 8 }}>Posted ${fmtDay(r.at)}. ${n ? `${n} candidate${n === 1 ? '' : 's'} shared.` : 'No candidates yet.'}</p></div>
       <${Chip} s=${r.st === 'filled' ? 'ok' : r.st === 'shared' ? 'new' : ['closed'].includes(r.st) ? '' : 'amber'}>${REQ_ST[r.st || 'open']}<//></div>`; })}</div>`
-      : html`<div className="panel"><${Empty} title=${tab === 'open' ? 'No open requirements' : 'Nothing here yet'} action=${html`<button className="btn" onClick=${() => setNw(true)}>Post a requirement</button>`}>Tell StratEdge who you need. Your account manager reviews it and shares matching candidates here for you to shortlist or interview.<//></div>`}
+      : html`<div className="panel"><${Empty} title=${tab === 'open' ? 'No open requirements' : 'Nothing here yet'} action=${html`<button type="button" className="btn" onClick=${() => setNw(true)}>Post a requirement</button>`}>Tell StratEdge who you need. Your account manager reviews it and shares matching candidates here for you to shortlist or interview.<//></div>`}
     ${nw && html`<${ReqForm} onClose=${() => setNw(false)} />`}
     ${cur && html`<${ReqDetail} key=${cur.id} r=${cur} onClose=${() => setOpen(null)} />`}
   </div>`;
@@ -242,7 +242,7 @@ function ClientReports() {
     <div className="toolbar">
       <${Field} label="From week of"><input type="date" value=${from} onInput=${e => e.target.value && setFrom(e.target.value)} /><//>
       <${Field} label="To week of"><input type="date" value=${to} onInput=${e => e.target.value && setTo(e.target.value)} /><//>
-      <div className="push" style=${{ alignSelf: 'flex-end' }}><button className="btn" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Export CSV</button></div>
+      <div className="push" style=${{ alignSelf: 'flex-end' }}><button type="button" className="btn" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Export CSV</button></div>
     </div>
     <p className="muted small">Submitted timesheet hours for weeks of ${weekLabel(f)} through ${weekLabel(t)}.</p>
     <section className="panel" style=${{ padding: '6px 8px' }}>

@@ -85,8 +85,8 @@ function SignPanel({ d, mine, signer, tok, onDone }) {
         <${Field} label="Full legal name"><input value=${typed} onInput=${e => setTyped(e.target.value)} /><//>
         <label className="check"><input type="checkbox" checked=${consent} onChange=${e => setConsent(e.target.checked)} /><span>I have reviewed this document and agree to sign it electronically. I understand this electronic signature is as binding as a handwritten one.</span></label>
         <div className="actions">
-          <button className="btn go lg" disabled=${!!busy} onClick=${sign}>${busy === 'sign' ? 'Signing…' : 'Sign document'}</button>
-          ${decl === null ? html`<button className="btn ghost" disabled=${!!busy} onClick=${() => setDecl('')}>Decline</button>` : html`<input value=${decl} onInput=${e => setDecl(e.target.value)} placeholder="Reason (optional)" style=${{ maxWidth: 240 }} /><button className="btn danger" disabled=${!!busy} onClick=${decline}>Confirm decline</button>`}
+          <button type="button" className="btn go lg" disabled=${!!busy} onClick=${sign}>${busy === 'sign' ? 'Signing…' : 'Sign document'}</button>
+          ${decl === null ? html`<button type="button" className="btn ghost" disabled=${!!busy} onClick=${() => setDecl('')}>Decline</button>` : html`<input value=${decl} onInput=${e => setDecl(e.target.value)} placeholder="Reason (optional)" style=${{ maxWidth: 240 }} /><button type="button" className="btn danger" disabled=${!!busy} onClick=${decline}>Confirm decline</button>`}
         </div>
       </section>`
       : d.st === 'sent' ? html`<div className="note amber"><span>Waiting for ${(d.signers[d.cur || 0] || {}).n || 'another signer'} to sign first.</span></div>` : null}
@@ -95,7 +95,7 @@ function SignPanel({ d, mine, signer, tok, onDone }) {
 }
 function SignModal({ d, onClose }) {
   const P = usePortal();
-  return html`<${Modal} wide title=${d.ti} onClose=${onClose} foot=${html`<button className="btn" onClick=${onClose}>Close</button>`}>
+  return html`<${Modal} wide title=${d.ti} onClose=${onClose} foot=${html`<button type="button" className="btn" onClick=${onClose}>Close</button>`}>
     <${SignPanel} d=${d} mine=${myTurn(d, P.uid)} signer=${{ n: P.prof ? P.prof.n : ((Cap.me && Cap.me.name) || ''), e: (Cap.me && Cap.me.email) || '' }} /><//>`;
 }
 /* Public signing page for email signers (no account needed) */
@@ -120,7 +120,7 @@ function SignDocsPage() {
   const list = tab === 'todo' ? todo : tab === 'done' ? done : docs;
   const cur = open && docs.find(d => d.id === open);
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['todo', 'Waiting for you', todo.length], ['done', 'Completed', done.length], ['all', 'All', docs.length]].map(([k, v, n]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'todo' && n ? ' amber' : '')}>${n}</span></button>`)}</div>
+    <div className="tabs" role="tablist">${[['todo', 'Waiting for you', todo.length], ['done', 'Completed', done.length], ['all', 'All', docs.length]].map(([k, v, n]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className=${'chip' + (k === 'todo' && n ? ' amber' : '')}>${n}</span></button>`)}</div>
     ${tab === 'todo' && waiting.length > 0 && html`<p className="muted small">${waiting.length} more ${waiting.length === 1 ? 'document is' : 'documents are'} waiting for someone else to sign first.</p>`}
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Document</th><th>From</th><th>Sent</th><th>Status</th><th /></tr></thead>
@@ -150,7 +150,7 @@ function NewSigRequest({ onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title="Send a document for signature" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${send}>${busy ? 'Sending…' : 'Send for signature'}</button>`}>
+  return html`<${Modal} title="Send a document for signature" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${send}>${busy ? 'Sending…' : 'Send for signature'}</button>`}>
     <div className="form">
       <${Field} label="Title"><input value=${f.ti} onInput=${up('ti')} placeholder="e.g. Consulting agreement, NDA, Offer letter, Vendor MSA" /><//>
       <div><div className="ph-row" style=${{ marginBottom: 6 }}><span className="lbl">Signers, in signing order</span><button type="button" className="btn link small" onClick=${() => setRows([...rows, { kind: 'email', uid: '', n: '', e: '' }])}>Add another signer</button></div>
@@ -162,7 +162,7 @@ function NewSigRequest({ onClose }) {
       <label className="check"><input type="checkbox" checked=${f.counter} onChange=${up('counter')} /><span>I countersign after them (adds your signature last)</span></label>
       <div className="row2"><${Field} label="Due date (optional)"><input type="date" value=${f.due} onInput=${up('due')} /><//></div>
       <${Field} label="Message to the signers"><textarea value=${f.msg} onInput=${up('msg')} placeholder="What this is and anything they should check before signing. Included in the email." /><//>
-      <div><span className="lbl">Document</span>${file ? html`<ul className="files" style=${{ marginTop: 8 }}><li><${Icon} n="file" /><div className="fn"><b>${file.name}</b><span>${sizeLabel(file.size)}</span></div><button className="btn ghost sm" onClick=${() => setFile(null)}>Remove</button></li></ul>`
+      <div><span className="lbl">Document</span>${file ? html`<ul className="files" style=${{ marginTop: 8 }}><li><${Icon} n="file" /><div className="fn"><b>${file.name}</b><span>${sizeLabel(file.size)}</span></div><button type="button" className="btn ghost sm" onClick=${() => setFile(null)}>Remove</button></li></ul>`
         : html`<div style=${{ marginTop: 8 }}><${FilePick} busy=${busy} progress=${prog} onFiles=${fs => setFile(fs[0])} label="Attach the document to sign." hint="PDF works best; PNG or JPG also work. Save Word files as PDF first." /></div>`}</div>
       <p className="muted small">Every signer receives an email with a secure link. Email signers don\u2019t need an account. When everyone has signed, the final PDF is emailed to all parties and kept here.</p>
     </div><//>`;
@@ -173,13 +173,13 @@ function SigDetail({ d, onClose }) {
   const cancel = async () => { try { await api('sig_cancel', { id: d.id }); Sync.kick(); toast('Request cancelled.'); onClose(); } catch (e) { toast(errText(e), true); } };
   const remind = async () => { try { const r = await api('sig_remind', { id: d.id }); Sync.kick(); toast(r.mailed ? 'Reminder emailed.' : 'Reminder could not be emailed. Check the mail settings in api/config.php.', !r.mailed); } catch (e) { toast(errText(e), true); } };
   const copy = async s => { const link = location.origin + location.pathname + '#/sign/' + d.id + '/' + s.tok; try { await navigator.clipboard.writeText(link); toast('Signing link copied.'); } catch (e) { prompt('Copy this signing link', link); } };
-  return html`<${Modal} wide title=${d.ti} onClose=${onClose} foot=${html`${d.st === 'sent' && html`<button className="btn ghost" onClick=${remind}>Resend email</button><button className="btn ghost" onClick=${cancel}>Cancel request</button>`}${myTurn(d, P.uid) && html`<button className="btn go" onClick=${() => setSign(true)}>Sign now</button>`}<button className="btn" onClick=${onClose}>Close</button>`}>
+  return html`<${Modal} wide title=${d.ti} onClose=${onClose} foot=${html`${d.st === 'sent' && html`<button type="button" className="btn ghost" onClick=${remind}>Resend email</button><button type="button" className="btn ghost" onClick=${cancel}>Cancel request</button>`}${myTurn(d, P.uid) && html`<button type="button" className="btn go" onClick=${() => setSign(true)}>Sign now</button>`}<button type="button" className="btn" onClick=${onClose}>Close</button>`}>
     <div className="stack">
       <div className="actions"><${Chip} s=${sigChip(d.st)}>${SIG_ST[d.st]}<//><span className="muted small">Sent by ${d.byn} ${fmtDay(d.at)}${d.due ? ', due ' + fmtDate(d.due) : ''}${d.done ? ', completed ' + fmtDay(d.done) : ''}</span></div>
       <div className="tblwrap"><table className="tbl"><thead><tr><th>Signer</th><th>How</th><th>Status</th><th>Signed</th><th>Network address</th><th /></tr></thead>
         <tbody>${(d.signers || []).map((s, i) => html`<tr key=${i}><td><b style=${{ fontWeight: 600 }}>${s.n}</b><div className="muted small">${s.e}</div></td><td>${s.ext ? 'Email link' : s.role === 'countersign' ? 'Countersign' : 'Portal'}</td>
           <td><${Chip} s=${s.st === 'signed' ? 'ok' : s.st === 'declined' ? 'red' : d.st === 'sent' && i === (d.cur || 0) ? 'amber' : ''}>${s.st === 'signed' ? 'Signed' : s.st === 'declined' ? 'Declined' : d.st === 'sent' && i === (d.cur || 0) ? 'Waiting' : 'Queued'}<//>${s.typed ? html`<div className="muted small">as "${s.typed}"</div>` : ''}${s.reason ? html`<div className="muted small">${s.reason}</div>` : ''}</td>
-          <td className="num">${s.at ? fmtTs(s.at) : '—'}</td><td className="small muted">${s.ip || '—'}</td><td className="r">${s.tok && s.st !== 'signed' && d.st === 'sent' && html`<button className="btn ghost sm" onClick=${() => copy(s)}>Copy link</button>`}</td></tr>`)}</tbody></table></div>
+          <td className="num">${s.at ? fmtTs(s.at) : '—'}</td><td className="small muted">${s.ip || '—'}</td><td className="r">${s.tok && s.st !== 'signed' && d.st === 'sent' && html`<button type="button" className="btn ghost sm" onClick=${() => copy(s)}>Copy link</button>`}</td></tr>`)}</tbody></table></div>
       <div className="actions"><a className="btn ghost sm" href=${fileUrl(base, d.fid, true)}><${Icon} n="down" />Original (${d.fn})</a>${d.sfid && html`<a className="btn sm" href=${fileUrl(base, d.sfid, true)}><${Icon} n="down" />Signed copy</a>`}</div>
       ${d.fh && html`<p className="muted small">Original SHA-256: <span className="num" style=${{ wordBreak: 'break-all' }}>${d.fh}</span></p>`}
       <div><h3 className="ph" style=${{ marginBottom: 8 }}>Audit log</h3><ul className="list">${(d.log || []).slice().reverse().map((l, i) => html`<li key=${i}><div><div className="t">${l.ev}</div><div className="m">${l.who}${l.ip ? ', ' + l.ip : ''}</div></div><span className="muted small num">${fmtTs(l.t)}</span></li>`)}</ul></div>
@@ -196,16 +196,16 @@ function ESignAdmin() {
   const cur = open && docs.find(d => d.id === open);
   const mineTurn = docs.filter(d => myTurn(d, P.uid));
   return html`<div className="stack">
-    ${mineTurn.length > 0 && html`<div className="note amber"><span><b>${mineTurn.length} document${mineTurn.length === 1 ? '' : 's'} need your countersignature.</b></span><div className="actions"><button className="btn sm" onClick=${() => setOpen(mineTurn[0].id)}>Open</button></div></div>`}
-    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Awaiting', counts.open], ['completed', 'Completed', counts.completed], ['declined', 'Declined', counts.declined], ['all', 'All', null]].map(([k, v, n]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${n != null && html`<span className=${'chip' + (k === 'open' && n ? ' amber' : '')}>${n}</span>`}</button>`)}</div>
+    ${mineTurn.length > 0 && html`<div className="note amber"><span><b>${mineTurn.length} document${mineTurn.length === 1 ? '' : 's'} need your countersignature.</b></span><div className="actions"><button type="button" className="btn sm" onClick=${() => setOpen(mineTurn[0].id)}>Open</button></div></div>`}
+    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Awaiting', counts.open], ['completed', 'Completed', counts.completed], ['declined', 'Declined', counts.declined], ['all', 'All', null]].map(([k, v, n]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}${n != null && html`<span className=${'chip' + (k === 'open' && n ? ' amber' : '')}>${n}</span>`}</button>`)}</div>
       <input type="search" style=${{ maxWidth: 240 }} placeholder="Search" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search requests" />
-      <div className="push"><button className="btn" onClick=${() => setNw(true)}><${Icon} n="send" />Send for signature</button></div></div>
+      <div className="push"><button type="button" className="btn" onClick=${() => setNw(true)}><${Icon} n="send" />Send for signature</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Document</th><th>Signers</th><th>Sent</th><th>Status</th><th /></tr></thead>
         <tbody>${list.map(d => html`<tr key=${d.id} className="click" tabIndex="0" onClick=${() => setOpen(d.id)}><td><b style=${{ fontWeight: 600 }}>${d.ti}</b><div className="muted small">${d.fn}</div></td>
           <td>${(d.signers || []).map((s, i) => html`<div key=${i} className="small">${s.n} <span className="muted">${s.st === 'signed' ? '(signed)' : s.st === 'declined' ? '(declined)' : s.ext ? '(email)' : ''}</span></div>`)}</td><td className="num">${fmtDay(d.at)}<div className="muted small">by ${d.byn}</div></td>
           <td><${Chip} s=${sigChip(d.st)}>${SIG_ST[d.st]}<//></td><td className="r">${d.sfid && d.st === 'completed' ? html`<a className="btn ghost sm" href=${fileUrl(`sig/${d.id}`, d.sfid, true)} onClick=${e => e.stopPropagation()}><${Icon} n="down" />Signed copy</a>` : html`<button className="btn ghost sm">Open</button>`}</td></tr>`)}</tbody></table></div>`
-        : html`<${Empty} title=${tab === 'open' ? 'Nothing awaiting signature' : 'No requests here yet'} action=${html`<button className="btn" onClick=${() => setNw(true)}>Send a document for signature</button>`}>Send offer letters, agreements, NDAs, vendor MSAs or client paperwork to anyone by email. They sign on a secure link, and the signed copy with its audit trail comes back here.<//>`}
+        : html`<${Empty} title=${tab === 'open' ? 'Nothing awaiting signature' : 'No requests here yet'} action=${html`<button type="button" className="btn" onClick=${() => setNw(true)}>Send a document for signature</button>`}>Send offer letters, agreements, NDAs, vendor MSAs or client paperwork to anyone by email. They sign on a secure link, and the signed copy with its audit trail comes back here.<//>`}
     </section>
     ${nw && html`<${NewSigRequest} onClose=${() => setNw(false)} />`}
     ${cur && html`<${SigDetail} key=${cur.id + cur.st + cur.cur} d=${cur} onClose=${() => setOpen(null)} />`}

@@ -37,4 +37,7 @@ return [
   // Job matching runs inside this site (no separate server). Turn sources on and add their keys under
   // Admin > Job portals > Sources. To collect on a schedule without anyone opening the portal, add a cron job
   // (shown on that page) that runs api/cron.php.
+  // One-click apply (consultants) and one-click submit (bench sales recruiters) email the chosen resume to the
+  // contact address in a posting using the outgoing email settings above; without them the application is
+  // still logged and the posting still opens. Each account may send up to 60 applications an hour.
 ];

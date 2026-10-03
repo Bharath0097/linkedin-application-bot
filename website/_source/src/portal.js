@@ -14,7 +14,7 @@ function Gate({ title, children, actions }) {
 function ProfileForm({ uid, initial, onSaved, submitLabel, as }) {
   const toast = useToast();
   const me = Cap.me || {};
-  const [f, setF] = useState({ n: '', e: '', ph: '', ti: '', loc: '', co: '', role: as === 'client' ? 'employer' : as === 'employee' ? 'employee' : 'consultant', ...(initial || {}), ...(!initial ? { n: me.name || '', e: me.email || '' } : {}) });
+  const [f, setF] = useState({ n: '', e: '', ph: '', ti: '', loc: '', co: '', role: as === 'client' ? 'employer' : as === 'employee' ? 'employee' : as === 'bench' ? 'bench' : 'consultant', ...(initial || {}), ...(!initial ? { n: me.name || '', e: me.email || '' } : {}) });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const up = k => e => setF({ ...f, [k]: e.target.value });
@@ -33,7 +33,7 @@ function ProfileForm({ uid, initial, onSaved, submitLabel, as }) {
   };
   return html`<form className="form" onSubmit=${save} noValidate>
     <div className="rolepick" role="radiogroup" aria-label="I am">
-      ${[['consultant', 'Consultant', 'I am placed by StratEdge or looking for my next role: resume, matched jobs, timesheets.'], ['employee', 'StratEdge employee', 'I work for StratEdge: recruiting, HR, delivery or office staff.'], ['employer', 'Client or vendor contact', 'I approve timesheets and post requirements.']].map(([k, t, d]) => html`<label key=${k} className=${f.role === k ? 'on' : ''}>
+      ${[['consultant', 'Consultant', 'I am placed by StratEdge or looking for my next role: resume, matched jobs, timesheets.'], ['employee', 'StratEdge employee', 'I work for StratEdge: recruiting, HR, delivery or office staff.'], ['bench', 'Bench sales recruiter', 'I market StratEdge consultants to vendors and clients: job grabber, submissions, RTRs.'], ['employer', 'Client or vendor contact', 'I approve timesheets and post requirements.']].map(([k, t, d]) => html`<label key=${k} className=${f.role === k ? 'on' : ''}>
         <input type="radio" name="role" value=${k} checked=${f.role === k} onChange=${() => setF({ ...f, role: k })} /><div><b>${t}</b><span>${d}</span></div></label>`)}
     </div>
     <div className="row2"><${Field} label=${emp ? 'Full name' : 'Full legal name'} hint=${emp ? null : 'As it should appear on timesheets.'}><input value=${f.n} onInput=${up('n')} autoComplete="name" /><//>
@@ -111,10 +111,10 @@ function PortalData({ caps, path, q }) {
       <p className="muted">Welcome to the StratEdge portal. Add your details once, and StratEdge will approve your access.</p>
       <${ProfileForm} uid=${uid} as=${q.as} submitLabel="Request access" /><//>`;
     if (!a.st) return html`<${Gate} title=${`Thanks, ${firstName(prof.n)}. Your access is being reviewed`}>
-      <p className="muted">${prof.role === 'employer' ? `StratEdge will connect your account to ${prof.co || 'your company'}'s client workspace.` : 'HR will approve your account and assign your client and project.'} This page opens your portal automatically as soon as that happens.</p>
+      <p className="muted">${prof.role === 'employer' ? `StratEdge will connect your account to ${prof.co || 'your company'}'s client workspace.` : prof.role === 'bench' ? 'An administrator approves your account and you get the bench sales portal.' : 'HR will approve your account and assign your client and project.'} This page opens your portal automatically as soon as that happens.</p>
       ${editing ? html`<${ProfileForm} uid=${uid} initial=${prof} onSaved=${() => setEditing(false)} />`
         : html`<dl className="kv"><dt>Name</dt><dd>${prof.n}</dd><dt>Email</dt><dd>${prof.e}</dd>${prof.co && html`<dt>Company</dt><dd>${prof.co}</dd>`}${prof.ph && html`<dt>Phone</dt><dd>${prof.ph}</dd>`}${prof.ti && html`<dt>Title</dt><dd>${prof.ti}</dd>`}<dt>Requested</dt><dd>${portalLabel(prof.role)}</dd></dl>
-          <div><button className="btn ghost sm" onClick=${() => setEditing(true)}>Edit details</button></div>`}<//>`;
+          <div><button type="button" className="btn ghost sm" onClick=${() => setEditing(true)}>Edit details</button></div>`}<//>`;
     if (a.st === 'inactive') return html`<${Gate} title="Your portal access is paused">
       <p className="muted">This usually means an engagement has ended. If you think it's a mistake, contact StratEdge at ${CO.email} or ${CO.phone}.</p><//>`;
     if (role === 'employer' && !a.cid) return html`<${Gate} title="Your client workspace isn't linked yet">
@@ -147,29 +147,35 @@ const ACCT_SHARED_NAV = [['admin/team', 'Team', 'users'], ['admin/payroll', 'Pay
 const HR_SHARED_NAV = [['admin/team', 'Team', 'users'], ['admin/approvals', 'Approvals', 'approve'], ['admin/payroll', 'Payroll', 'money'], ['admin/attendance', 'Team attendance', 'clock'], ['admin/announcements', 'Announcements', 'mega']];
 const REC_NAV = [['rec/consultants', 'Consultants', 'users'], ['rec/submissions', 'RTRs & submissions', 'send'], ['rec/eod', 'Daily report', 'mega']];
 const CONSULTANT_NAV = [
-  ['', 'Dashboard', 'home'], ['jobs', 'Matched jobs', 'search'], ['resume', 'Resume & preferences', 'star'], ['attendance', 'Attendance', 'clock'], ['timesheets', 'Timesheets', 'sheet'], ['pay', 'Earnings', 'money'], ['timeoff', 'Time off', 'cal'],
+  ['', 'Dashboard', 'home'], ['jobs', 'Matched jobs', 'search'], ['applications', 'Applications', 'check'], ['resume', 'Resume & preferences', 'star'], ['attendance', 'Attendance', 'clock'], ['timesheets', 'Timesheets', 'sheet'], ['pay', 'Earnings', 'money'], ['timeoff', 'Time off', 'cal'],
   ['tasks', 'Tasks', 'tasks'], ['documents', 'Documents', 'folder'], ['profile', 'Profile', 'user'],
+];
+// Bench sales recruiters: the job grabber and the recruiting workspace are inline in the primary nav (no separate Recruiting group).
+const BENCH_NAV = [
+  ['', 'Dashboard', 'home'], ['jobs/grab', 'Job grabber', 'search'], ['jobs/consultants', 'Consultant matches', 'users'], ['rec/consultants', 'Bench consultants', 'users'], ['rec/submissions', 'RTRs & submissions', 'send'], ['rec/eod', 'Daily report', 'mega'],
+  ['attendance', 'Attendance', 'clock'], ['timesheets', 'Timesheets', 'sheet'], ['tasks', 'Tasks', 'tasks'], ['timeoff', 'Time off', 'cal'], ['documents', 'Documents', 'folder'], ['profile', 'Profile', 'user'],
 ];
 function Shell({ path, q }) {
   const P = usePortal();
   const [more, setMore] = useState(false);
   const sub = path.replace(/^\/(portal|client)\/?/, '');
   useEffect(() => { setMore(false); }, [path]);
-  const emp = P.role === 'employer'; const cons = P.role === 'consultant';
+  const emp = P.role === 'employer'; const cons = P.role === 'consultant'; const bench = P.role === 'bench';
   const toSign = pendingSigs(P.sigs, P.uid).length;
   const openTasks = emp ? 0 : Object.entries(P.asg.tasks || {}).filter(([id, t]) => !t.x && (((P.root.tp || {})[id] || {}).s || 'todo') !== 'done').length;
   const A = P.admin;
   const badge = { tasks: openTasks, sign: toSign, 'admin/team': A && A.requests.length, 'admin/approvals': A && (A.pendTs.length + A.pendLv.length), 'admin/website': A && A.unread, 'admin/esign': toSign, 'hr/esign': toSign };
   const onbOpen = !emp && P.asg.onb && P.asg.onb.kind !== 'done';
-  const primary = emp ? CLIENT_NAV : cons ? [...CONSULTANT_NAV.slice(0, 7), ...(onbOpen ? [['onboarding', 'Onboarding', 'tasks']] : []), ['sign', 'Sign documents', 'sheet'], ['policies', 'Policies', 'sheet'], ...CONSULTANT_NAV.slice(7)] : [...MEMBER_NAV.slice(0, 6), ...(onbOpen ? [['onboarding', 'Onboarding', 'tasks']] : []), ['sign', 'Sign documents', 'sheet'], ['policies', 'Policies', 'sheet'], MEMBER_NAV[6]];
-  const rec = (!emp && !cons && P.prof && !P.asg.norec) || P.isAdmin ? REC_NAV : [];
+  const benchNav = bench ? BENCH_NAV.filter(n => !(P.asg.norec && n[0].startsWith('rec/'))) : BENCH_NAV;
+  const primary = emp ? CLIENT_NAV : cons ? [...CONSULTANT_NAV.slice(0, 8), ...(onbOpen ? [['onboarding', 'Onboarding', 'tasks']] : []), ['sign', 'Sign documents', 'sheet'], ['policies', 'Policies', 'sheet'], ...CONSULTANT_NAV.slice(8)] : bench ? [...benchNav.slice(0, -1), ...(onbOpen ? [['onboarding', 'Onboarding', 'tasks']] : []), ['sign', 'Sign documents', 'sheet'], ['policies', 'Policies', 'sheet'], benchNav[benchNav.length - 1]] : [...MEMBER_NAV.slice(0, 6), ...(onbOpen ? [['onboarding', 'Onboarding', 'tasks']] : []), ['sign', 'Sign documents', 'sheet'], ['policies', 'Policies', 'sheet'], MEMBER_NAV[6]];
+  const rec = (!emp && !cons && !bench && P.prof && !P.asg.norec) || P.isAdmin ? REC_NAV : [];
   // Separate portals: the route prefix decides which portal is open; a switcher moves between the ones this person can use.
-  const portals = [...(emp ? [['client', 'Client portal', '']] : cons ? [['consultant', 'Consultant portal', '']] : [['employee', 'Employee portal', '']]), ...(P.isHR || P.roleName === 'admin' ? [['hr', 'HR portal', 'hr']] : []), ...(P.isAcct || P.roleName === 'admin' ? [['acct', 'Accounting portal', 'acct']] : []), ...(P.roleName === 'admin' ? [['admin', 'Admin portal', 'admin']] : [])];
-  const portalKey = sub === 'admin' || sub.startsWith('admin/') ? 'admin' : sub === 'hr' || sub.startsWith('hr/') ? 'hr' : sub === 'acct' || sub.startsWith('acct/') ? 'acct' : emp ? 'client' : cons ? 'consultant' : 'employee';
+  const portals = [...(emp ? [['client', 'Client portal', '']] : cons ? [['consultant', 'Consultant portal', '']] : bench ? [['bench', 'Bench sales portal', '']] : [['employee', 'Employee portal', '']]), ...(P.isHR || P.roleName === 'admin' ? [['hr', 'HR portal', 'hr']] : []), ...(P.isAcct || P.roleName === 'admin' ? [['acct', 'Accounting portal', 'acct']] : []), ...(P.roleName === 'admin' ? [['admin', 'Admin portal', 'admin']] : [])];
+  const portalKey = sub === 'admin' || sub.startsWith('admin/') ? 'admin' : sub === 'hr' || sub.startsWith('hr/') ? 'hr' : sub === 'acct' || sub.startsWith('acct/') ? 'acct' : emp ? 'client' : cons ? 'consultant' : bench ? 'bench' : 'employee';
   const inPortal = portals.some(x => x[0] === portalKey) ? portalKey : portals[0][0];
   const groups = inPortal === 'admin' ? [['', ADMIN_NAV], ['Recruiting', REC_NAV]] : inPortal === 'hr' ? [['', HR_NAV], ['Team', HR_SHARED_NAV], ['Recruiting', REC_NAV]] : inPortal === 'acct' ? [['', ACCT_NAV], ['Team', ACCT_SHARED_NAV]] : [['', primary], ...(rec.length ? [['Recruiting', rec]] : [])];
   const staff = [];
-  const all = [...primary, ...rec, ...CONSULTANT_NAV, ...ADMIN_NAV, ...HR_NAV, ...HR_SHARED_NAV, ...ACCT_NAV, ...ACCT_SHARED_NAV];
+  const all = [...primary, ...rec, ...CONSULTANT_NAV, ...BENCH_NAV, ...ADMIN_NAV, ...HR_NAV, ...HR_SHARED_NAV, ...ACCT_NAV, ...ACCT_SHARED_NAV];
   const cur = all.find(n => n[0] === sub) || groups[0][1][0];
   const portalName = (portals.find(x => x[0] === inPortal) || portals[0])[1];
   const switchPortal = e => { const k = e.target.value; const p = portals.find(x => x[0] === k); if (p) location.hash = '#/portal' + (p[2] ? '/' + p[2] : ''); };
@@ -177,7 +183,7 @@ function Shell({ path, q }) {
   const href = k => '#/portal' + (k ? '/' + k : '');
   const link = ([k, label, ic]) => html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''} aria-current=${cur[0] === k ? 'page' : undefined}>
     <${Icon} n=${ic} />${label}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`;
-  const tabs = inPortal === 'client' ? ['', 'timesheets', 'consultants', 'requirements'] : inPortal === 'admin' ? ['admin', 'admin/approvals', 'admin/team', 'admin/payruns'] : inPortal === 'hr' ? ['hr', 'hr/onboarding', 'hr/verify', 'hr/reports'] : inPortal === 'acct' ? ['acct', 'admin/invoices', 'acct/expenses', 'acct/payroll'] : cons ? ['', 'jobs', 'timesheets', 'resume'] : ['', 'attendance', 'timesheets', 'rec/submissions'];
+  const tabs = inPortal === 'client' ? ['', 'timesheets', 'consultants', 'requirements'] : inPortal === 'admin' ? ['admin', 'admin/approvals', 'admin/team', 'admin/payruns'] : inPortal === 'hr' ? ['hr', 'hr/onboarding', 'hr/verify', 'hr/reports'] : inPortal === 'acct' ? ['acct', 'admin/invoices', 'acct/expenses', 'acct/payroll'] : cons ? ['', 'jobs', 'applications', 'resume'] : bench ? (P.asg.norec ? ['', 'jobs/grab', 'jobs/consultants', 'timesheets'] : ['', 'jobs/grab', 'rec/submissions', 'rec/consultants']) : ['', 'attendance', 'timesheets', 'rec/submissions'];
   const page = (() => {
     if (emp) switch (sub) {
       case 'timesheets': return html`<${ClientTimesheets} />`;
@@ -202,9 +208,15 @@ function Shell({ path, q }) {
       case 'policies': return html`<${PoliciesPage} />`;
       case 'sign': return html`<${SignDocsPage} />`;
       case 'jobs': return html`<${JobsPage} />`;
+      case 'applications': return html`<${ApplicationsPage} />`;
       case 'resume': return html`<${ResumePage} />`;
     }
-    if ((!emp && !P.asg.norec) || P.isAdmin) switch (sub) {
+    // Job grabber: bench sales recruiters and admins only (consultants and clients fall through to the dashboard).
+    if (bench || P.isAdmin) switch (sub) {
+      case 'jobs/grab': return html`<${JobPortalsAdmin} bench=${!P.isAdmin} />`;
+      case 'jobs/consultants': return html`<${JobPortalsAdmin} bench=${!P.isAdmin} tab="consultants" />`;
+    }
+    if ((!emp && !cons && !P.asg.norec) || P.isAdmin) switch (sub) {
       case 'rec/consultants': return html`<${RecConsultants} />`;
       case 'rec/submissions': return html`<${RecSubmissions} />`;
       case 'rec/eod': return html`<${RecEOD} />`;
@@ -250,7 +262,7 @@ function Shell({ path, q }) {
     return html`<${Dashboard} />`;
   })();
   const me = P.people[P.uid] || Cap.me || {};
-  const roleLine = P.roleName === 'admin' ? 'Admin' : P.isHR ? 'HR' : P.roleName === 'acct' ? 'Accounting' : emp ? (P.asg.cl || P.prof.co || 'Client contact') : cons ? (P.asg.ty ? P.asg.ty + ' consultant' : 'Consultant') : 'StratEdge employee';
+  const roleLine = P.roleName === 'admin' ? 'Admin' : P.isHR ? 'HR' : P.roleName === 'acct' ? 'Accounting' : emp ? (P.asg.cl || P.prof.co || 'Client contact') : cons ? (P.asg.ty ? P.asg.ty + ' consultant' : 'Consultant') : bench ? 'Bench sales recruiter' : 'StratEdge employee';
   const banner = toSign > 0 && sub !== 'sign' && !sub.endsWith('esign') ? html`<div className="note amber" style=${{ marginBottom: 18 }}><span><b>${toSign} document${toSign === 1 ? '' : 's'} waiting for your signature.</b></span><div className="actions"><a className="btn sm" href="#/portal/sign">Review and sign</a></div></div>` : null;
   const content = html`<${Fragment}>${banner}${emp ? html`<${ClientData}>${page}<//>` : page}<//>`;
   return html`<div className="app">
@@ -264,13 +276,13 @@ function Shell({ path, q }) {
       <header className="ptop">
         <a className="mlogo" href="#/" aria-label="StratEdge website"><${Logo} /></a>
         <h1>${title}</h1>
-        <div className="push"><${ThemeToggle} /><a className="btn ghost sm" href="#/">Website</a><button className="btn ghost sm" onClick=${logout}><${Icon} n="exit" />Log out</button></div>
+        <div className="push"><${ThemeToggle} /><a className="btn ghost sm" href="#/">Website</a><button type="button" className="btn ghost sm" onClick=${logout}><${Icon} n="exit" />Log out</button></div>
       </header>
       <main className="content">${content}</main>
     </div>
     <nav className="tabbar" aria-label="Portal sections">
       ${tabs.map(k => { const n = all.find(x => x[0] === k) || ['', 'Home', 'home']; return html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''}><${Icon} n=${n[2]} />${k === '' || k === 'admin' || k === 'hr' || k === 'acct' ? 'Home' : n[1].replace('Team attendance', 'Attendance')}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`; })}
-      <button onClick=${() => setMore(true)}><${Icon} n="more" />More</button>
+      <button type="button" onClick=${() => setMore(true)}><${Icon} n="more" />More</button>
     </nav>
     ${more && html`<${Modal} title="Portal" onClose=${() => setMore(false)}>
       <div className="side" style=${{ display: 'flex', position: 'static', height: 'auto', border: 0, padding: 0 }}>
@@ -365,9 +377,9 @@ function ClockCard() {
     ${onBrk && html`<div className="brk-live"><span className="dot live" />On break since ${fmtTime(c.brk.i)} (${hm(mins(c.brk.i, now))})</div>`}
     ${over > 0 && html`<div className="note amber" style=${{ marginBottom: 10 }}><span>Breaks are ${hm(over)} over today’s ${hm(allow)} allowance. The extra time is unpaid unless an admin approves the extended break.</span></div>`}
     <${LocationStatus} />
-    ${!c && html`<div className="seg" role="radiogroup" aria-label="Where are you working?">${Object.entries(MODES).map(([k, v]) => html`<button key=${k} role="radio" aria-checked=${mode === k} className=${mode === k ? 'on' : ''} onClick=${() => setMode(k)}>${v}</button>`)}</div>`}
-    ${c ? html`<div className="punches">${onBrk ? html`<button className="punch brk" disabled=${busy} onClick=${() => breakEnd()}>${busy ? 'Saving…' : 'End break'}</button>` : html`<button className="punch brk" disabled=${busy} onClick=${breakStart}>${busy ? 'Saving…' : 'Start break'}</button>`}<button className="punch out" disabled=${busy} onClick=${() => clockOut()}>${busy ? 'Saving…' : 'Clock out'}</button></div>`
-      : html`<button className="punch in" disabled=${busy} onClick=${() => clockIn(mode)}>${busy ? 'Saving…' : 'Clock in'}</button>`}
+    ${!c && html`<div className="seg" role="radiogroup" aria-label="Where are you working?">${Object.entries(MODES).map(([k, v]) => html`<button type="button" key=${k} role="radio" aria-checked=${mode === k} className=${mode === k ? 'on' : ''} onClick=${() => setMode(k)}>${v}</button>`)}</div>`}
+    ${c ? html`<div className="punches">${onBrk ? html`<button type="button" className="punch brk" disabled=${busy} onClick=${() => breakEnd()}>${busy ? 'Saving…' : 'End break'}</button>` : html`<button type="button" className="punch brk" disabled=${busy} onClick=${breakStart}>${busy ? 'Saving…' : 'Start break'}</button>`}<button type="button" className="punch out" disabled=${busy} onClick=${() => clockOut()}>${busy ? 'Saving…' : 'Clock out'}</button></div>`
+      : html`<button type="button" className="punch in" disabled=${busy} onClick=${() => clockIn(mode)}>${busy ? 'Saving…' : 'Clock in'}</button>`}
     ${sess.length > 0 && html`<ul className="sess">${sess.slice().reverse().map(s => html`<li key=${s.i}><span><b>${fmtTime(s.i)} – ${s.o ? fmtTime(s.o) : 'now'}</b><span style=${{ marginLeft: 10 }}>${MODES[s.m] || ''}</span></span><span className="num">${hm(mins(s.i, s.o || (c && c.i === s.i ? now : s.i)))}</span></li>`)}</ul>`}
   </section>`;
 }
@@ -382,7 +394,7 @@ function ClockOutAtModal({ onClose }) {
     if (t > Date.now()) { setErr("Clock-out can't be in the future."); return; }
     if (await clockOut(t, true)) onClose();
   };
-  return html`<${Modal} title="Set your clock-out time" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>Save clock-out</button>`}>
+  return html`<${Modal} title="Set your clock-out time" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>Save clock-out</button>`}>
     <p className="muted" style=${{ marginBottom: 16 }}>You clocked in ${fmtDate(c.d)} at ${fmtTime(c.i)}. Corrected times are marked as edited for your approver.</p>
     <${Field} label="Clocked out at"><input type="datetime-local" value=${v} min=${toLocalInput(c.i)} max=${toLocalInput(Date.now())} onInput=${e => setV(e.target.value)} /><//>
     ${err && html`<p className="err" role="alert" style=${{ marginTop: 10 }}>${err}</p>`}<//>`;
@@ -393,7 +405,7 @@ function ForgotBanner() {
   const { busy, clockOut } = useClockActions();
   if (!c || !c.on || c.d === dkey()) return null;
   return html`<div className="note amber" role="alert"><span>You're still clocked in from <b>${fmtDate(c.d)} at ${fmtTime(c.i)}</b>. Did you forget to clock out?</span>
-    <div className="actions"><button className="btn sm" onClick=${() => setOpen(true)}>Set clock-out time</button><button className="btn ghost sm" disabled=${busy} onClick=${() => clockOut()}>Clock out now</button></div>
+    <div className="actions"><button type="button" className="btn sm" onClick=${() => setOpen(true)}>Set clock-out time</button><button type="button" className="btn ghost sm" disabled=${busy} onClick=${() => clockOut()}>Clock out now</button></div>
     ${open && html`<${ClockOutAtModal} onClose=${() => setOpen(false)} />`}</div>`;
 }
 function WeekCard() {
@@ -454,6 +466,7 @@ function Dashboard() {
     ${P.prof ? html`<${Fragment}>
       <${ForgotBanner} />
       ${P.role === 'consultant' && html`<${JobsCard} />`}
+      ${P.role === 'bench' && html`<${BenchCard} />`}
       <div className="g32"><${ClockCard} /><${WeekCard} /></div>
       <div className="g2"><${TsCard} /><${TasksCard} /></div>
       <${EarnCard} />
@@ -486,7 +499,7 @@ function MissedPunch({ onClose }) {
     } catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title="Add a missed punch" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>Add punch</button>`}>
+  return html`<${Modal} title="Add a missed punch" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>Add punch</button>`}>
     <div className="form">
       <div className="row3"><${Field} label="Date"><input type="date" max=${dkey()} value=${f.d} onInput=${up('d')} /><//><${Field} label="Clock in"><input type="time" value=${f.i} onInput=${up('i')} /><//><${Field} label="Clock out"><input type="time" value=${f.o} onInput=${up('o')} /><//></div>
       <${Field} label="Work location"><select value=${f.m} onChange=${up('m')}>${Object.entries(MODES).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//>
@@ -520,10 +533,10 @@ function Attendance() {
   return html`<div className="stack">
     <${ForgotBanner} />
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous month" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${monthLabel(mk)}</b>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous month" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${monthLabel(mk)}</b>
         <button className="btn ghost icon" aria-label="Next month" disabled=${mk >= mkey(dkey())} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button></div>
-      ${mk !== mkey(dkey()) && html`<button className="btn ghost sm" onClick=${() => setMk(mkey(dkey()))}>This month</button>`}
-      <div className="push"><button className="btn ghost" onClick=${() => setAdd(true)}><${Icon} n="plus" />Add missed punch</button><button className="btn ghost" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Export CSV</button></div>
+      ${mk !== mkey(dkey()) && html`<button type="button" className="btn ghost sm" onClick=${() => setMk(mkey(dkey()))}>This month</button>`}
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setAdd(true)}><${Icon} n="plus" />Add missed punch</button><button type="button" className="btn ghost" disabled=${!rows.length} onClick=${exp}><${Icon} n="down" />Export CSV</button></div>
     </div>
     <div className="kpis" style=${{ gridTemplateColumns: 'repeat(3,minmax(0,1fr))' }}>
       <a><b>${hm(total)}</b><span>Total this month</span></a><a><b>${daysWorked}</b><span>Days worked</span></a><a><b>${daysWorked ? hm(total / daysWorked) : '0h 00m'}</b><span>Average per day</span></a>
@@ -636,17 +649,17 @@ function Timesheets({ q }) {
   const cdNote = pub.data && pub.data.cd;
   return html`<div className="stack">
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous week" disabled=${!!busy} onClick=${() => goWeek(-1)}><${Icon} n="left" /></button><b>${weekLabel(ws)}</b>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous week" disabled=${!!busy} onClick=${() => goWeek(-1)}><${Icon} n="left" /></button><b>${weekLabel(ws)}</b>
         <button className="btn ghost icon" aria-label="Next week" disabled=${!!busy || ws >= weekStart()} onClick=${() => goWeek(1)}><${Icon} n="right" /></button></div>
       <${Chip} s=${st}>${TS_LABEL[st]}<//>
       ${cst !== 'none' && html`<${Chip} s=${cst === 'approved' ? 'ok' : cst === 'returned' ? 'red' : 'amber'}>${CD_LABEL[cst]}<//>`}
-      ${editable && html`<div className="push"><button className="btn ghost sm" disabled=${!!busy} onClick=${fill}>Fill from attendance</button><button className="btn ghost sm" disabled=${!!busy} onClick=${copyPrev}>Copy previous week</button></div>`}
+      ${editable && html`<div className="push"><button type="button" className="btn ghost sm" disabled=${!!busy} onClick=${fill}>Fill from attendance</button><button type="button" className="btn ghost sm" disabled=${!!busy} onClick=${copyPrev}>Copy previous week</button></div>`}
     </div>
     ${st === 'rejected' && html`<div className="note red"><span><b>Returned by StratEdge.</b> ${rev.c || 'Update your timesheet and submit it again.'}</span></div>`}
     ${st === 'reopened' && html`<div className="note info"><span><b>Reopened for changes.</b> ${rev.c || 'Make your updates and submit again.'}</span></div>`}
     ${cst === 'returned' && cdNote && html`<div className="note red"><span><b>Returned by your client.</b> ${cdNote.c || 'Review the hours with your client manager and resubmit.'}</span></div>`}
     ${cst === 'approved' && cdNote && html`<div className="note ok"><span>Your client approved these hours ${fmtDay(cdNote.at)}.${cdNote.c ? ' ' + cdNote.c : ''}</span></div>`}
-    ${st === 'pending' && html`<div className="note amber"><span>Submitted ${fmtTs(sum.sa)}. ${cid ? 'Your client and StratEdge are reviewing it.' : 'Waiting for approval.'}</span><div className="actions"><button className="btn ghost sm" disabled=${!!busy} onClick=${() => act('withdraw', () => persist(false), 'Withdrawn. You can edit and resubmit.')}>Withdraw to edit</button></div></div>`}
+    ${st === 'pending' && html`<div className="note amber"><span>Submitted ${fmtTs(sum.sa)}. ${cid ? 'Your client and StratEdge are reviewing it.' : 'Waiting for approval.'}</span><div className="actions"><button type="button" className="btn ghost sm" disabled=${!!busy} onClick=${() => act('withdraw', () => persist(false), 'Withdrawn. You can edit and resubmit.')}>Withdraw to edit</button></div></div>`}
     ${st === 'approved' && html`<div className="note ok"><span>Approved by StratEdge ${fmtDay(rev.at)}${rev.c ? ': ' + rev.c : ''}. This timesheet is locked.</span></div>`}
     ${!form ? html`<${Spinner} />` : html`<${Fragment}>
       <div className="stack" style=${{ gap: 10 }}>
@@ -655,7 +668,7 @@ function Timesheets({ q }) {
             <${Field} label="Project">${projects.length ? html`<select disabled=${!editable} value=${r.p} onChange=${e => setRow(ri, { p: e.target.value })}>${projOpts(r.p).map(p => html`<option key=${p}>${p}</option>`)}</select>`
               : html`<input disabled=${!editable} value=${r.p} onInput=${e => setRow(ri, { p: e.target.value })} placeholder="Client or project" />`}<//>
             <${Field} label="Task or description"><input disabled=${!editable} value=${r.t} onInput=${e => setRow(ri, { t: e.target.value })} placeholder="What you worked on" /><//>
-            ${editable && form.rows.length > 1 ? html`<button className="btn ghost icon" aria-label="Remove line" onClick=${() => { setForm({ ...form, rows: form.rows.filter((_, i) => i !== ri) }); setDirty(true); }}><${Icon} n="trash" /></button>` : html`<span />`}
+            ${editable && form.rows.length > 1 ? html`<button type="button" className="btn ghost icon" aria-label="Remove line" onClick=${() => { setForm({ ...form, rows: form.rows.filter((_, i) => i !== ri) }); setDirty(true); }}><${Icon} n="trash" /></button>` : html`<span />`}
           </div>
           <div className="days">${DOW.map((d, di) => html`<label key=${d} className=${di > 4 ? 'we' : ''}>${d} ${parseD(days[di]).getDate()}
             <input disabled=${!editable} inputMode="decimal" value=${r.h[di]} placeholder="0" aria-label=${`${d} hours, line ${ri + 1}`}
@@ -663,7 +676,7 @@ function Timesheets({ q }) {
             <div className="tot">${h1(r.h.reduce((a, x) => a + numv(x), 0))} h</div></div>
         </div>`)}
         <div className="days sum" aria-label="Daily totals">${totals.map((t, i) => html`<div key=${i} className=${t > 24 ? 'over' : ''}>${h1(t)}</div>`)}<div className="tot" style=${{ fontSize: 17 }}>${h1(grand)} h</div></div>
-        ${editable && html`<div><button className="btn ghost sm" onClick=${() => { setForm({ ...form, rows: [...form.rows, blank()] }); setDirty(true); }}><${Icon} n="plus" />Add line</button></div>`}
+        ${editable && html`<div><button type="button" className="btn ghost sm" onClick=${() => { setForm({ ...form, rows: [...form.rows, blank()] }); setDirty(true); }}><${Icon} n="plus" />Add line</button></div>`}
       </div>
       <section className="panel stack" style=${{ gap: 14 }}>
         <div><h2 className="ph">Attachments</h2><p className="muted small" style=${{ marginTop: 4 }}>${P.asg.na ? 'Your client requires a signed timesheet. Attach it before submitting.' : 'Attach your client-approved timesheet if your client provides one.'}</p></div>
@@ -673,8 +686,8 @@ function Timesheets({ q }) {
         <${Field} label="Notes for your approver"><textarea disabled=${!editable} value=${form.note} onInput=${e => { setForm({ ...form, note: e.target.value }); setDirty(true); }} placeholder="Overtime, holidays, anything your approver should know" /><//>
       </section>
       ${editable && html`<div className="actions">
-        <button className="btn lg" disabled=${!!busy} onClick=${() => act('submit', () => persist(true), cid ? 'Submitted to your client and StratEdge for approval.' : 'Timesheet submitted for approval.')}>${busy === 'submit' ? 'Submitting…' : 'Submit for approval'}</button>
-        <button className="btn ghost lg" disabled=${!!busy} onClick=${() => act('save', () => persist(false), 'Draft saved.')}>${busy === 'save' ? 'Saving…' : 'Save draft'}</button>
+        <button type="button" className="btn lg" disabled=${!!busy} onClick=${() => act('submit', () => persist(true), cid ? 'Submitted to your client and StratEdge for approval.' : 'Timesheet submitted for approval.')}>${busy === 'submit' ? 'Submitting…' : 'Submit for approval'}</button>
+        <button type="button" className="btn ghost lg" disabled=${!!busy} onClick=${() => act('save', () => persist(false), 'Draft saved.')}>${busy === 'save' ? 'Saving…' : 'Save draft'}</button>
         ${dirty && html`<span className="muted small">Unsaved changes</span>`}</div>`}
     <//>`}
     <section className="panel">
@@ -682,7 +695,7 @@ function Timesheets({ q }) {
       ${hist.length ? html`<ul className="list">${(showAll ? hist : hist.slice(0, 8)).map(([w, s]) => { const x = tsStatus(s, (P.asg.rev || {})[w]); return html`<li key=${w}>
         <a href=${'#/portal/timesheets?w=' + w} style=${{ textDecoration: 'none', color: 'inherit' }}><div className="t">${weekLabel(w)}</div><div className="m">${h1(s.t)} hours${s.f ? `, ${s.f} attachment${s.f > 1 ? 's' : ''}` : ''}</div></a>
         <${Chip} s=${x}>${TS_LABEL[x]}<//></li>`; })}</ul>
-        ${hist.length > 8 && !showAll && html`<button className="btn link" style=${{ marginTop: 10 }} onClick=${() => setShowAll(true)}>Show all ${hist.length} weeks</button>`}`
+        ${hist.length > 8 && !showAll && html`<button type="button" className="btn link" style=${{ marginTop: 10 }} onClick=${() => setShowAll(true)}>Show all ${hist.length} weeks</button>`}`
       : html`<${Empty} title="No timesheets yet">Your submitted weeks will be listed here.<//>`}
     </section>
   </div>`;
@@ -707,7 +720,7 @@ function TaskItem({ t }) {
     <div className="row2 form" style=${{ gap: 10 }}>
       <${Field} label="Status"><select value=${s} disabled=${busy} onChange=${e => save(e.target.value)}>${Object.entries(TASK_S).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//>
       <${Field} label="Update for your manager"><div style=${{ display: 'flex', gap: 8 }}><input value=${note} onInput=${e => setNote(e.target.value)} placeholder="Progress, blockers, links" />
-        <button className="btn ghost" disabled=${busy || note === (t.pr.n || '')} onClick=${() => save(s)}>Save</button></div><//>
+        <button type="button" className="btn ghost" disabled=${busy || note === (t.pr.n || '')} onClick=${() => save(s)}>Save</button></div><//>
     </div>
   </article>`;
 }
@@ -717,7 +730,7 @@ function Tasks() {
   const all = myTasks(P);
   const list = all.filter(t => tab === 'open' ? t.pr.s !== 'done' : t.pr.s === 'done');
   return html`<div className="stack">
-    <div className="tabs" role="tablist">${[['open', 'Open'], ['done', 'Done']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className="chip">${all.filter(t => k === 'open' ? t.pr.s !== 'done' : t.pr.s === 'done').length}</span></button>`)}</div>
+    <div className="tabs" role="tablist">${[['open', 'Open'], ['done', 'Done']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}<span className="chip">${all.filter(t => k === 'open' ? t.pr.s !== 'done' : t.pr.s === 'done').length}</span></button>`)}</div>
     ${list.length ? list.map(t => html`<${TaskItem} key=${t.id} t=${t} />`) : html`<div className="panel"><${Empty} title=${tab === 'open' ? 'No open tasks' : 'Nothing completed yet'}>Tasks assigned by HR or your manager appear here, along with due dates and priorities.<//></div>`}
   </div>`;
 }
@@ -754,7 +767,7 @@ function TimeOff() {
     <section className="panel"><h2 className="ph" style=${{ marginBottom: 8 }}>Your requests</h2>
       ${list.length ? html`<ul className="list">${list.map(l => { const s = l.x ? 'cancelled' : l.dec ? l.dec.s : 'pending'; return html`<li key=${l.id}>
         <div><div className="t">${LEAVE_K[l.k]}: ${fmtDate(l.f)}${l.t !== l.f ? ' to ' + fmtDate(l.t) : ''}</div><div className="m">${bizDays(l.f, l.t)} business day${bizDays(l.f, l.t) === 1 ? '' : 's'}${l.dec && l.dec.c ? '. HR: ' + l.dec.c : ''}</div></div>
-        <div className="actions"><${Chip} s=${s}>${s === 'pending' ? 'Pending' : s === 'approved' ? 'Approved' : s === 'declined' ? 'Declined' : 'Cancelled'}<//>${s === 'pending' && html`<button className="btn ghost sm" onClick=${() => cancel(l.id)}>Cancel</button>`}</div></li>`; })}</ul>`
+        <div className="actions"><${Chip} s=${s}>${s === 'pending' ? 'Pending' : s === 'approved' ? 'Approved' : s === 'declined' ? 'Declined' : 'Cancelled'}<//>${s === 'pending' && html`<button type="button" className="btn ghost sm" onClick=${() => cancel(l.id)}>Cancel</button>`}</div></li>`; })}</ul>`
         : html`<${Empty} title="No requests yet">Requests you send show their approval status here.<//>`}
     </section>
   </div>`;
@@ -866,10 +879,10 @@ function Earnings() {
   const exp = async () => { try { await saveDownload(`payslip-${mk}.csv`, payCsv(c, mk, P.prof.n)); } catch (e) { if (!e || e.code !== 'declined') toast(errText(e), true); } };
   return html`<div className="stack">
     <div className="toolbar">
-      <div className="wknav"><button className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b>
+      <div className="wknav"><button type="button" className="btn ghost icon" aria-label="Previous pay period" onClick=${() => setMk(addMonths(mk, -1))}><${Icon} n="left" /></button><b>${cyc.label}</b>
         <button className="btn ghost icon" aria-label="Next pay period" disabled=${mk >= cycleFor(dkey(), ps)} onClick=${() => setMk(addMonths(mk, 1))}><${Icon} n="right" /></button></div>
       <span className="muted small">${payLabel(c.p)}${c.p.from ? ', from ' + fmtDate(c.p.from, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}${ps > 1 ? `. Pay period runs from the ${ps}${ps === 26 ? 'th' : ''} to the ${ps - 1}${ps - 1 === 25 ? 'th' : ''}.` : ''}</span>
-      <div className="push"><button className="btn ghost" onClick=${exp}><${Icon} n="down" />Download payslip</button></div>
+      <div className="push"><button type="button" className="btn ghost" onClick=${exp}><${Icon} n="down" />Download payslip</button></div>
     </div>
     <div className="kpis" style=${{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))' }}>
       <a><b>${M(c.net)}</b><span>Net pay${mk === mkey(dkey()) ? ' so far' : ''}</span></a>
@@ -947,7 +960,7 @@ function NoPayPlan() {
   </section>`;
   const asked = P.root && P.root.payReq;
   const ask = async () => { setBusy(true); try { await dbMerge(`u/${P.uid}`, { payReq: Date.now() }); toast('HR has been notified.'); } catch (e) { toast(errText(e), true); } setBusy(false); };
-  return html`<div className="panel"><${Empty} title="Your pay plan isn't set up yet" action=${html`<button className="btn" disabled=${busy || !!asked} onClick=${ask}>${asked ? 'HR notified ' + fmtDay(asked) : 'Ask HR to set it up'}</button>`}>StratEdge HR adds your salary or hourly rate and any allowances under Team › your name › Pay. Once that's done, this page shows your earnings for each month, computed from your clock-ins.<//></div>`;
+  return html`<div className="panel"><${Empty} title="Your pay plan isn't set up yet" action=${html`<button type="button" className="btn" disabled=${busy || !!asked} onClick=${ask}>${asked ? 'HR notified ' + fmtDay(asked) : 'Ask HR to set it up'}</button>`}>StratEdge HR adds your salary or hourly rate and any allowances under Team › your name › Pay. Once that's done, this page shows your earnings for each month, computed from your clock-ins.<//></div>`;
 }
 
 /* Location sharing status on the clock card, with a one-click way to allow it */

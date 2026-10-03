@@ -104,7 +104,7 @@ function InvoiceEditor({ inv, onClose, onSaved }) {
     setBusy(false);
   };
   const M = n => fmtMoney(n, f.cur);
-  return html`<${Modal} wide title=${inv ? 'Edit ' + inv.num : 'New invoice'} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : inv ? 'Save changes' : 'Save draft'}</button>`}>
+  return html`<${Modal} wide title=${inv ? 'Edit ' + inv.num : 'New invoice'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : inv ? 'Save changes' : 'Save draft'}</button>`}>
     <div className="form">
       <div className="row3">
         <${Field} label="Client workspace (optional)" hint="Links the invoice to the client portal and lets you pull approved hours."><select value=${f.cid} onChange=${pickClient}><option value="">None (vendor or other)</option>${A.clients.map(c => html`<option key=${c.id} value=${c.id}>${c.n}</option>`)}</select><//>
@@ -136,7 +136,7 @@ function SendInvoice({ d, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title=${'Email ' + d.num} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${send}><${Icon} n="send" />${busy ? 'Sending…' : 'Send invoice'}</button>`}>
+  return html`<${Modal} title=${'Email ' + d.num} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${send}><${Icon} n="send" />${busy ? 'Sending…' : 'Send invoice'}</button>`}>
     <div className="form">
       <${Field} label="To"><input type="email" value=${f.to} onInput=${e => setF({ ...f, to: e.target.value })} /><//>
       <${Field} label="Cc (optional, comma-separated)"><input value=${f.cc} onInput=${e => setF({ ...f, cc: e.target.value })} placeholder="accounts@client.com, you@stratedge.com" /><//>
@@ -157,7 +157,7 @@ function RecordPayment({ d, onClose }) {
     catch (e) { toast(errText(e), true); }
     setBusy(false);
   };
-  return html`<${Modal} title=${'Record payment for ' + d.num} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn go" disabled=${busy} onClick=${save}>Record payment</button>`}>
+  return html`<${Modal} title=${'Record payment for ' + d.num} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn go" disabled=${busy} onClick=${save}>Record payment</button>`}>
     <div className="form"><div className="row2"><${Field} label=${'Amount received (' + d.cur + ')'}><input type="number" step="0.01" min="0" value=${f.a} onInput=${e => setF({ ...f, a: e.target.value })} /><//><${Field} label="Date"><input type="date" value=${f.dt} onInput=${e => setF({ ...f, dt: e.target.value })} /><//></div>
       <div className="row2"><${Field} label="Method"><select value=${f.m} onChange=${e => setF({ ...f, m: e.target.value })}>${['Bank transfer', 'ACH', 'Wire', 'Check', 'Card', 'UPI', 'Other'].map(x => html`<option key=${x}>${x}</option>`)}</select><//><${Field} label="Reference"><input value=${f.ref} onInput=${e => setF({ ...f, ref: e.target.value })} placeholder="Transaction or check number" /><//></div>
       <p className="muted small">Balance before this payment: ${fmtMoney(invBalance(d), d.cur)}.</p></div><//>`;
@@ -170,13 +170,13 @@ function InvoiceDetail({ d, onClose, onEdit }) {
   const link = d.tok ? location.origin + location.pathname + '#/invoice/' + d.id + '/' + d.tok : '';
   const copy = async () => { try { await navigator.clipboard.writeText(link); toast('Invoice link copied.'); } catch (e) { prompt('Copy this invoice link', link); } };
   return html`<${Modal} wide title=${`${d.num}: ${d.bill.co}`} onClose=${onClose} foot=${html`
-      ${d.st === 'draft' && html`<button className="btn ghost" onClick=${() => onEdit(d)}>Edit</button>`}
-      ${d.st !== 'void' && d.st !== 'paid' && html`<button className="btn ghost" onClick=${voidIt}>Void</button>`}
-      <button className="btn ghost" disabled=${busy} onClick=${download}><${Icon} n="down" />PDF</button>
-      ${d.st !== 'void' && d.st !== 'paid' && html`<button className="btn ghost" onClick=${() => setPay(true)}>Record payment</button>`}
-      ${d.st !== 'void' && html`<button className="btn" onClick=${() => setSend(true)}><${Icon} n="send" />${d.st === 'draft' ? 'Send by email' : 'Resend'}</button>`}`}>
+      ${d.st === 'draft' && html`<button type="button" className="btn ghost" onClick=${() => onEdit(d)}>Edit</button>`}
+      ${d.st !== 'void' && d.st !== 'paid' && html`<button type="button" className="btn ghost" onClick=${voidIt}>Void</button>`}
+      <button type="button" className="btn ghost" disabled=${busy} onClick=${download}><${Icon} n="down" />PDF</button>
+      ${d.st !== 'void' && d.st !== 'paid' && html`<button type="button" className="btn ghost" onClick=${() => setPay(true)}>Record payment</button>`}
+      ${d.st !== 'void' && html`<button type="button" className="btn" onClick=${() => setSend(true)}><${Icon} n="send" />${d.st === 'draft' ? 'Send by email' : 'Resend'}</button>`}`}>
     <div className="stack">
-      <div className="actions"><${Chip} s=${invChip(d)}>${INV_LABEL(invStatus(d))}<//><span className="muted small">${d.sentAt ? 'Sent ' + fmtTs(d.sentAt) + (d.to ? ' to ' + d.to : '') : 'Not sent yet'}${d.viewedAt ? ', viewed ' + fmtTs(d.viewedAt) : ''}</span>${link && html`<button className="btn link small" onClick=${copy}>Copy view link</button>`}</div>
+      <div className="actions"><${Chip} s=${invChip(d)}>${INV_LABEL(invStatus(d))}<//><span className="muted small">${d.sentAt ? 'Sent ' + fmtTs(d.sentAt) + (d.to ? ' to ' + d.to : '') : 'Not sent yet'}${d.viewedAt ? ', viewed ' + fmtTs(d.viewedAt) : ''}</span>${link && html`<button type="button" className="btn link small" onClick=${copy}>Copy view link</button>`}</div>
       <${InvoiceView} d=${d} />
       ${(d.pays || []).length > 0 && html`<div><h3 className="ph" style=${{ marginBottom: 8 }}>Payments</h3><ul className="list">${d.pays.map((p, i) => html`<li key=${i}><div><div className="t">${fmtMoney(p.a, d.cur)}</div><div className="m">${p.m}${p.ref ? ', ' + p.ref : ''}</div></div><span className="muted small num">${fmtDate(p.dt, { month: 'short', day: 'numeric', year: 'numeric' })}</span></li>`)}</ul></div>`}
       <div><h3 className="ph" style=${{ marginBottom: 8 }}>History</h3><ul className="list">${(d.log || []).slice().reverse().map((l, i) => html`<li key=${i}><div><div className="t">${l.ev}</div><div className="m">${l.who}</div></div><span className="muted small num">${fmtTs(l.t)}</span></li>`)}</ul></div>
@@ -189,7 +189,7 @@ function BillingSettings({ onClose }) {
   const [f, setF] = useState({ co: org.co || CO.legal, addr: org.addr || `${CO.addr1}\n${CO.addr2}`, email: org.email || CO.email, phone: org.phone || CO.phone, pay: org.pay || '', taxp: org.taxp || 0, terms: org.terms != null ? org.terms : 30 });
   const [busy, setBusy] = useState(false); const up = k => e => setF({ ...f, [k]: e.target.value });
   const save = async () => { setBusy(true); try { await dbMerge('org/main/x/settings', { inv: { ...f, taxp: r2(f.taxp), terms: +f.terms || 0 } }); toast('Billing settings saved.'); onClose(); } catch (e) { toast(errText(e), true); } setBusy(false); };
-  return html`<${Modal} title="Billing settings" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>Save</button>`}>
+  return html`<${Modal} title="Billing settings" onClose=${onClose} foot=${html`<button type="button" className="btn ghost" onClick=${onClose}>Cancel</button><button type="button" className="btn" disabled=${busy} onClick=${save}>Save</button>`}>
     <div className="form"><${Field} label="Company name on invoices"><input value=${f.co} onInput=${up('co')} /><//>
       <${Field} label="Address"><textarea value=${f.addr} onInput=${up('addr')} style=${{ minHeight: 70 }} /><//>
       <div className="row2"><${Field} label="Billing email"><input value=${f.email} onInput=${up('email')} /><//><${Field} label="Phone"><input value=${f.phone} onInput=${up('phone')} /><//></div>
@@ -210,14 +210,14 @@ function InvoicesAdmin() {
   return html`<div className="stack">
     <div className="kpis" style=${{ gridTemplateColumns: `repeat(${Object.keys(out).length + 2},minmax(0,1fr))` }}>
       ${Object.entries(out).map(([c, v]) => html`<a key=${c}><b>${fmtMoney(v, c)}</b><span>Outstanding (${c})</span></a>`)}<a><b>${overdue}</b><span>Overdue</span></a><a><b>${docs.filter(d => d.st === 'draft').length}</b><span>Drafts</span></a></div>
-    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['overdue', 'Overdue'], ['draft', 'Drafts'], ['paid', 'Paid'], ['all', 'All']].map(([k, v]) => html`<button key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
+    <div className="toolbar"><div className="tabs" role="tablist" style=${{ marginBottom: 0, border: 0 }}>${[['open', 'Open'], ['overdue', 'Overdue'], ['draft', 'Drafts'], ['paid', 'Paid'], ['all', 'All']].map(([k, v]) => html`<button type="button" key=${k} role="tab" aria-selected=${tab === k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${v}</button>`)}</div>
       <input type="search" style=${{ maxWidth: 220 }} placeholder="Search" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search invoices" />
-      <div className="push"><button className="btn ghost" onClick=${() => setCfgOpen(true)}>Billing settings</button><button className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />New invoice</button></div></div>
+      <div className="push"><button type="button" className="btn ghost" onClick=${() => setCfgOpen(true)}>Billing settings</button><button type="button" className="btn" onClick=${() => setEdit(null)}><${Icon} n="plus" />New invoice</button></div></div>
     <section className="panel" style=${{ padding: '6px 8px' }}>
       ${col.loading ? html`<${Spinner} />` : list.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Invoice</th><th>Billed to</th><th>Issued</th><th>Due</th><th className="r">Total</th><th className="r">Balance</th><th>Status</th></tr></thead>
         <tbody>${list.map(d => html`<tr key=${d.id} className="click" tabIndex="0" onClick=${() => setOpen(d.id)}><td><b style=${{ fontWeight: 600 }}>${d.num}</b></td><td>${d.bill.co}<div className="muted small">${d.bill.e || ''}</div></td><td className="num nw">${fmtDate(d.issue)}</td><td className="num nw">${d.due ? fmtDate(d.due) : '—'}</td>
           <td className="r num">${fmtMoney(d.total, d.cur)}</td><td className="r num">${['paid', 'void'].includes(d.st) ? '—' : fmtMoney(invBalance(d), d.cur)}</td><td><${Chip} s=${invChip(d)}>${INV_LABEL(invStatus(d))}<//></td></tr>`)}</tbody></table></div>`
-        : html`<${Empty} title=${tab === 'open' ? 'No open invoices' : 'No invoices here yet'} action=${html`<button className="btn" onClick=${() => setEdit(null)}>Create an invoice</button>`}>Build an invoice from approved timesheet hours or your own lines, email it with the PDF attached, and track viewed, paid and overdue here. Clients also see their invoices in the client portal.<//>`}
+        : html`<${Empty} title=${tab === 'open' ? 'No open invoices' : 'No invoices here yet'} action=${html`<button type="button" className="btn" onClick=${() => setEdit(null)}>Create an invoice</button>`}>Build an invoice from approved timesheet hours or your own lines, email it with the PDF attached, and track viewed, paid and overdue here. Clients also see their invoices in the client portal.<//>`}
     </section>
     ${edit !== undefined && html`<${InvoiceEditor} inv=${edit} onClose=${() => setEdit(undefined)} onSaved=${id => setOpen(id)} />`}
     ${cur && html`<${InvoiceDetail} key=${cur.id + cur.u} d=${cur} onClose=${() => setOpen(null)} onEdit=${d => { setOpen(null); setEdit(d); }} />`}
