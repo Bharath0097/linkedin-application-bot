@@ -1277,7 +1277,7 @@ function jobsRoute(string $r, string $method, array $b): void {
       jdb()->prepare('UPDATE job_apps SET status = ?, note = ?, updated_at = ? WHERE id = ?')->execute([$st, $note, now(), $id]);
       if ($a['kind'] === 'bench') { // keep the RTR / submissions log in step
         $q = db()->prepare("SELECT path, data FROM docs WHERE col = 'rec/sub/items'"); $q->execute();
-        while ($row = $q->fetch()) { $d = json_decode($row['data']); if ($d instanceof stdClass && (int) ($d->app_id ?? 0) === $id) { $d->st = $st; $d->u = now(); $d->un = $me['name']; docSet($row['path'], $d); break; } }
+        while ($row = $q->fetch()) { $d = json_decode($row['data']); if ($d instanceof stdClass && (int) ($d->app_id ?? 0) === $id) { $d->st = $st === 'applied' ? 'submitted' : $st; $d->u = now(); $d->un = $me['name']; docSet($row['path'], $d); break; } }
       }
       ok(['app' => jobAppOut(jobAppGet($id), $staff || isBench($me['id']) || $a['kind'] === 'self')]);
     }

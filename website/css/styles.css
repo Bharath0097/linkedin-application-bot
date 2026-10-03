@@ -1018,3 +1018,32 @@ select::-ms-expand{display:none}
 .btn::-moz-focus-inner,.tabs button::-moz-focus-inner,.seg button::-moz-focus-inner{border:0;padding:0}
 /* iOS: avoid the 300ms tap delay and double-tap zoom on controls */
 a,button,input,select,textarea,label,[role=tab]{touch-action:manipulation}
+
+/* resume versions (consultant portal): name, meta and chips on the left, actions on their own row */
+.files.resumes li{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:6px 12px;padding:12px 14px}
+.files.resumes li>.ico{margin-top:2px}
+.files.resumes .fn b{white-space:normal;overflow:visible;font-size:16px}
+.files.resumes .fn span{display:block;margin-top:2px}
+.files.resumes li>.actions{grid-column:1/-1;justify-content:flex-start!important;flex-wrap:wrap;margin:2px 0 0}
+.files.resumes form.actions input{min-height:38px;padding:6px 10px;font-size:15px;max-width:320px}
+@media (max-width:560px){.seg.logins{flex-wrap:wrap;gap:4px}.seg.logins a{flex:1 1 calc(50% - 4px);padding:9px 6px;font-size:13px}}
+@media (max-width:640px){.edge-tip{display:none}}
+
+/* phone-width portal shell: the title must never push the actions out of the bar, and KPI rows wrap into two columns even when a page sets four inline */
+.ptop{min-width:0}
+.ptop h1{min-width:0;overflow-wrap:break-word}
+.ptop .push{flex:none}
+@media (max-width:640px){
+  .ptop{padding:10px 16px;gap:8px;min-height:58px}
+  .ptop h1{font-size:18px;line-height:1.2}
+  .ptop .mlogo{display:none}
+  .ptop .push a.btn{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .kpis a{padding:14px 14px;border-bottom:1px solid var(--line)}
+  .kpis a:nth-child(2n){border-right:0}
+  .kpis a:nth-last-child(-n+2):nth-child(2n+1),.kpis a:last-child{border-bottom:0}
+  .kpis a b{word-break:normal;overflow-wrap:normal}
+  .kpis span{font-size:13px}
+  .tabbar a,.tabbar button{font-size:11px}
+}
+@media (max-width:400px){.kpis a b{font-size:20px}}

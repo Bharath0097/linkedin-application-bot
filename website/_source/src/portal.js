@@ -281,7 +281,7 @@ function Shell({ path, q }) {
       <main className="content">${content}</main>
     </div>
     <nav className="tabbar" aria-label="Portal sections">
-      ${tabs.map(k => { const n = all.find(x => x[0] === k) || ['', 'Home', 'home']; return html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''}><${Icon} n=${n[2]} />${k === '' || k === 'admin' || k === 'hr' || k === 'acct' ? 'Home' : n[1].replace('Team attendance', 'Attendance')}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`; })}
+      ${tabs.map(k => { const n = all.find(x => x[0] === k) || ['', 'Home', 'home']; return html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''}><${Icon} n=${n[2]} />${k === '' || k === 'admin' || k === 'hr' || k === 'acct' ? 'Home' : n[1].replace('Team attendance', 'Attendance').replace('Payroll runs & salary confirmation', 'Payroll')}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`; })}
       <button type="button" onClick=${() => setMore(true)}><${Icon} n="more" />More</button>
     </nav>
     ${more && html`<${Modal} title="Portal" onClose=${() => setMore(false)}>

@@ -1899,7 +1899,7 @@ function Shell({ path, q }) {
       <main className="content">${content}</main>
     </div>
     <nav className="tabbar" aria-label="Portal sections">
-      ${tabs.map(k => { const n = all.find(x => x[0] === k) || ['', 'Home', 'home']; return html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''}><${Icon} n=${n[2]} />${k === '' || k === 'admin' || k === 'hr' || k === 'acct' ? 'Home' : n[1].replace('Team attendance', 'Attendance')}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`; })}
+      ${tabs.map(k => { const n = all.find(x => x[0] === k) || ['', 'Home', 'home']; return html`<a key=${k} href=${href(k)} className=${cur[0] === k ? 'on' : ''}><${Icon} n=${n[2]} />${k === '' || k === 'admin' || k === 'hr' || k === 'acct' ? 'Home' : n[1].replace('Team attendance', 'Attendance').replace('Payroll runs & salary confirmation', 'Payroll')}${badge[k] ? html`<span className="badge">${badge[k]}</span>` : null}</a>`; })}
       <button type="button" onClick=${() => setMore(true)}><${Icon} n="more" />More</button>
     </nav>
     ${more && html`<${Modal} title="Portal" onClose=${() => setMore(false)}>
@@ -3352,7 +3352,7 @@ function ResumePage() {
     <div className="stack">
       <section className="panel stack" style=${{ gap: 14 }}>
         <div><h2 className="ph">Your resumes</h2><p className="muted small" style=${{ marginTop: 4 }}>${resumes.length ? html`Keep a version per skill set or role. The one marked <b>Primary</b> drives your job matches; any of them can be sent with one-click apply. A copy of each is kept under Documents.` : 'Upload your current resume. We read the titles, skills, experience and location from it and search the job boards for you. You can keep up to 10 versions, for example one per skill set.'}</p></div>
-        ${resumes.length ? html`<ul className="files">${resumes.map(r => html`<li key=${r.id} style=${{ flexWrap: 'wrap' }}><${Icon} n="file" />
+        ${resumes.length ? html`<ul className="files resumes">${resumes.map(r => html`<li key=${r.id}><${Icon} n="file" />
           <div className="fn" style=${{ minWidth: 0, flex: 1 }}>
             ${renaming === r.id ? html`<form className="actions" style=${{ flexWrap: 'nowrap' }} onSubmit=${e => { e.preventDefault(); rename(r); }}><input value=${newLabel} onInput=${e => setNewLabel(e.target.value)} maxLength="80" placeholder="e.g. SAP FICO resume" aria-label="Resume name" autoFocus /><button className="btn sm" disabled=${busy}>Save</button><button className="btn ghost sm" type="button" onClick=${() => setRenaming(null)}>Cancel</button></form>`
               : html`<b>${r.label || r.name}</b><span>${r.label ? r.name + ' · ' : ''}Uploaded ${fmtDay(r.at)}${r.size ? ', ' + sizeLabel(r.size) : ''}</span>`}
