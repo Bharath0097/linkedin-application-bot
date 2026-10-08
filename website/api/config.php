@@ -10,33 +10,36 @@ return [
   'files_dir' => __DIR__ . '/../storage/files',
   // Optional: create the first administrator automatically. Leave admin_email empty to make
   // the first person who registers on the site the administrator instead.
-  'admin_email' => '',
+  'admin_email' => 'info@stratedgeitconsulting.com',
   'admin_name' => 'StratEdge Admin',
-  'admin_password' => '',
+  'admin_password' => 'Se-D32A9Gd0M2dU!',   // temporary: change it after the first login (Admin > Team > your card > Reset password)
   'max_upload_mb' => 10,
   'session_name' => 'stratedge_portal',
   'public_forms_per_hour' => 20,
-  // Website assistant ("Edge"). Without a key it answers from api/knowledge.php.
-  // Add an Anthropic API key to make it a full AI assistant that can discuss anything (usage is billed to your key).
-  'ai_api_key' => '',
-  'ai_model' => 'claude-sonnet-5-5',
-  'ai_messages_per_hour' => 40,
-  // End-of-day recruiting reports are always visible in the HR and admin portals; add addresses
-  // (comma-separated) to also email each report the moment it is sent.
-  'eod_emails' => '',
-  // Outgoing email (signature requests, invoices, notifications).
-  // 'php' uses the host's mail() function; 'smtp' uses the SMTP account below (recommended on shared hosting).
-  'mail_transport' => 'php',
-  'mail_from' => '',            // e.g. billing@stratedgeitconsulting.com (defaults to no-reply@your-domain)
+  // Website assistant ("StratEdge"). It answers from api/knowledge.php. To let it hold open-ended
+  // conversations, add a hosted language model that supports the standard chat-completions API:
+  // the endpoint URL, an API key and the model name from that provider (usage is billed to that key).
+  'assistant_api_url' => '',
+  'assistant_api_key' => '',
+  'assistant_model' => '',
+  'assistant_messages_per_hour' => 40,
+  'eod_emails' => 'info@stratedgeitconsulting.com',
+  // Outgoing email. Easiest: log in as admin and open Mass email > Gmail & sending to connect Gmail,
+  // Google Workspace or any SMTP service (with a test button). The values below are only used until
+  // that page is saved. 'php' uses the host's mail() function; 'smtp' uses the account below.
+  'mail_transport' => 'smtp',   // SMTP is used once smtp_host and smtp_pass are filled in; until then the host's mail() is used
+  'mail_from' => 'info@stratedgeitconsulting.com',
   'mail_from_name' => 'StratEdge IT Consulting',
-  'smtp_host' => '', 'smtp_port' => 587, 'smtp_secure' => 'tls', 'smtp_user' => '', 'smtp_pass' => '',
+  // From cPanel > Email Accounts > info@... > Connect Devices: the outgoing server is usually mail.stratedgeitconsulting.com (port 465, ssl)
+  'smtp_host' => '', 'smtp_port' => 465, 'smtp_secure' => 'ssl', 'smtp_user' => 'info@stratedgeitconsulting.com', 'smtp_pass' => '',
   // Sign-in activity: look up an approximate city for each sign-in from its network address (uses ip-api.com; set false to keep it off).
   'geo_lookup' => true,
   // Public address of the site, used in email links. Leave empty to detect automatically.
-  'site_url' => '',
-  // Job-portal server (the Python service in the repository root: "python -m jobserver"). It keeps the Dice, LinkedIn,
-  // Indeed and Monster logins, scrapes jobs on a schedule and matches them to each consultant's uploaded resume.
-  // jobs_key must equal JOBSERVER_API_KEY on that server. Leave jobs_url empty to hide the job features.
-  'jobs_url' => 'http://127.0.0.1:8765',
-  'jobs_key' => '',
+  'site_url' => 'https://stratedgeitconsulting.com/',
+  // Job matching runs inside this site (no separate server). Turn sources on and add their keys under
+  // Admin > Job portals > Sources. To collect on a schedule without anyone opening the portal, add a cron job
+  // (shown on that page) that runs api/cron.php.
+  // Bench sales team addresses: copied on every resume a consultant emails to a recruiter and told about
+  // applications that need a submission. Can also be changed under Admin > Job portals > Sources.
+  'apply_emails' => 'info@stratedgeitconsulting.com',
 ];

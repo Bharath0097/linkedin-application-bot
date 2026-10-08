@@ -1,0 +1,13 @@
+{
+  "name": "stratedge-website",
+  "private": true,
+  "description": "Source for js/app.js and css/styles.css. Run `python3 build.py` after editing src/.",
+  "scripts": {
+    "build": "python3 build.py",
+    "format": "prettier --write \"src/*.{js,css}\" \"../api/*.php\" \"!../api/config.php\""
+  },
+  "devDependencies": {
+    "@prettier/plugin-php": "^0.22.0",
+    "prettier": "^3.3.0"
+  }
+}

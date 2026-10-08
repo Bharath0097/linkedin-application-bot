@@ -1,0 +1,6 @@
+# Bot assets are kept fresh independently of the main portal's versioned bundle.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|css|zip)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>

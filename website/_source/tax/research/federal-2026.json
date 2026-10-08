@@ -1,0 +1,152 @@
+{
+  "year": 2026,
+  "brackets": {
+    "single": [[0, 0.10], [12400, 0.12], [50400, 0.22], [105700, 0.24], [201775, 0.32], [256225, 0.35], [640600, 0.37]],
+    "mfj": [[0, 0.10], [24800, 0.12], [100800, 0.22], [211400, 0.24], [403550, 0.32], [512450, 0.35], [768700, 0.37]],
+    "mfs": [[0, 0.10], [12400, 0.12], [50400, 0.22], [105700, 0.24], [201775, 0.32], [256225, 0.35], [384350, 0.37]],
+    "hoh": [[0, 0.10], [17700, 0.12], [67450, 0.22], [105700, 0.24], [201750, 0.32], [256200, 0.35], [640600, 0.37]],
+    "qss": [[0, 0.10], [24800, 0.12], [100800, 0.22], [211400, 0.24], [403550, 0.32], [512450, 0.35], [768700, 0.37]]
+  },
+  "stdDeduction": {"single": 16100, "mfj": 32200, "mfs": 16100, "hoh": 24150, "qss": 32200},
+  "addlStd": {"unmarried": 2050, "married": 1650},
+  "dependentStd": {"min": 1350, "earnedPlus": 450},
+  "capGains": {
+    "zeroMax": {"single": 49450, "mfj": 98900, "mfs": 49450, "hoh": 66200, "qss": 98900},
+    "fifteenMax": {"single": 545500, "mfj": 613700, "mfs": 306850, "hoh": 579600, "qss": 613700}
+  },
+  "ctc": {
+    "perChild": 2200,
+    "refundableMax": 1700,
+    "earnedFloor": 2500,
+    "refundRate": 0.15,
+    "phaseStart": {"mfj": 400000, "other": 200000},
+    "phasePer1000": 50,
+    "odc": 500,
+    "notes": "2026: $2,200 per qualifying child under 17 with the required SSN (Rev. Proc. 2025-32 sec. 4.05; draft 2026 Schedule 8812). Refundable ACTC = min($1,700 x qualifying children, 15% x (earned income - $2,500)), and never more than the unused CTC. Phase-out applies to combined CTC + ODC: (MAGI - threshold), if positive and not a multiple of $1,000, is rounded UP to the next $1,000, then x 5% (= $50 per $1,000). Thresholds $400,000 MFJ / $200,000 all other statuses (not indexed). ODC $500 per other dependent, nonrefundable, not indexed. OBBBA requires an SSN valid for employment for the child and for the taxpayer (at least one spouse on a joint return). The alternative ACTC computation for 3+ children (Schedule 8812 Part II-B in prior years) is not captured by these fields."
+  },
+  "eitc": {
+    "kids0": {"credit": 664, "earnedAmount": 8680, "phaseStart": 10860, "phaseStartMfj": 18140, "completePhaseout": 19540, "completePhaseoutMfj": 26820, "creditRate": 0.0765, "phaseRate": 0.0765},
+    "kids1": {"credit": 4427, "earnedAmount": 13020, "phaseStart": 23890, "phaseStartMfj": 31160, "completePhaseout": 51593, "completePhaseoutMfj": 58863, "creditRate": 0.34, "phaseRate": 0.1598},
+    "kids2": {"credit": 7316, "earnedAmount": 18290, "phaseStart": 23890, "phaseStartMfj": 31160, "completePhaseout": 58629, "completePhaseoutMfj": 65899, "creditRate": 0.40, "phaseRate": 0.2106},
+    "kids3": {"credit": 8231, "earnedAmount": 18290, "phaseStart": 23890, "phaseStartMfj": 31160, "completePhaseout": 62974, "completePhaseoutMfj": 70244, "creditRate": 0.45, "phaseRate": 0.2106},
+    "investmentIncomeLimit": 12200
+  },
+  "obbba": {
+    "senior": {"amountPerPerson": 6000, "phaseStart": {"mfj": 150000, "other": 75000}, "phaseRate": 0.06},
+    "tips": {"cap": 25000, "phaseStart": {"mfj": 300000, "other": 150000}, "phasePer1000": 100},
+    "overtime": {"cap": {"mfj": 25000, "other": 12500}, "phaseStart": {"mfj": 300000, "other": 150000}, "phasePer1000": 100},
+    "carLoanInterest": {"cap": 10000, "phaseStart": {"mfj": 200000, "other": 100000}, "phasePer1000": 200}
+  },
+  "salt": {"cap": 40400, "capMfs": 20200, "phaseStart": 505000, "phaseStartMfs": 252500, "phaseRate": 0.30, "floor": 10000, "floorMfs": 5000},
+  "ss": {"wageBase": 184500, "employeeRate": 0.062, "medicareRate": 0.0145, "seNetFactor": 0.9235, "seRate": 0.153},
+  "addlMedicare": {"rate": 0.009, "single": 200000, "mfj": 250000, "mfs": 125000, "hoh": 200000, "qss": 200000},
+  "niit": {"rate": 0.038, "single": 200000, "mfj": 250000, "mfs": 125000, "hoh": 200000, "qss": 250000},
+  "qbi": {
+    "rate": 0.20,
+    "threshold": {"mfj": 403500, "other": 201750},
+    "phaseRange": {"mfj": 150000, "other": 75000},
+    "minimumDeduction": {"amount": 400, "activeIncomeFloor": 1000}
+  },
+  "studentLoanInterest": {"max": 2500, "phase": {"single": [85000, 100000], "mfj": [175000, 205000]}},
+  "aotc": {"max": 2500, "refundablePct": 0.40, "phase": {"single": [80000, 90000], "mfj": [160000, 180000]}},
+  "llc": {"max": 2000, "rate": 0.20, "expenseCap": 10000, "phase": {"single": [80000, 90000], "mfj": [160000, 180000]}},
+  "saversCredit": {
+    "rows": [
+      {"rate": 0.5, "mfj": 48500, "hoh": 36375, "other": 24250},
+      {"rate": 0.2, "mfj": 52500, "hoh": 39375, "other": 26250},
+      {"rate": 0.1, "mfj": 80500, "hoh": 60375, "other": 40250}
+    ],
+    "maxContribution": 2000
+  },
+  "dependentCare": {
+    "expenseCap": {"one": 3000, "twoPlus": 6000},
+    "maxRate": 0.50,
+    "minRate": 0.20,
+    "schedule": "Applicable percentage by AGI (Form 1040 line 11): 50% if AGI <= $15,000; reduced 1 percentage point for each $2,000 or fraction thereof of AGI over $15,000, but not below 35% (49% for AGI over $15,000 up to $17,000 ... 36% for over $41,000 up to $43,000; 35% for AGI over $43,000); then further reduced 1 percentage point for each $2,000 ($4,000 if MFJ) or fraction thereof of AGI over $75,000 ($150,000 if MFJ), but not below 20%. Non-MFJ: 35% over $43,000 to $75,000; 34% over $75,000 to $77,000 ... 21% over $101,000 to $103,000; 20% over $103,000. MFJ: 35% over $43,000 to $150,000; 34% over $150,000 to $154,000 ... 21% over $202,000 to $206,000; 20% over $206,000. Formula: s1 = max(0, ceil((AGI - 15000)/2000)); rate = max(0.35, 0.50 - 0.01*s1); s2 = max(0, ceil((AGI - T)/W)) with T = 150000/W = 4000 for MFJ, T = 75000/W = 2000 otherwise; rate = max(0.20, rate - 0.01*s2).",
+    "notes": "New for 2026 (OBBBA sec. 70405; IRC 21(a)(2) as amended). Expense caps ($3,000 one / $6,000 two or more qualifying persons) are not indexed and are reduced by employer dependent care benefits excluded under sec. 129. 2026 sec. 129 exclusion (dependent care FSA / employer assistance) rises to $7,500 ($3,750 for married filing separately), up from $5,000/$2,500 (OBBBA sec. 70404; draft 2026 Form 2441 line 21 and instructions). The per-row table comes from the DRAFT 2026 Form 2441 instructions dated Aug 21, 2026 and matches the statute text exactly. The credit remains nonrefundable (draft 2026 'What's New' lists only the rate increase and the $7,500 exclusion)."
+  },
+  "ira": {"limit": 7500, "catchUp50": 1100},
+  "hsa": {"self": 4400, "family": 8750, "catchUp55": 1000},
+  "charityNonItemizer": {"single": 1000, "mfj": 2000},
+  "itemizedLimits": {
+    "charityFloorPctAgi": 0.005,
+    "benefitCapRate": 0.35,
+    "notes": "Both start in 2026. (1) 0.5% floor (IRC 170(b)(1)(I)): itemizers may deduct charitable contributions only to the extent they exceed 0.5% of the contribution base (AGI computed without NOL carrybacks). (2) IRC 68 as rewritten by OBBBA sec. 70111 (tax years beginning after 12/31/2025): itemized deductions (after all other limits, incl. the SALT cap and the 0.5% floor) are reduced by 2/37 of the lesser of (a) total itemized deductions or (b) taxable income computed without sec. 68 and increased by itemized deductions, in excess of the start of the 37% bracket ($640,600 single and HOH, $768,700 MFJ and QSS, $384,350 MFS). The draft 2026 Schedule A (line 18) tests Form 1040 line 11b (AGI) minus line 13a (Schedule 1-A deductions) minus line 13b (QBI deduction) against that threshold. The 2026 Form 1040-ES describes this as a 5.4% reduction; use 2/37 exactly. Net effect: each itemized dollar saves at most 35 cents for a 37%-bracket filer. The old Pease limitation is gone."
+  },
+  "taxTableRule": {
+    "under": 100000,
+    "notes": "Same as 2025 unless changed: taxable income under $100,000 uses the IRS Tax Table, $100,000 or more uses the Tax Computation Worksheet (= the rate schedules). The 2025 Tax Table (Pub 1040) uses $5/$10 bands below $25, $25 bands below $3,000, then $50 bands up to $100,000, with tax computed at the midpoint of each band and rounded to whole dollars (for example $3,000 to $3,050 single = $303). The 2026 Form 1040 instructions are not yet published, so this is not confirmed for 2026."
+  },
+  "sources": {
+    "brackets": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "stdDeduction": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "addlStd": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "dependentStd": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "capGains": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "ctc": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "ctc.mechanics2026draft": "https://www.irs.gov/pub/irs-dft/f1040s8--dft.pdf",
+    "eitc": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "eitc.creditAndPhaseRates(statute, secondary host)": "https://www.law.cornell.edu/uscode/text/26/32",
+    "obbba.amounts2026draft": "https://www.irs.gov/pub/irs-dft/f1040s1a--dft.pdf",
+    "obbba.roundingAndPerPersonSenior2025final": "https://www.irs.gov/pub/irs-pdf/f1040s1a.pdf",
+    "obbba.factSheet": "https://www.irs.gov/newsroom/one-big-beautiful-bill-act-tax-deductions-for-working-americans-and-seniors",
+    "obbba.individualsPage": "https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers",
+    "salt": "https://www.irs.gov/forms-pubs/correction-to-state-and-local-income-tax-deduction-amount-in-the-2026-form-1040-es",
+    "salt.cap2026draftScheduleA": "https://www.irs.gov/pub/irs-dft/f1040sa--dft.pdf",
+    "salt.phaseRate30pct": "https://www.irs.gov/pub/irs-pdf/i1040sca.pdf",
+    "ss.wageBaseAndRates": "https://www.ssa.gov/oact/cola/cbb.html",
+    "ss.seNetFactorAndSeRate": "https://www.irs.gov/taxtopics/tc554",
+    "ss.wageBase2026Form1040ES": "https://www.irs.gov/pub/irs-pdf/f1040es.pdf",
+    "addlMedicare": "https://www.irs.gov/taxtopics/tc560",
+    "niit": "https://www.irs.gov/taxtopics/tc559",
+    "qbi": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "qbi.rate2026draftForm8995": "https://www.irs.gov/pub/irs-dft/f8995--dft.pdf",
+    "qbi.minimumDeduction": "https://www.irs.gov/pub/irs-pdf/f1040es.pdf",
+    "studentLoanInterest": "https://www.irs.gov/pub/irs-drop/rp-25-32.pdf",
+    "aotc": "https://www.irs.gov/credits-deductions/individuals/education-credits-aotc-llc",
+    "aotc.llc.phase2026draftForm8863": "https://www.irs.gov/pub/irs-dft/f8863--dft.pdf",
+    "llc": "https://www.irs.gov/credits-deductions/individuals/llc",
+    "saversCredit": "https://www.irs.gov/pub/irs-drop/n-25-67.pdf",
+    "saversCredit.maxContribution": "https://www.irs.gov/retirement-plans/plan-participant-employee/retirement-savings-contributions-savers-credit",
+    "dependentCare": "https://www.irs.gov/pub/irs-dft/i2441--dft.pdf",
+    "dependentCare.fsaExclusion2026draftForm2441": "https://www.irs.gov/pub/irs-dft/f2441--dft.pdf",
+    "dependentCare.statute(secondary host)": "https://www.law.cornell.edu/uscode/text/26/21",
+    "dependentCare.sec129statute(secondary host)": "https://www.law.cornell.edu/uscode/text/26/129",
+    "ira": "https://www.irs.gov/pub/irs-drop/n-25-67.pdf",
+    "ira.newsRelease": "https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500",
+    "hsa": "https://www.irs.gov/pub/irs-drop/rp-25-19.pdf",
+    "hsa.catchUp55": "https://www.irs.gov/publications/p969",
+    "charityNonItemizer": "https://www.irs.gov/pub/irs-pdf/f1040es.pdf",
+    "charityNonItemizer.line12f2026draftForm1040": "https://www.irs.gov/pub/irs-dft/f1040--dft.pdf",
+    "itemizedLimits": "https://www.irs.gov/pub/irs-pdf/f1040es.pdf",
+    "itemizedLimits.sec68statute(secondary host)": "https://www.law.cornell.edu/uscode/text/26/68",
+    "itemizedLimits.sec68line18draftScheduleA": "https://www.irs.gov/pub/irs-dft/f1040sa--dft.pdf",
+    "itemizedLimits.charityFloorStatute(secondary host)": "https://www.law.cornell.edu/uscode/text/26/170",
+    "taxTableRule": "https://www.irs.gov/publications/p1040",
+    "newsroom2026Adjustments": "https://www.irs.gov/newsroom/irs-releases-tax-inflation-adjustments-for-tax-year-2026-including-amendments-from-the-one-big-beautiful-bill",
+    "obbbaProvisionsIndex": "https://www.irs.gov/newsroom/one-big-beautiful-bill-provisions"
+  },
+  "unverified": [
+    "taxTableRule.under ($100,000): 2026 Form 1040 instructions are not yet published, and the 2025 line 16 sentence could not be quoted from irs.gov. The value is the long-standing rule; the band and midpoint structure was checked against the 2025 Pub 1040 Tax Table.",
+    "ctc: whether the alternative ACTC computation for 3+ children (Schedule 8812 Part II-B) is unchanged for 2026 was not checked.",
+    "uscode.house.gov was down for maintenance, so the statute text for IRC 21, 32(b), 68, 129 and 170(b)(1)(I) was read on Cornell LII (a reputable secondary host). Every one of those values is also confirmed by IRS documents (Rev. Proc. arithmetic, the 2026 Form 1040-ES, and draft 2026 forms)."
+  ],
+  "notes": [
+    "Source dating: Rev. Proc. 2025-32 (Oct 2025) is final. Several mechanics come from IRS DRAFT 2026 forms, which may change before release: Form 1040 (created 8/19/26), Schedule 1-A (6/16/26), Schedule A (5/12/26), Schedule 8812 (4/24/26), Form 2441 and its instructions (8/21/26), Form 8863 (4/28/26) and Form 8995 (5/1/26).",
+    "Brackets: each pair is [lower bound, rate]; the rate applies to taxable income OVER the lower bound. QSS uses the MFJ table. Rev. Proc. cumulative tax at the start of the 37% bracket: single $192,979.25; MFJ/QSS $206,583.50; HOH $191,171; MFS $103,291.75 (all bracket arithmetic verified).",
+    "2026 Form 1040 draft layout: line 11a/11b AGI; 12e standard or itemized deduction; 12f charitable deduction for non-itemizers (new); 13a Schedule 1-A deductions (tips, overtime, car loan interest, senior); 13b QBI deduction; 14 = 12e + 12f + 13a + 13b; 15 taxable income.",
+    "Standard deduction: the additional amount for age 65+ or blind (per condition, per person) is $2,050 for single and HOH (unmarried and not a surviving spouse) and $1,650 for MFJ, MFS and QSS. A dependent's standard deduction is the greater of $1,350 or earned income + $450, capped at the regular standard deduction. Personal exemption remains $0.",
+    "Capital gains: zeroMax and fifteenMax are taxable-income breakpoints for qualified dividends and LTCG. The 20% rate applies above fifteenMax. Use the Qualified Dividends and Capital Gain Tax Worksheet logic.",
+    "OBBBA deductions (Schedule 1-A): they are below-the-line (they do not reduce AGI) and are available whether or not the filer itemizes. Amounts are unchanged for 2026 (not indexed) and the provisions run 2025 through 2028. MAGI = AGI + excluded Puerto Rico / Form 2555 / Form 4563 income. Tips: one $25,000 cap per return (MFJ too); reduction = $100 x floor((MAGI - threshold)/1000), so the quotient is rounded DOWN. Overtime: cap $12,500 ($25,000 MFJ), qualified overtime premium only; same round-DOWN $100 per $1,000. Car loan interest: cap $10,000 per return, new US-assembled vehicle; reduction = $200 x ceil((MAGI - threshold)/1000), rounded UP. Senior: $6,000 per qualifying person (born before Jan 2, 1962 for 2026), each person's $6,000 reduced by 6% of MAGI over $75,000 ($150,000 MFJ), so the MFJ maximum is $12,000. Tips, overtime and senior require MFJ if married (MFS ineligible) and an SSN valid for employment. The fact sheet states no joint-filing requirement for car loan interest; Schedule 1-A uses the $100,000 threshold for non-MFJ filers.",
+    "Charitable deduction for non-itemizers (new 2026): cash contributions to eligible organizations, max $1,000 for every filing status except MFJ ($2,000). It is taken on Form 1040 line 12f in addition to the standard deduction.",
+    "SALT 2026: deductible SALT = min(actual SALT, max(floor, cap - 0.30 x max(0, MAGI - phaseStart))), with MFS using the halved figures. MAGI = AGI + excluded foreign / Puerto Rico income. Note: the original 2026 Form 1040-ES printed the 2025 figures ($40,000 / $500,000); IRS published a correction to $40,400 / $20,200 cap and $505,000 / $252,500 threshold, and the draft 2026 Schedule A line 5e uses $40,400 ($20,200 MFS). The cap and threshold rise 1% a year through 2029, then the cap reverts to $10,000 in 2030.",
+    "QBI: the threshold for MFS is $201,775, not the $201,750 'other' value (separate $25 rounding). Upper ends of the phase-in range: $553,500 MFJ, $276,775 MFS, $276,750 other. The phaseRange fields hold WIDTHS ($150,000 MFJ / $75,000 other, widened by OBBBA from $100,000 / $50,000). The 20% rate is permanent. Minimum deduction: $400 if the filer has at least $1,000 of QBI from active trades or businesses in which they materially participate; both amounts are indexed only after 2026. Because the sec. 68 test subtracts the QBI deduction and the QBI taxable-income limit depends on deductions, compute QBI first using pre-sec. 68 itemized deductions (final IRS worksheet ordering not yet published).",
+    "Social Security / SE: the $184,500 wage base covers combined wages and SE earnings. SE tax = 15.3% on 92.35% of net SE earnings (12.4% portion only up to the wage base remaining after W-2 SS wages); half of SE tax is an above-the-line deduction; the SE tax threshold is $400. Additional Medicare (0.9%) and NIIT (3.8%) thresholds are statutory and not indexed. QSS is $200,000 for Additional Medicare ('all other taxpayers') but $250,000 for NIIT.",
+    "EITC: credit = min(creditRate x earned income, max credit), reduced by phaseRate x (greater of AGI or earned income - phaseStart). The 'phaseStart'/'completePhaseout' values apply to single, HOH, QSS and eligible separated MFS filers. No EITC if investment income exceeds $12,200. The IRS EIC Table uses $50 income bands (midpoint), so table results can differ from the formula by a few dollars.",
+    "Education: AOTC = 100% of the first $2,000 + 25% of the next $2,000 per student (max $2,500), 40% refundable (max $1,000). LLC = 20% of up to $10,000 per return (max $2,000), nonrefundable. Both phase out linearly over $80,000-$90,000 ($160,000-$180,000 MFJ); these are not indexed. Form 8863 provides only MFJ and single/HOH/QSS amounts, so MFS is not eligible. Student loan interest: max $2,500, linear phase-out $85,000-$100,000 ($175,000-$205,000 MFJ); 'single' in the JSON covers single, HOH and QSS; MFS cannot claim it.",
+    "Saver's credit rows are 'AGI not more than' limits: rate 50% up to row 1, 20% up to row 2, 10% up to row 3, 0% above. 'other' covers single, MFS and QSS. Eligible contributions are capped at $2,000 per person ($4,000 MFJ), so the maximum credit is $1,000 ($2,000 MFJ). The credit is nonrefundable.",
+    "Retirement / health 2026: IRA $7,500 + $1,100 catch-up (50+); HSA $4,400 self-only / $8,750 family + $1,000 catch-up (55+); health FSA $3,400 (carryover $680); dependent care FSA $7,500 ($3,750 MFS).",
+    "Not in the schema but relevant 2026 values (Rev. Proc. 2025-32): AMT exemption $90,100 unmarried / $140,200 MFJ and QSS / $70,100 MFS. The phase-out starts at $500,000 unmarried and MFS and $1,000,000 MFJ; the Rev. Proc. ranges imply a 50% phase-out rate (fully phased out at $680,200 / $1,280,400 / $640,200). The AMT 28% rate starts above $244,500 ($122,250 MFS). Kiddie-tax unearned income amount: $1,350. Educator expense deduction: $350. Qualifying-relative gross income limit: $5,300. Adoption credit: $17,670, of which up to $5,120 is refundable. The premium tax credit repayment cap on excess advance payments is removed for 2026 (OBBBA sec. 71305).",
+    "IRS now brands OBBBA (Pub. L. 119-21) on irs.gov as the 'Working Families Tax Cuts'."
+  ]
+}

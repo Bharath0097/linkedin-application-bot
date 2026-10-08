@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "StratEdge Application Bot Companion",
+  "version": "1.2.0",
+  "description": "Fills the job applications you approve in the StratEdge portal, in your own browser, on employer sites you allow.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs",
+    "alarms",
+    "unlimitedStorage"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "StratEdge Application Bot Companion",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://stratedgeitconsulting.com/*",
+      "https://*.stratedgeitconsulting.com/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
+    ]
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlj/wMLfxBUupxbAyBIX4fiXznie8Q/q+icQznS10PR26fPLZIq04kx7wQkztxrOd2BTP3/RhOe2d1egNPRUrwZ+hAOS/Ydi8FNG3OPm78pgiwG6H4pOqovZHwyvDDclpR/+jq/jLRP9+WN+Lsweqllx5vfs6uIcXQoPyKJsomCcEbIn/fRWnt5nxsKoLwxDLs/NidP4tJxoAz2ob2cfGkQdl22Lho4mlth2DXJeaFHli2U+NEtOh3aQzKS78+t3XGPBHO/3zQ7pjBVGHKa+sI7k/PtGt+4q+7AUMQjAeoDOEhj7GNRunUBigYz5NN5tbS/CVInZ2y7PxSC55Y6IldwIDAQAB"
+}

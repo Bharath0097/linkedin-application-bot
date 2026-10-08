@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StratEdge Application Bot Companion</title><link rel="stylesheet" href="popup.css"><script src="core.js" defer></script><script src="popup.js" defer></script></head><body><div class="brand"><img src="icons/icon48.png" alt="" width="33" height="33"> StratEdge Application Bot</div>
+<section class="quick"><button id="fill">Fill this application</button><p class="note" id="who"></p><button id="openbot" class="secondary">Open my Application bot</button></section>
+<p id="status" role="status" aria-live="polite"></p>
+<div class="divider"></div>
+<p class="intro">The <b>Application bot</b> page in your StratEdge portal connects to this companion by itself and runs the jobs you approve. Employer sites ask for your permission the first time.</p>
+<label for="employer">Allow an employer website ahead of time</label><input id="employer" type="url" placeholder="https://careers.company.com/"><button id="grant" class="secondary">Allow this site</button><p class="note">For automatic submission, also list the site under Settings in the portal’s Application bot. Job boards are always a manual handoff.</p><div id="permissions"></div>
+<details><summary>Using the portal at another address?</summary><label for="dashboard">Portal address</label><input id="dashboard" type="url" placeholder="https://portal.example.com/"><button id="connect" class="secondary">Connect &amp; open</button></details>
+<button id="stop" class="secondary">Pause the bot</button></body></html>

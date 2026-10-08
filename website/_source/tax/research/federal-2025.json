@@ -1,0 +1,189 @@
+{
+  "year": 2025,
+  "brackets": {
+    "single": [[0, 0.10], [11925, 0.12], [48475, 0.22], [103350, 0.24], [197300, 0.32], [250525, 0.35], [626350, 0.37]],
+    "mfj": [[0, 0.10], [23850, 0.12], [96950, 0.22], [206700, 0.24], [394600, 0.32], [501050, 0.35], [751600, 0.37]],
+    "mfs": [[0, 0.10], [11925, 0.12], [48475, 0.22], [103350, 0.24], [197300, 0.32], [250525, 0.35], [375800, 0.37]],
+    "hoh": [[0, 0.10], [17000, 0.12], [64850, 0.22], [103350, 0.24], [197300, 0.32], [250500, 0.35], [626350, 0.37]],
+    "qss": [[0, 0.10], [23850, 0.12], [96950, 0.22], [206700, 0.24], [394600, 0.32], [501050, 0.35], [751600, 0.37]]
+  },
+  "stdDeduction": {"single": 15750, "mfj": 31500, "mfs": 15750, "hoh": 23625, "qss": 31500},
+  "addlStd": {"unmarried": 2000, "married": 1600},
+  "dependentStd": {"min": 1350, "earnedPlus": 450},
+  "capGains": {
+    "zeroMax": {"single": 48350, "mfj": 96700, "mfs": 48350, "hoh": 64750, "qss": 96700},
+    "fifteenMax": {"single": 533400, "mfj": 600050, "mfs": 300000, "hoh": 566700, "qss": 600050}
+  },
+  "ctc": {
+    "perChild": 2200,
+    "refundableMax": 1700,
+    "earnedFloor": 2500,
+    "refundRate": 0.15,
+    "phaseStart": {"mfj": 400000, "other": 200000},
+    "phasePer1000": 50,
+    "odc": 500,
+    "notes": "OBBBA raised the 2025 CTC to $2,200 per qualifying child (Rev. Proc. 2024-40 predates OBBBA and assumed $2,000); the refundable ACTC cap stays $1,700 per child. Qualifying child: dependent under age 17 at end of 2025 with an SSN valid for employment issued by the return due date. New for 2025: the taxpayer must have a valid SSN; on a joint return only one spouse needs one. Phase-out (Schedule 8812 lines 9-11): MAGI (AGI plus excluded foreign/Puerto Rico income) minus $400,000 MFJ or $200,000 for all other statuses (QSS counts as 'other'); if the result is above zero and not a multiple of $1,000, round it UP to the next $1,000; multiply by 5% ($50 per $1,000). The reduction applies to CTC + ODC combined. CTC/ODC are nonrefundable up to tax liability. ACTC = least of (unused CTC, $1,700 x qualifying children, 15% x (earned income - $2,500)). With 3+ children the Part II-B social security/Medicare-tax method may give more. ODC: $500 per other dependent (SSN, ITIN or ATIN OK), nonrefundable."
+  },
+  "eitc": {
+    "kids0": {"credit": 649, "earnedAmount": 8490, "phaseStart": 10620, "phaseStartMfj": 17730, "completePhaseout": 19104, "completePhaseoutMfj": 26214, "creditRate": 0.0765, "phaseRate": 0.0765},
+    "kids1": {"credit": 4328, "earnedAmount": 12730, "phaseStart": 23350, "phaseStartMfj": 30470, "completePhaseout": 50434, "completePhaseoutMfj": 57554, "creditRate": 0.34, "phaseRate": 0.1598},
+    "kids2": {"credit": 7152, "earnedAmount": 17880, "phaseStart": 23350, "phaseStartMfj": 30470, "completePhaseout": 57310, "completePhaseoutMfj": 64430, "creditRate": 0.40, "phaseRate": 0.2106},
+    "kids3": {"credit": 8046, "earnedAmount": 17880, "phaseStart": 23350, "phaseStartMfj": 30470, "completePhaseout": 61555, "completePhaseoutMfj": 68675, "creditRate": 0.45, "phaseRate": 0.2106},
+    "investmentIncomeLimit": 11950,
+    "ageRulesNoKids": "Without a qualifying child: at least age 25 but under 65 at end of 2025 (born after Dec 31, 1960 and before Jan 2, 2001). On a joint return, at least one spouse must meet the age rule. The filer can't be anyone's dependent, and must have lived in the US more than half of 2025. All EIC filers: taxpayer, spouse and qualifying children need SSNs valid for employment issued by the return due date (including extensions); investment income must be $11,950 or less. MFS can claim only under the separated-spouse rule (lived apart from spouse for the last 6 months of 2025, plus the other conditions). Credit is figured on earned income and on AGI, and the smaller result applies once AGI is past the phase-out start. OBBBA did not change 2025 EITC amounts."
+  },
+  "obbba": {
+    "senior": {
+      "amountPerPerson": 6000,
+      "phaseStart": {"mfj": 150000, "other": 75000},
+      "phaseRate": 0.06,
+      "rules": "Enhanced deduction for seniors, tax years 2025-2028 (Schedule 1-A Part V). Each taxpayer/spouse age 65 or older at end of 2025 (born before Jan 2, 1961) gets $6,000 ($12,000 if both spouses qualify on MFJ), on top of the regular age-65 additional standard deduction. Reduction: $6,000 - 6% x (MAGI - $75,000, or $150,000 if MFJ), not below 0. The form computes ONE reduced amount (line 35) and enters it separately for each eligible spouse (lines 36a/36b), so on a joint return with two seniors each $6,000 is reduced, a combined 12% of the excess. Each qualifying person needs an SSN valid for employment. Married must file jointly (no MFS). Allowed whether the filer itemizes or not. QSS uses the $75,000 threshold."
+    },
+    "tips": {
+      "cap": 25000,
+      "phaseStart": {"mfj": 300000, "other": 150000},
+      "phasePer1000": 100,
+      "rules": "No tax on tips, tax years 2025-2028 (Schedule 1-A Part II). Deduct qualified tips up to $25,000 PER RETURN; the cap is not doubled for MFJ (line 7: smaller of total or $25,000). Reduction: $100 x floor((MAGI - threshold)/1,000). The form rounds the quotient DOWN to a whole number. Qualified tips are voluntary cash or charged tips, including tip sharing, received in an occupation on Treasury's list of occupations that customarily and regularly received tips on or before Dec 31, 2024. They must be included in income. Tips earned in a specified service trade or business (SSTB) don't qualify. Self-employed: the deduction can't exceed net income from the business where the tips were earned. Earner needs an SSN valid for employment. Married must file jointly (no MFS). For 2025, W-2s/1099s don't separately report qualified tips. Notice 2025-69 lets filers use W-2 box 7 (social security tips), Form 4137, Forms 4070/employer records, or substantiated tip logs, and 1099-NEC/MISC/K for the self-employed. This is an income-tax deduction only; social security/Medicare tax is not reduced. Tips deducted under section 224 are excluded from QBI."
+    },
+    "overtime": {
+      "cap": {"mfj": 25000, "other": 12500},
+      "phaseStart": {"mfj": 300000, "other": 150000},
+      "phasePer1000": 100,
+      "rules": "No tax on overtime, tax years 2025-2028 (Schedule 1-A Part III). Deduct qualified overtime compensation, which is only the FLSA-required premium (the 'half' of time-and-a-half), not the whole overtime paycheck. Cap per return: $12,500, or $25,000 if MFJ (QSS uses $12,500). Reduction: $100 x floor((MAGI - threshold)/1,000), rounded DOWN like tips. For 2025, employers weren't required to report it separately. Per Notice 2025-69: if only total overtime paid at 1.5x is known, deduct total/3; if paid at 2x (double time), deduct total/4; an amount the employer separately labels as the FLSA premium can be used directly. The pay must be included in W-2 box 1 or 1099-NEC/MISC income. SSN valid for employment required. Married must file jointly (no MFS). It does not reduce wages for social security, Medicare or withholding (IRS FS-2026-13)."
+    },
+    "carLoanInterest": {
+      "cap": 10000,
+      "phaseStart": {"mfj": 200000, "other": 100000},
+      "phasePer1000": 200,
+      "rules": "No tax on car loan interest, tax years 2025-2028 (Schedule 1-A Part IV). Deduct up to $10,000 per return of interest paid on a loan originated after Dec 31, 2024 for a NEW vehicle whose original use begins with the taxpayer: car, minivan, van, SUV, pickup or motorcycle, gross vehicle weight rating under 14,000 lbs, final assembly in the US, bought for personal (not business) use. The VIN must be entered on Schedule 1-A. Used vehicles and leases don't qualify. Reduction: $200 x ceil((MAGI - threshold)/1,000). This one rounds UP ('or fraction thereof'). MFS IS allowed here (threshold $100,000), unlike tips, overtime and senior. QSS uses $100,000. Available to itemizers and non-itemizers."
+    },
+    "whereClaimed": "All four go on new Schedule 1-A (Form 1040), Additional Deductions. Part I computes MAGI = Form 1040 line 11b + excluded Puerto Rico income + Form 2555 and Form 4563 exclusions. Parts II-V hold tips, overtime, car loan interest and seniors. Part VI line 38 (sum of lines 13, 21, 30, 37) goes to Form 1040 line 13b. They are below-the-line: they do not reduce AGI (line 11a/11b) and are allowed with either the standard or itemized deduction. Form 1040 line 14 = line 12e (standard or itemized) + line 13a (QBI) + line 13b (Schedule 1-A); line 15 taxable income = line 11b - line 14."
+  },
+  "salt": {"cap": 40000, "capMfs": 20000, "phaseStart": 500000, "phaseStartMfs": 250000, "phaseRate": 0.30, "floor": 10000, "floorMfs": 5000},
+  "ss": {"wageBase": 176100, "employeeRate": 0.062, "medicareRate": 0.0145, "seNetFactor": 0.9235, "seRate": 0.153},
+  "addlMedicare": {"rate": 0.009, "single": 200000, "mfj": 250000, "mfs": 125000, "hoh": 200000, "qss": 200000},
+  "niit": {"rate": 0.038, "single": 200000, "mfj": 250000, "mfs": 125000, "hoh": 200000, "qss": 250000},
+  "qbi": {"rate": 0.20, "threshold": {"mfj": 394600, "other": 197300}, "phaseRange": {"mfj": 100000, "other": 50000}},
+  "studentLoanInterest": {"max": 2500, "phase": {"single": [85000, 100000], "mfj": [170000, 200000]}, "mfsAllowed": false},
+  "aotc": {"max": 2500, "refundablePct": 0.40, "phase": {"single": [80000, 90000], "mfj": [160000, 180000]}},
+  "llc": {"max": 2000, "rate": 0.20, "expenseCap": 10000, "phase": {"single": [80000, 90000], "mfj": [160000, 180000]}},
+  "saversCredit": {
+    "rows": [
+      {"rate": 0.5, "mfj": 47500, "hoh": 35625, "other": 23750},
+      {"rate": 0.2, "mfj": 51000, "hoh": 38250, "other": 25500},
+      {"rate": 0.1, "mfj": 79000, "hoh": 59250, "other": 39500}
+    ],
+    "maxContribution": 2000
+  },
+  "dependentCare": {
+    "expenseCap": {"one": 3000, "twoPlus": 6000},
+    "maxRate": 0.35,
+    "minRate": 0.20,
+    "phaseStartAgi": 15000,
+    "notes": "2025 rules are unchanged. Credit = rate x the smallest of: qualifying expenses, the $3,000/$6,000 cap, and earned income (the lower-earning spouse's if married). A spouse who is a student or disabled is deemed to earn $250/month ($500 with 2+ qualifying persons). Rate: 35% at AGI up to $15,000, down 1 point per $2,000 (or part) of AGI above $15,000, reaching 20% at AGI over $43,000 (Form 2441 line 8 table). Nonrefundable. Employer dependent care benefits are excludable up to $5,000 ($2,500 MFS) in 2025 and reduce the expense cap (Form 2441 Part III). MFS can claim only under the lived-apart rules. OBBBA's increase of the maximum rate to 50% starts in tax year 2026, not 2025."
+  },
+  "ira": {"limit": 7000, "catchUp50": 1000},
+  "hsa": {"self": 4300, "family": 8550, "catchUp55": 1000},
+  "charityNonItemizer": {
+    "single": 0,
+    "mfj": 0,
+    "notes": "No charitable deduction for non-itemizers in 2025: you must itemize on Schedule A (Pub 526 (2025)). OBBBA's non-itemizer cash-gift deduction of up to $1,000 ($2,000 MFJ) begins with tax year 2026."
+  },
+  "kiddie": {
+    "notes": "2025 (Rev. Proc. 2024-40; Form 8615/8814 instructions). Form 8615 is required if the child has more than $2,700 of unearned income and is under 18 at end of 2025, OR is 18, OR is a full-time student age 19-23, with earned income not over half of own support. Also: the child must be required to file, at least one parent must be alive at end of 2025, and the child doesn't file a joint return. Net unearned income over $2,700 is taxed at the parent's rate. A dependent child's standard deduction is the greater of $1,350 or earned income + $450. Parent's election (Form 8814): child under 19 (or under 24 if a full-time student), income only interest, dividends and capital gain distributions, gross income more than $1,350 and less than $13,500, no estimated payments or withholding. The first $1,350 is untaxed, the next $1,350 is taxed at 10% (max $135), and the excess over $2,700 is added to the parent's income."
+  },
+  "taxTableRule": {
+    "under": 100000,
+    "description": "Form 1040 line 16: if taxable income (line 15) is under $100,000, the 2025 Tax Table must be used (Pub 1040 (2025) / i1040tt). At $100,000 or more, use the 2025 Tax Computation Worksheet, which is the exact rate-schedule calculation with no row rounding. Row widths ('At least X but less than Y'): $0-$5 (tax $0), $5-$15 ($1), $15-$25 ($2), then $25-wide rows from $25 up to $3,000 ($25-$50, $50-$75, $75-$100, ...), then $50-wide rows from $3,000 up to $100,000 ($3,000-$3,050, ...). Each row's tax is the rate-schedule tax on the row MIDPOINT (e.g. $25,300-$25,350 uses $25,325), rounded to whole dollars with $.50 rounding up. Formula: t<5 -> 0; 5<=t<15 -> tax(10); 15<=t<25 -> tax(20); 25<=t<3000 -> tax(25*floor(t/25)+12.5); 3000<=t<100000 -> tax(50*floor(t/50)+25). Spot-checked against published 2025 rows: $25-$50=$4; $50-$75=$6; $75-$100=$9; $100-$125=$11; $150-$175=$16; $3,000-$3,050=$303; $3,050-$3,100=$308; $11,950-$12,000 S $1,199 / MFJ $1,198; $17,000-$17,050 S $1,805 / MFJ & HOH $1,703; $23,850-$23,900 S $2,627 / MFJ $2,388 / HOH $2,525; $25,300-$25,350 S $2,801 / MFJ $2,562 / HOH $2,699; $48,500-$48,550 S $5,590 / MFJ $5,346 / HOH $5,483; $58,700-$58,750 S $7,834 / MFJ $6,570 / HOH $6,707. All match. The Qualified Dividends and Capital Gain Tax Worksheet also uses the Tax Table for its ordinary-income pieces under $100,000."
+  },
+  "form1040Lines": "2025 Form 1040 (redesigned; transcribed from irs.gov/pub/irs-pdf/f1040.pdf):\n1a Total amount from Form(s) W-2, box 1\n1b Household employee wages not reported on Form(s) W-2\n1c Tip income not reported on line 1a\n1d Medicaid waiver payments not reported on Form(s) W-2\n1e Taxable dependent care benefits from Form 2441, line 26\n1f Employer-provided adoption benefits from Form 8839, line 31\n1g Wages from Form 8919, line 6\n1h Other earned income (see instructions)\n1i Nontaxable combat pay election\n1z Add lines 1a through 1h\n2a Tax-exempt interest\n2b Taxable interest\n3a Qualified dividends\n3b Ordinary dividends\n3c Check if your child's dividends are included in line 3a / line 3b\n4a IRA distributions\n4b Taxable amount\n4c Check if: Rollover / QCD / other\n5a Pensions and annuities\n5b Taxable amount\n5c Check if: Rollover / PSO / other\n6a Social security benefits\n6b Taxable amount\n6c If you elect to use the lump-sum election method, check here\n6d If married filing separately and lived apart entire year, check here\n7a Capital gain or (loss). Attach Schedule D if required\n7b Check if: Schedule D not required / Includes child's capital gain or (loss)\n8 Additional income from Schedule 1, line 10\n9 Add lines 1z, 2b, 3b, 4b, 5b, 6b, 7a, and 8. This is your total income\n10 Adjustments to income from Schedule 1, line 26\n11a Subtract line 10 from line 9. This is your adjusted gross income\n11b Amount from line 11a (adjusted gross income) [top of page 2]\n12a Someone can claim: You / Your spouse as a dependent\n12b Spouse itemizes on a separate return\n12c You were a dual-status alien\n12d You / Spouse: Were born before January 2, 1961 / Are blind\n12e Standard deduction or itemized deductions (from Schedule A)\n13a Qualified business income deduction from Form 8995 or Form 8995-A\n13b Additional deductions from Schedule 1-A, line 38\n14 Add lines 12e, 13a, and 13b\n15 Subtract line 14 from line 11b. If zero or less, enter -0-. This is your taxable income\n16 Tax (see instructions). Check if any from Form(s): 8814 / 4972 / other\n17 Amount from Schedule 2, line 3\n18 Add lines 16 and 17\n19 Child tax credit or credit for other dependents from Schedule 8812\n20 Amount from Schedule 3, line 8\n21 Add lines 19 and 20\n22 Subtract line 21 from line 18. If zero or less, enter -0-\n23 Other taxes, including self-employment tax, from Schedule 2, line 21\n24 Add lines 22 and 23. This is your total tax\n25a Federal income tax withheld from Form(s) W-2\n25b Federal income tax withheld from Form(s) 1099\n25c Federal income tax withheld from other forms\n25d Add lines 25a through 25c\n26 2025 estimated tax payments and amount applied from 2024 return\n27a Earned income credit (EIC)\n27b Clergy filing Schedule SE (checkbox)\n27c If you do not want to claim the EIC, check here\n28 Additional child tax credit (ACTC) from Schedule 8812\n29 American opportunity credit from Form 8863, line 8\n30 Refundable adoption credit from Form 8839, line 13\n31 Amount from Schedule 3, line 15\n32 Add lines 27a, 28, 29, 30, and 31. These are your total other payments (and refundable credits)\n33 Add lines 25d, 26, and 32. These are your total payments\n34 If line 33 is more than line 24, subtract line 24 from line 33. This is the amount you overpaid\n35a Amount of line 34 you want refunded to you\n35b Routing number\n35c Type: Checking / Savings\n35d Account number\n36 Amount of line 34 you want applied to your 2026 estimated tax\n37 Subtract line 33 from line 24. This is the amount you owe\n38 Estimated tax penalty\nSchedule 1-A deductions -> line 13b; QBI deduction -> line 13a; standard/itemized -> line 12e. The form's margin shows the 2025 standard deduction: Single or MFS $15,750; MFJ or QSS $31,500; HOH $23,625.",
+  "freeFile": {
+    "agiLimit2026Season": 89000,
+    "notes": "IRS Free File guided software for 2025 returns (2026 filing season): AGI of $89,000 or less in 2025. Free File Fillable Forms have no income limit. An IRS release dated Jan 29, 2026 said the 2026 filing season 'officially kicked off this week'. Free File stayed open for extension filers through Oct 15, 2026."
+  },
+  "deadlines": {"filing": "2026-04-15", "extended": "2026-10-15"},
+  "sources": {
+    "brackets": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "brackets_postOBBBA_confirmation": "https://www.irs.gov/filing/federal-income-tax-rates-and-brackets",
+    "brackets_newsroom": "https://www.irs.gov/newsroom/irs-releases-tax-inflation-adjustments-for-tax-year-2025",
+    "stdDeduction": "https://www.irs.gov/pub/irs-pdf/f1040.pdf",
+    "stdDeduction_OBBBA": "https://www.irs.gov/newsroom/new-and-enhanced-deductions-for-individuals",
+    "addlStd": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "addlStd_corroboration_filingThresholds": "https://www.irs.gov/publications/p501",
+    "dependentStd": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "capGains": "https://www.irs.gov/taxtopics/tc409",
+    "capGains_revproc": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "ctc": "https://www.irs.gov/instructions/i1040s8",
+    "ctc_form": "https://www.irs.gov/pub/irs-pdf/f1040s8.pdf",
+    "ctc_OBBBA": "https://www.irs.gov/newsroom/tax-credits-for-individuals",
+    "eitc": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "eitc_tables": "https://www.irs.gov/credits-deductions/individuals/earned-income-tax-credit/earned-income-and-earned-income-tax-credit-eitc-tables",
+    "eitc_rules": "https://www.irs.gov/publications/p596",
+    "eitc_rates_statute_secondary": "https://www.law.cornell.edu/uscode/text/26/32",
+    "obbba_schedule1A_form": "https://www.irs.gov/pub/irs-pdf/f1040s1a.pdf",
+    "obbba_schedule1A_newsroom": "https://www.irs.gov/newsroom/schedule-1-a-additional-deductions-what-to-know-about-the-new-form",
+    "obbba_factsheet": "https://www.irs.gov/newsroom/working-families-tax-cuts-tax-deductions-for-working-americans-and-seniors",
+    "obbba_schedule1A_announcement": "https://www.irs.gov/newsroom/irs-published-schedule-taxpayers-will-use-to-claim-deductions-on-no-tax-on-tips-no-tax-on-overtime-no-tax-on-car-loans-no-tax-on-seniors",
+    "obbba_tips": "https://www.irs.gov/newsroom/what-the-no-tax-on-tips-deduction-means-for-you",
+    "obbba_tips_overtime_2025_methods_notice_2025_69": "https://www.irs.gov/newsroom/treasury-irs-provide-guidance-for-individuals-who-received-tips-or-overtime-during-tax-year-2025",
+    "obbba_overtime_faq": "https://www.irs.gov/pub/taxpros/fs-2026-13.pdf",
+    "obbba_carLoan_and_documents": "https://www.irs.gov/newsroom/what-you-will-need-to-file-your-taxes-under-the-one-big-beautiful-bill",
+    "obbba_senior": "https://www.irs.gov/newsroom/check-your-eligibility-for-the-new-enhanced-deduction-for-seniors",
+    "obbba_provisions_index": "https://www.irs.gov/newsroom/one-big-beautiful-bill-provisions",
+    "salt": "https://www.irs.gov/instructions/i1040sca",
+    "ss_wageBase_and_SE": "https://www.irs.gov/pub/irs-pdf/f1040sse.pdf",
+    "ss_SE_instructions": "https://www.irs.gov/instructions/i1040sse",
+    "ss_rates": "https://www.ssa.gov/oact/cola/cbb.html",
+    "ss_seRate": "https://www.irs.gov/businesses/small-businesses-self-employed/self-employment-tax-social-security-and-medicare-taxes",
+    "addlMedicare": "https://www.irs.gov/businesses/small-businesses-self-employed/questions-and-answers-for-the-additional-medicare-tax",
+    "niit": "https://www.irs.gov/individuals/net-investment-income-tax",
+    "qbi": "https://www.irs.gov/instructions/i8995a",
+    "qbi_8995": "https://www.irs.gov/instructions/i8995",
+    "studentLoanInterest": "https://www.irs.gov/pub/irs-drop/rp-24-40.pdf",
+    "studentLoanInterest_rules": "https://www.irs.gov/taxtopics/tc456",
+    "aotc": "https://www.irs.gov/pub/irs-pdf/f8863.pdf",
+    "aotc_instructions": "https://www.irs.gov/instructions/i8863",
+    "llc": "https://www.irs.gov/pub/irs-pdf/f8863.pdf",
+    "saversCredit": "https://www.irs.gov/pub/irs-pdf/f8880.pdf",
+    "saversCredit_newsroom": "https://www.irs.gov/newsroom/401k-limit-increases-to-23500-for-2025-ira-limit-remains-7000",
+    "dependentCare": "https://www.irs.gov/instructions/i2441",
+    "ira": "https://www.irs.gov/newsroom/401k-limit-increases-to-23500-for-2025-ira-limit-remains-7000",
+    "hsa": "https://www.irs.gov/pub/irs-drop/rp-24-25.pdf",
+    "hsa_catchUp": "https://www.irs.gov/publications/p969",
+    "charityNonItemizer": "https://www.irs.gov/taxtopics/tc506",
+    "charityNonItemizer_2025": "https://www.irs.gov/publications/p526",
+    "kiddie": "https://www.irs.gov/instructions/i8615",
+    "kiddie_8814": "https://www.irs.gov/instructions/i8814",
+    "taxTableRule": "https://www.irs.gov/pub/irs-pdf/i1040tt.pdf",
+    "taxTableRule_pub1040": "https://www.irs.gov/publications/p1040",
+    "form1040Lines": "https://www.irs.gov/pub/irs-pdf/f1040.pdf",
+    "freeFile": "https://www.irs.gov/newsroom/2026-tax-filing-season-opens-with-several-free-filing-options-available",
+    "freeFile_extension": "https://www.irs.gov/newsroom/irs-reminder-extension-filers-can-use-irs-free-file-this-summer",
+    "deadlines": "https://www.irs.gov/instructions/i1040gi",
+    "whatsNew2025": "https://www.irs.gov/instructions/i1040gi"
+  },
+  "unverified": [
+    "eitc.*.creditRate / phaseRate: no IRS page lists the rates. Taken from IRC 32(b)(1) via Cornell LII (secondary). They reproduce every Rev. Proc. 2024-40 EITC dollar amount exactly (e.g. 0.45 x 17,880 = 8,046; 23,350 + 8,046/0.2106 = 61,555).",
+    "taxTableRule: the midpoint-and-round-half-up method is inferred, not stated in the IRS text I could read. It matches 20+ published 2025 Tax Table entries. The fetched PDF text stopped near $58,800, so rows from there to $100,000 weren't viewed. The $100,000 cutoff comes from Pub 1040 (2025).",
+    "dependentStd ($1,350 / earned + $450) and addlStd ($1,600 / $2,000): from Rev. Proc. 2024-40, which predates OBBBA. OBBBA didn't change them, and Pub 501 (2025) filing thresholds back them up ($17,750 single 65+ = 15,750 + 2,000; $33,100 MFJ one 65+ = 31,500 + 1,600). The 2025 standard-deduction charts and dependents' worksheet weren't rendered by the fetch tool.",
+    "form1040Lines: line titles came from a text extraction of the official PDF, so punctuation or wording may differ slightly from print. In particular, line 32's trailing words weren't fully confirmed.",
+    "dependentCare rate table: read from the 2025 Form 2441 instructions. The extract labeled one copy as the worksheet for 2024 expenses, but the 35%-to-20% schedule is the same."
+  ],
+  "notes": [
+    "OBBBA (P.L. 119-21, signed July 4, 2025) changed these 2025 values after Rev. Proc. 2024-40, and this file uses the amended ones: basic standard deduction $15,750 / $31,500 / $23,625 (was $15,000 / $30,000 / $22,500); CTC $2,200 per child (was $2,000; ACTC still $1,700); SALT cap $40,000 ($20,000 MFS) with a phase-down (was $10,000 / $5,000); new Schedule 1-A deductions (tips, overtime, car loan interest, seniors) for 2025-2028; refundable adoption credit up to $5,000.",
+    "NOT changed by OBBBA for 2025, so Rev. Proc. 2024-40 values stand: bracket thresholds (confirmed on the July 2026 IRS rates page and against the 2025 Tax Table), capital-gain breakpoints, EITC amounts, additional and dependent standard deductions, QBI thresholds and phase-in ($50k/$100k; OBBBA's $75k/$150k range starts 2026), kiddie-tax amounts, student-loan-interest phase-out, and adoption credit max $17,280 (MAGI phase-out $259,190-$299,190).",
+    "QSS uses the MFJ figures for brackets, basic standard deduction, capital-gain breakpoints and the NIIT threshold ($250,000). QSS is treated as NON-joint ('other') for: CTC phase-out ($200,000); EITC (non-MFJ phase-out column); Schedule 1-A thresholds ($150,000 tips/overtime, $100,000 car loan, $75,000 senior); the overtime cap ($12,500); Additional Medicare ($200,000); additional standard deduction ($1,600, the married rate, not $2,000); Saver's Credit ('other' column); AOTC/LLC ($80k-$90k); student loan interest (single range); QBI ($197,300).",
+    "MFS: cannot take the tips, overtime or senior deductions (married must file jointly). CAN take the car-loan-interest deduction ($100,000 threshold). Cannot take student loan interest, AOTC or LLC. EITC and the dependent care credit are allowed only under the separated / lived-apart rules. Standard deduction is $0 if the spouse itemizes. SALT cap $20,000, phase-down from $250,000, floor $5,000.",
+    "SSN rules: tips, overtime and senior deductions need an SSN valid for employment (for seniors, each qualifying spouse). CTC/ACTC: the child needs an SSN valid for employment issued by the return due date, and starting 2025 the taxpayer (on a joint return, at least one spouse) must have a valid SSN. ODC accepts SSN, ITIN or ATIN. EITC: taxpayer, spouse and every qualifying child need valid SSNs by the due date (incl. extensions).",
+    "Schedule 1-A math: MAGI = AGI (line 11b) + excluded PR, Form 2555 and Form 4563 income. Tips: min(tips, 25,000) - 100 x floor(excess/1,000). Overtime: min(OT premium, 12,500 or 25,000 MFJ) - 100 x floor(excess/1,000). Car loan: min(interest, 10,000) - 200 x ceil(excess/1,000). Senior, per eligible person: max(0, 6,000 - 0.06 x excess). Floor each at 0. The caps apply per return, before the phase-out.",
+    "Schedule 1-A deductions (line 13b) come after AGI. They don't change AGI-based items (EITC, education credits, student loan interest, the CTC/SALT MAGI), and they are allowed with the standard or itemized deduction. They don't reduce social security/Medicare wages or SE tax.",
+    "QBI: the 20% income limit uses taxable income before QBI = Form 1040 line 11a - line 12e - line 13b, i.e. after Schedule 1-A, minus net capital gain (line 3a + net capital gain). Compute Schedule 1-A first. Simplified Form 8995 applies if that taxable income is at or below $197,300 ($394,600 MFJ).",
+    "SALT: limit = max(floor, cap - 0.30 x max(0, MAGI - phaseStart)). MAGI = line 11b + excluded PR/foreign income. Then take the smaller of the limit and actual SALT paid (Schedule A line 5e).",
+    "Standard deduction: if someone can claim the filer as a dependent, the basic standard deduction is the greater of $1,350 or earned income + $450, capped at the regular basic amount ($15,750 single). Add $1,600 per 65+/blind box if married or QSS, $2,000 if single/HOH. 65+ for 2025 means born before Jan 2, 1961. The senior deduction is separate and stacks on top.",
+    "SE tax: net earnings = 0.9235 x net SE profit; no SE tax if under $400. Social security part = 12.4% x min(net earnings, 176,100 - W-2 social security wages). Medicare part = 2.9% x net earnings. Deduct 50% of SE tax on Schedule 1 line 15. Additional Medicare (0.9%) applies to wages + SE income over the threshold (Form 8959). NIIT (3.8%) applies to the lesser of NII or MAGI over the threshold. Both thresholds are statutory and not indexed.",
+    "Ordinary tax: taxable income under $100,000 must use the Tax Table (midpoint rows); $100,000+ uses the exact rate schedule. With qualified dividends/LTCG, use the QDCG worksheet with the 0%/15% breakpoints above (20% above fifteenMax).",
+    "Credits order: nonrefundable credits (CTC/ODC via Schedule 8812 line 14, then Schedule 3 credits such as dependent care, LLC, nonrefundable AOTC and Saver's) are limited to tax. Refundable credits go on lines 27a (EIC), 28 (ACTC), 29 (AOTC 40%, max $1,000), 30 (adoption, up to $5,000) and 31 (Schedule 3 line 15).",
+    "Line 16 can also include Form 8814 (kiddie election) and Form 4972 tax. Line 23 / Schedule 2 adds SE tax, Additional Medicare, NIIT, etc.",
+    "Due dates: Wednesday April 15, 2026; extension (Form 4868) to Thursday October 15, 2026. An extension gives time to file, not to pay."
+  ]
+}
