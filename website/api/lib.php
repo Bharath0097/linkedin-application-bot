@@ -1813,6 +1813,33 @@ function docGet(string $path): ?stdClass
     $d = json_decode($r['data']);
     return $d instanceof stdClass ? $d : new stdClass();
 }
+/** v83: true once this request has used the given share of memory_limit. Collection reads stop decoding records there,
+ *  so a collection of many huge records gives a shorter list (or a clean refusal) instead of a fatal out-of-memory error. */
+function memNear(float $share): bool
+{
+    static $lim = null;
+    if ($lim === null) {
+        $v = trim((string) ini_get('memory_limit'));
+        $n = (float) $v * (['g' => 1073741824, 'm' => 1048576, 'k' => 1024][strtolower(substr($v, -1))] ?? 1);
+        $lim = $n > 0 ? $n : 0.0;
+    }
+    return $lim > 0 && memory_get_usage() > $lim * $share;
+}
+const COL_MAX_BYTES = 50331648; // v83: 48 MB of records in one collection, for large records saved through the record routes
+/** v83: a large record (over 32 KB) saved through the record routes (set/update) must leave its collection under
+ *  COL_MAX_BYTES, so nobody can fill a shared list with huge records that no one can then load */
+function colRoomFor(string $path, stdClass $data): void
+{
+    $bytes = strlen((string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    if ($bytes <= 32768) {
+        return;
+    }
+    $s = db()->prepare('SELECT COALESCE(SUM(LENGTH(data)), 0) FROM docs WHERE col = ? AND path <> ?');
+    $s->execute([substr($path, 0, (int) strrpos($path, '/')), $path]);
+    if ((int) $s->fetchColumn() + $bytes > COL_MAX_BYTES) {
+        fail(400, 'invalid_argument', 'That list is full. Remove some large records from it first.');
+    }
+}
 function docSet(string $path, stdClass $data): void
 {
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1932,6 +1959,10 @@ function colDelta(string $col, int $since, string $only = ''): array
         if (!can($r['path'], 'r')) {
             continue;
         }
+        if (memNear(0.7)) {
+            error_log('colDelta: ' . $col . ' cut short, too large to send at once');
+            break; // v83: a shorter answer rather than an out-of-memory error
+        }
         $d = json_decode($r['data']);
         if (!($d instanceof stdClass)) {
             $d = new stdClass();
@@ -1947,6 +1978,12 @@ function colAll(string $col, ?string $orderBy = null, string $dir = 'asc'): arra
     $s->execute([$col]);
     $out = [];
     while ($r = $s->fetch()) {
+        if (memNear(0.85)) {
+            // v83: a clean refusal (callers count and total these lists, so a shorter one would be wrong) instead of
+            // an out-of-memory error
+            error_log('colAll: ' . $col . ' too large to load at once');
+            fail(503, 'unavailable', 'This list is too large to load at once. Remove some large records and try again.');
+        }
         $d = json_decode($r['data']);
         if (!($d instanceof stdClass)) {
             $d = new stdClass();
@@ -1988,6 +2025,10 @@ function colList(string $col, ?string $orderBy, string $dir, int $limit, string 
     while ($r = $s->fetch()) {
         if (!can($r['path'], 'r')) {
             continue;
+        }
+        if (memNear(0.7)) {
+            error_log('colList: ' . $col . ' cut short, too large to send at once');
+            break; // v83: a shorter list rather than an out-of-memory error
         }
         $d = json_decode($r['data']);
         if (!($d instanceof stdClass)) {

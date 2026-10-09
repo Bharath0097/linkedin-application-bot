@@ -737,6 +737,7 @@ switch ($r) {
         if (preg_match('#^ats/[^/]+$#', $path)) {
             unset($data->lite);
         }
+        colRoomFor($path, $data); // v83: no filling a list with huge records nobody can load
         docSet($path, $data);
         if (financialPath($path)) {
             require_once __DIR__ . '/payroll.php';
