@@ -644,6 +644,12 @@ switch ($r) {
         }
         // Feature switches on a Team card (r/{id}.ft) are given and taken away by administrators only.
         $cu = currentUser();
+        // v83: the shared box: a note keeps the person who added it; it is set here, never taken from the browser
+        if (preg_match('#^org/box/items/[^/]+$#', $path)) {
+            $prevBox = docGet($path);
+            $data->by = $prevBox ? (string) ($prevBox->by ?? '') : (string) $cu['id'];
+            $data->byn = $prevBox ? (string) ($prevBox->byn ?? '') : (string) ($cu['name'] ?? '');
+        }
         // v83: the client's decision on a timesheet (cd) is the client's: a consultant's own mirror keeps the stored one,
         // and every change by them is a new version (so an earlier decision no longer applies)
         if (preg_match('#^pub/([^/]+)/ts/#', $path, $pm) && userLevel($cu) < 2 && !in_array($pm[1], clientCids((string) $cu['id']), true)) {
@@ -694,6 +700,18 @@ switch ($r) {
                     $data->$k = $prevCtl->$k;
                 } else {
                     unset($data->$k);
+                }
+            }
+        }
+        // v83: placement rates and commissions are kept by administrators, HR and accounting; anyone else who saves a
+        // placement (they read it without them, see redactDoc) leaves the stored values as they are
+        if (str_starts_with($path, 'rec/place/items/') && !(hasRole($cu, 'admin') || hasRole($cu, 'hr') || hasRole($cu, 'acct'))) {
+            unset($data->pay, $data->bill, $data->comm);
+            if ($r === 'set' && ($prevPl = docGet($path))) {
+                foreach (['pay', 'bill', 'comm'] as $k) {
+                    if (property_exists($prevPl, $k)) {
+                        $data->$k = $prevPl->$k;
+                    }
                 }
             }
         }

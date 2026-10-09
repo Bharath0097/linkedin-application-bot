@@ -91,6 +91,11 @@ function idsCan(?array $u): bool
     if (hasRole($u, 'admin') || hasRole($u, 'hr')) {
         return true;
     }
+    // v83: outside bookkeepers get the accounting portal only, never the ID checks
+    $r = myR((string) $u['id']);
+    if ($r && (!empty($r->ext) || ($r->role ?? '') === 'ext')) {
+        return false;
+    }
     return idsSettings()['rec'] && (isRecruiter((string) $u['id']) || isBench((string) $u['id']));
 }
 function idsStaff(): array

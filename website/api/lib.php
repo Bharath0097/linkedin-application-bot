@@ -1035,7 +1035,9 @@ function isRecruiter(string $uid): bool
     $d = myR($uid);
     return (bool) ($d &&
         ($d->st ?? '') === 'active' &&
-        !in_array($d->role ?? '', ['employer', 'consultant', 'student'], true) &&
+        // v83: outside bookkeepers (role 'ext') have the accounting portal only, not the recruiting workspace
+        !in_array($d->role ?? '', ['employer', 'consultant', 'ext', 'student'], true) &&
+        empty($d->ext) &&
         empty($d->norec));
 }
 // v63: the bench sales role is folded into Employee. isBench() keeps its name: an active employee has the Bench desk
@@ -1236,6 +1238,14 @@ function can(string $path, string $mode): bool
             return false;
         }
     }
+    // v83: the shared box: a note and its files are changed or removed only by the person who added it, or an
+    // administrator (as storage_box_delete); a new note can still be added by anyone who may write the box
+    if ($mode === 'w' && $uid !== null && !hasRole($u, 'admin') && preg_match('#^org/box/items/([^/]+)#', $path, $bm)) {
+        $item = docGet('org/box/items/' . $bm[1]);
+        if ($item && (string) ($item->by ?? '') !== (string) $uid) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -1260,21 +1270,48 @@ function booksSettings(): array
     return $c;
 }
 /** The date a financial record belongs to, for the close-the-books check. */
-function recordDate(string $path, ?stdClass $d): string
+// v83: every date the record posts on (as booksEntries posts it), not only the first date-shaped field: a stray date
+// on a bill or paystub no longer hides the one it posts on, and a bill's payment or an invoice's payments are checked too
+function recordDates(string $path, ?stdClass $d): array
 {
     if (!$d) {
-        return '';
+        return [];
+    }
+    $out = [];
+    $add = function ($v) use (&$out): void {
+        if (is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+            $out[] = $v;
+        }
+    };
+    if (str_starts_with($path, 'inv/')) {
+        // an invoice posts on its issue date, each payment on its own date
+        $add($d->issue ?? null);
+        foreach ((array) ($d->pays ?? []) as $p) {
+            if ($p instanceof stdClass) {
+                $add($p->dt ?? null);
+            }
+        }
+        return $out;
+    }
+    if (str_starts_with($path, 'exp/')) {
+        // a bill posts on its date, its payment on the paid date
+        $add($d->d ?? null);
+        $add($d->paidOn ?? null);
+        return $out;
     }
     foreach (['issue', 'd', 'dt', 'paidOn', 'payDate'] as $k) {
-        $v = (string) ($d->$k ?? '');
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
-            return $v;
-        }
+        $add($d->$k ?? null);
     }
-    if (preg_match('#^(?:pays/[^/]+/items|org/acct/runs)/(\d{4}-\d{2})(?:-(\d{1,2}))?$#', $path, $m)) {
-        return $m[1] . '-' . (isset($m[2]) ? (strlen($m[2]) === 1 ? ($m[2] === '1' ? '01' : '16') : $m[2]) : '01');
+    // a paystub posts on its run's pay date
+    if (preg_match('#^pays/[^/]+/items/([^/]+)$#', $path, $m) && ($run = docGet('org/acct/runs/' . $m[1]))) {
+        $add($run->payDate ?? null);
+        $add($run->paidOn ?? null);
     }
-    return '';
+    // older records with no date: the pay period in the path (a fallback only, so a late-June run paid in July stays open)
+    if (!$out && preg_match('#^(?:pays/[^/]+/items|org/acct/runs)/(\d{4}-\d{2})(?:-(\d{1,2}))?$#', $path, $m)) {
+        $out[] = $m[1] . '-' . (isset($m[2]) ? (strlen($m[2]) === 1 ? ($m[2] === '1' ? '01' : '16') : $m[2]) : '01');
+    }
+    return $out;
 }
 /** Writes to a closed period are refused unless an administrator reopens the books (Admin > Books > Settings).
  *  v83: recording a payment dated after the close on an invoice or bill from a closed period is allowed ($after = the
@@ -1285,10 +1322,15 @@ function booksGuard(string $path, ?stdClass $d, ?stdClass $after = null): void
     if ($bs['close'] === '') {
         return;
     }
-    $dt = recordDate($path, $d);
     $prev = docGet($path);
-    $dtPrev = recordDate($path, $prev);
-    $closed = ($dt !== '' && $dt <= $bs['close']) || ($dtPrev !== '' && $dtPrev <= $bs['close']);
+    $closed = false;
+    // the record as it will be saved (an update's patch merged into the stored one) and as it was
+    foreach (array_merge(recordDates($path, $after ?? $d), recordDates($path, $prev)) as $dt) {
+        if ($dt <= $bs['close']) {
+            $closed = true;
+            break;
+        }
+    }
     if ($closed && $prev && $after && booksLatePayment($path, $prev, $after, $bs['close'])) {
         return;
     }
@@ -2968,8 +3010,21 @@ function createLogin(array $b, array $me): array
     audit('access', 'Login created', $email, ['kind' => $kind !== '' ? $kind : $memberRole, 'portals' => array_values(array_unique($portals)), 'cids' => array_values(array_unique($cids))], $me);
     return ['id' => $id, 'password' => '', 'link' => $inv['link'], 'mailed' => $inv['mailed']];
 }
-/** One CSV line, every cell quoted. */
+/** v83: a CSV cell that a spreadsheet will not run as a formula: text starting with = + - @ (or a tab / carriage
+ * return) gets a leading apostrophe; numbers stay numbers. */
+function csvCell($c): string
+{
+    if (is_int($c) || is_float($c)) {
+        return (string) $c;
+    }
+    $s = (string) $c;
+    if ($s !== '' && !is_numeric($s) && preg_match('/^(\s*[=+\-@]|[\t\r])/', $s)) {
+        $s = "'" . $s;
+    }
+    return $s;
+}
+/** One CSV line, every cell quoted (and never a formula, csvCell). */
 function csvLine(array $cells): string
 {
-    return implode(',', array_map(fn($c) => '"' . str_replace('"', '""', (string) $c) . '"', $cells));
+    return implode(',', array_map(fn($c) => '"' . str_replace('"', '""', csvCell($c)) . '"', $cells));
 }

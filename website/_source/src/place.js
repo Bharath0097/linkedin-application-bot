@@ -34,8 +34,11 @@ function PlacementModal({ p, onClose }) {
       const id = (p && p.id) || nid();
       const m = f.uid && A ? A.members.find(x => x.id === f.uid) : null;
       const cl = f.cid && A ? A.clientsById[f.cid] : null;
-      const { id: _i, ...rest } = f;
-      await dbMerge(`rec/place/items/${id}`, { ...rest, n: m ? m.u.p.n : f.n.trim(), cl: cl ? cl.n : f.cl || '', bill: +f.bill || 0, pay: +f.pay || 0, st: f.st || '', u: Date.now(), ...(p ? {} : { at: Date.now(), by: P.uid }) });
+      const { id: _i, status: _s, bill: _b, pay: _p, comm: _c, ...rest } = f;
+      // v83: rates and commissions only from the people who see them (the server leaves them out for everyone else,
+      // so saving the blank form would wipe them)
+      const rates = canRates ? { bill: +f.bill || 0, pay: +f.pay || 0, comm: f.comm } : {};
+      await dbMerge(`rec/place/items/${id}`, { ...rest, ...rates, n: m ? m.u.p.n : f.n.trim(), cl: cl ? cl.n : f.cl || '', st: f.st || '', u: Date.now(), ...(p ? {} : { at: Date.now(), by: P.uid }) });
       toast('Placement saved.');
       onClose();
     } catch (e) {

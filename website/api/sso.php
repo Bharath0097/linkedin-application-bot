@@ -1469,7 +1469,8 @@ function ssoRoute(string $r, string $method, array $b): never
             foreach ($rows as $m) {
                 $fn = $fname($m);
                 $z->addFromString($fn, $eml($m));
-                fputcsv($csv, [$m['dir'] === 'in' ? 'Received' : 'Sent', date('Y-m-d H:i', (int) floor((int) $m['at'] / 1000)), $m['from_email'], $m['to_email'], $m['cc'], $m['subject'], $own[$m['label']] ?? (string) $m['label'], $fn]);
+                // v83: senders and subjects come from outside: no cell may run as a spreadsheet formula (csvCell)
+                fputcsv($csv, array_map('csvCell', [$m['dir'] === 'in' ? 'Received' : 'Sent', date('Y-m-d H:i', (int) floor((int) $m['at'] / 1000)), $m['from_email'], $m['to_email'], $m['cc'], $m['subject'], $own[$m['label']] ?? (string) $m['label'], $fn]));
             }
             rewind($csv);
             $z->addFromString('index.csv', (string) stream_get_contents($csv));

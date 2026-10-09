@@ -1452,14 +1452,16 @@ function booksRoute(string $r, string $method, array $b): never
                 // QuickBooks Desktop general journal import
                 $name = 'general-journal';
                 $out = ["!TRNS\tTRNSID\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO", "!SPL\tSPLID\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO", "!ENDTRNS"];
+                // v83: tabs and line breaks in any text field would add columns or TRNS/SPL rows to the import
+                $t = fn($v) => preg_replace('/[\t\r\n]+/', ' ', (string) $v);
                 $n = 0;
                 foreach (booksEntries($from, $to) as $e) {
                     $first = true;
                     $date = date('m/d/Y', strtotime($e['d']));
                     foreach ($e['lines'] as $l) {
                         $amt = $l['dr'] - $l['cr'];
-                        $acct = str_replace("\t", ' ', $idx[$l['acct']]['n'] ?? $l['acct']);
-                        $row = [$first ? 'TRNS' : 'SPL', ++$n, 'GENERAL JOURNAL', $date, $acct, str_replace("\t", ' ', $l['name']), number_format($first ? $amt : $amt, 2, '.', ''), $e['ref'], str_replace("\t", ' ', $l['memo'] !== '' ? $l['memo'] : $e['memo'])];
+                        $acct = $t($idx[$l['acct']]['n'] ?? $l['acct']);
+                        $row = [$first ? 'TRNS' : 'SPL', ++$n, 'GENERAL JOURNAL', $date, $acct, $t($l['name']), number_format($first ? $amt : $amt, 2, '.', ''), $t($e['ref']), $t($l['memo'] !== '' ? $l['memo'] : $e['memo'])];
                         $out[] = implode("\t", $row);
                         $first = false;
                     }
