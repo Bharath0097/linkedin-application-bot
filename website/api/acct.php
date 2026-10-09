@@ -76,7 +76,10 @@ function acctRecurRun(string $tid, stdClass $t, string $byName): string
     $issue = (string) ($t->next ?? '') ?: date('Y-m-d');
     $terms = (int) ($t->terms ?? 30);
     $lines = array_values(array_filter((array) ($t->lines ?? []), fn($l) => $l instanceof stdClass && trim((string) ($l->d ?? '')) !== ''));
-    $c = acctInvCalc($lines, (float) ($t->taxp ?? 0), (float) ($t->disc ?? 0));
+    // round the rate (3 decimals, e.g. 8.875%) and the discount first, then work out the totals from exactly what is stored
+    $taxp = round((float) ($t->taxp ?? 0), 3);
+    $disc = round((float) ($t->disc ?? 0), 2);
+    $c = acctInvCalc($lines, $taxp, $disc);
     $id = rid(10);
     $num = acctInvNext();
     $bill = $t->bill instanceof stdClass ? $t->bill : (object) ['co' => '', 'n' => '', 'e' => '', 'addr' => ''];
@@ -95,8 +98,8 @@ function acctRecurRun(string $tid, stdClass $t, string $byName): string
         'due' => date('Y-m-d', strtotime($issue . " +$terms days") ?: time()),
         'period' => (object) ['f' => '', 't' => ''],
         'lines' => $lines,
-        'taxp' => round((float) ($t->taxp ?? 0), 2),
-        'disc' => round((float) ($t->disc ?? 0), 2),
+        'taxp' => $taxp,
+        'disc' => $disc,
         'sub' => $c['sub'],
         'tax' => $c['tax'],
         'total' => $c['total'],
@@ -307,12 +310,25 @@ function acctRoute(string $r, string $method, array $b): never
             ok(['mailed' => $ok, 'to' => $to]);
         case 'acct_next_num':
             acctStaff(); // v83: was any staff login (HR too); resetting the numbering changes the books
-            $n = max(1, (int) ($b['n'] ?? 1));
+            $n = max(1, min(999999, (int) ($b['n'] ?? 1)));
             $y = date('Y');
             $k = "inv$y";
             $p = db();
             if (!$p->query("SELECT v FROM meta WHERE k='$k'")->fetch()) {
                 $p->exec("INSERT INTO meta (k, v) VALUES ('$k', 0)");
+            }
+            // v83: never hand out a number an invoice of this year already carries (moving back after deleting
+            // test invoices still works)
+            $pre = acctSettings()['prefix'] . "-$y-";
+            $used = 0;
+            foreach (acctCol('inv') as $d) {
+                $num = (string) ($d->num ?? '');
+                if (str_starts_with($num, $pre) && ctype_digit(substr($num, strlen($pre)))) {
+                    $used = max($used, (int) substr($num, strlen($pre)));
+                }
+            }
+            if ($n <= $used) {
+                fail(400, 'invalid_argument', sprintf('%s%04d is already on an invoice. Choose %d or higher.', $pre, $used, $used + 1));
             }
             $p->prepare("UPDATE meta SET v = ? WHERE k = '$k'")->execute([$n - 1]);
             ok(['next' => sprintf('%s-%s-%04d', acctSettings()['prefix'], $y, $n)]);

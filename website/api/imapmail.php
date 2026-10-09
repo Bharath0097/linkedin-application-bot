@@ -325,7 +325,10 @@ function mimeDecode(string $body, string $enc): string
 /** Text from an HTML body (for a message sent as HTML only). */
 function mimeHtmlText(string $html): string
 {
-    $h = (string) preg_replace('#<(script|style|head)[^>]*>.*?</\1>#is', '', $html);
+    // v83: stripHtmlBlocks() (textract.php) runs in linear time; the old back-reference pattern took seconds (or hit
+    // the backtrack limit and returned the raw body) on a message with an unclosed <style or <script.
+    require_once __DIR__ . '/textract.php';
+    $h = stripHtmlBlocks($html, ['script', 'style', 'head']);
     $h = (string) preg_replace('#<br\s*/?>#i', "\n", $h);
     $h = (string) preg_replace('#</(p|div|tr|h[1-6]|table|ul|ol|blockquote)>#i', "\n\n", $h);
     $h = (string) preg_replace('#<li[^>]*>#i', "\n- ", $h);

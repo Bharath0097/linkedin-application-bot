@@ -291,9 +291,10 @@ function DeskTicket({ id, onBack, onChanged }) {
           ${
             panel === 'fields' &&
             html`<div className="form row3" style=${{ alignItems: 'end' }}>
+              <${Field} label="Area"><select value=${x.cat || t.cat} onChange=${e => setX({ ...x, cat: e.target.value })}>${Object.entries(d.cats || {}).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select><//>
               <${Field} label="Impact"><select value=${x.impact || t.impact} onChange=${e => setX({ ...x, impact: +e.target.value })}>${[1, 2, 3].map(i => html`<option key=${i} value=${i}>${i} · ${['', 'High', 'Medium', 'Low'][i]}</option>`)}</select><//>
               <${Field} label="Urgency"><select value=${x.urgency || t.urgency} onChange=${e => setX({ ...x, urgency: +e.target.value })}>${[1, 2, 3].map(i => html`<option key=${i} value=${i}>${i} · ${['', 'High', 'Medium', 'Low'][i]}</option>`)}</select><//>
-              <div className="actions">${deskPri(deskPriOf(x.impact || t.impact, x.urgency || t.urgency))}<button type="button" className="btn sm" disabled=${!!busy} onClick=${() => run('desk_act', { act: 'fields', impact: x.impact || t.impact, urgency: x.urgency || t.urgency, cat: t.cat }, 'Priority updated.')}>Save</button></div>
+              <div className="actions">${deskPri(deskPriOf(x.impact || t.impact, x.urgency || t.urgency))}<button type="button" className="btn sm" disabled=${!!busy} onClick=${() => run('desk_act', { act: 'fields', impact: x.impact || t.impact, urgency: x.urgency || t.urgency, cat: x.cat || t.cat }, 'Priority and area updated.')}>Save</button></div>
             </div>`
           }
           ${(d.others || []).length > 0 && html`<p className="muted small" style=${{ margin: 0 }}>${t.by}'s other tickets: ${d.others.map(o => o.num + ' ' + o.title + ' (' + o.st + ')').join(' · ')}</p>`}

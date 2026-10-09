@@ -2837,7 +2837,7 @@ function tokenAllows(string $path, string $tok): bool
     if ($segs[0] === 'pv' && count($segs) >= 4 && $segs[2] === 'items') {
         // recruiters open the files of a vault entry the person shared (vault_shared hands out the token)
         $d = docGet("pv/{$segs[1]}/items/{$segs[3]}");
-        return $d && !empty($d->share) && ($d->tok ?? '') !== '' && ($d->tok ?? '') === $tok;
+        return $d && !empty($d->share) && ($d->tok ?? '') !== '' && hash_equals((string) $d->tok, $tok); // v83: constant-time compare
     }
     return false;
 }
@@ -2875,7 +2875,7 @@ function sigIndexByTok(stdClass $d, string $tok): int
         return -1;
     }
     foreach ((array) $d->signers as $i => $s) {
-        if (($s->tok ?? '') === $tok) {
+        if ((string) ($s->tok ?? '') !== '' && hash_equals((string) $s->tok, $tok)) { // v83: constant-time compare
             return $i;
         }
     }

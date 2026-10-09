@@ -564,6 +564,9 @@ function guardRoute(string $r, array $b): never
             $in = (array) ($b['cfg'] ?? []);
             $cur = guardCfg();
             $num = fn(string $k, int $min, int $max) => max($min, min($max, (int) ($in[$k] ?? $cur[$k])));
+            // v83: a switch the request leaves out keeps its saved value (before, a partial save such as {reauthMin:1}
+            // turned the bot check, data-theft guard and virus scan off)
+            $on = fn(string $k) => array_key_exists($k, $in) && $in[$k] !== null ? !empty($in[$k]) : !empty($cur[$k]);
             $nets = implode("\n", array_slice(fwLines((string) ($in['staffNets'] ?? $cur['staffNets'])), 0, 60));
             foreach (fwLines($nets) as $e) {
                 if (!filter_var($e, FILTER_VALIDATE_IP) && !preg_match('#^[0-9a-f:.]+(/\d{1,3}|\.)$#', $e)) {
@@ -575,19 +578,19 @@ function guardRoute(string $r, array $b): never
             }
             $new = [
                 'reauthMin' => $num('reauthMin', 1, 60),
-                'pow' => !empty($in['pow']),
-                'powLogin' => !empty($in['powLogin']),
+                'pow' => $on('pow'),
+                'powLogin' => $on('powLogin'),
                 'powIpFails' => $num('powIpFails', 1, 50),
                 'powAttack' => $num('powAttack', 5, 5000),
                 'powLevel' => ($in['powLevel'] ?? $cur['powLevel']) === 'strong' ? 'strong' : 'normal',
-                'dlp' => !empty($in['dlp']),
+                'dlp' => $on('dlp'),
                 'dlpFiles' => $num('dlpFiles', 5, 100000),
                 'dlpExports' => $num('dlpExports', 5, 10000),
                 'dlpProfiles' => $num('dlpProfiles', 5, 100000),
-                'dlpPause' => !empty($in['dlpPause']),
+                'dlpPause' => $on('dlpPause'),
                 'ddHold' => $num('ddHold', 0, 14),
                 'staffNets' => $nets,
-                'av' => !empty($in['av']),
+                'av' => $on('av'),
             ];
             secKvSet('guard', $new);
             guardCfg(true);

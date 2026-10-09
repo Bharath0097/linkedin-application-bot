@@ -125,6 +125,42 @@ function BdDetailsForm({ d, onSave, fields }) {
     </div>`;
 }
 
+/* v83: a recruiting record under this account's email links only after a one-time code sent to that email. */
+function BdLinkPanel({ onLinked }) {
+  const toast = useToast();
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const run = async body => {
+    setBusy(true);
+    setErr('');
+    try {
+      const r = await api('bd_my_link', body);
+      if (r.sent) {
+        setSent(true);
+        toast('We emailed you a code.');
+      } else {
+        toast('Linked.');
+        onLinked();
+      }
+    } catch (e) {
+      setErr(errText(e));
+    }
+    setBusy(false);
+  };
+  return html`<section className="panel">
+      <h2>Link your recruiting record</h2>
+      <p className="muted small">Your recruiter has a record under this account's email. To show your submissions here, confirm the code we send to that email.</p>
+      ${
+        sent
+          ? html`<div className="actions"><label className="fld" style=${{ margin: 0 }}><span>Code from the email</span><input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength="6" value=${code} onInput=${e => setCode(e.target.value.replace(/\D/g, ''))} /></label><button type="button" className="btn" disabled=${busy || code.length !== 6} onClick=${() => run({ code })}>${busy ? 'Checking…' : 'Link my record'}</button><button type="button" className="btn ghost sm" disabled=${busy} onClick=${() => run({})}>Send a new code</button></div>`
+          : html`<div className="actions"><button type="button" className="btn" disabled=${busy} onClick=${() => run({})}>${busy ? 'Sending…' : 'Email me a code'}</button></div>`
+      }
+      ${err && html`<div className="note red" role="alert"><span>${err}</span></div>`}
+    </section>`;
+}
+
 /* The portal page: approvals to give, details, and every submission in plain words. */
 function MySubsPage() {
   const toast = useToast();
@@ -147,6 +183,7 @@ function MySubsPage() {
   const det = d.details;
   const due = det ? BDM_FIELDS.map(x => x[0]).filter(k => det.fresh[k] && det.fresh[k].st !== 'fresh') : [];
   return html`<div className="stack">
+      ${!d.linked && d.claim && html`<${BdLinkPanel} onLinked=${load} />`}
       ${d.pending.map(
         p => html`<section key=${p.sid} className="panel">
           <h2>Needs your approval: ${p.role}</h2>
@@ -191,7 +228,7 @@ function MySubsPage() {
                   <${Chip} s=${s.st === 'placed' ? 'ok' : ['rejected', 'withdrawn', 'closed'].includes(s.st) ? 'red' : ['interview', 'offer'].includes(s.st) ? 'new' : s.st === 'approval' ? 'amber' : ''}>${s.label}<//>
                 </li>`
               )}</ul>`
-            : html`<${Empty} title="Nothing yet">${d.linked ? 'When your recruiter prepares or sends a submission for you, it shows here with its status.' : 'Your recruiting record is not linked to this account yet. It links by the email your recruiter has for you; ask them to check it.'}<//>`
+            : html`<${Empty} title="Nothing yet">${d.linked ? 'When your recruiter prepares or sends a submission for you, it shows here with its status.' : d.claim ? 'Your recruiting record is not linked to this account yet. It links once you enter the code we email to you (above).' : 'Your recruiting record is not linked to this account yet. It links by the email your recruiter has for you; ask them to check it.'}<//>`
         }
       </section>
     </div>`;

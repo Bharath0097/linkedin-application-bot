@@ -664,13 +664,15 @@ function idsPerson(array $who): ?array
     if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $id)) {
         return $k === 'name' && trim((string) ($who['n'] ?? '')) !== '' ? ['kind' => 'name', 'id' => '', 'n' => mb_substr(trim((string) $who['n']), 0, 120), 'dob' => ''] : null;
     }
-    if ($k === 'cand' && ($d = docGet('rec/cand/items/' . $id))) {
+    // v83: only a record the person checking may read themselves (its name and birth date are compared with the ID);
+    // one they may not read is treated as missing
+    if ($k === 'cand' && can('rec/cand/items/' . $id, 'r') && ($d = docGet('rec/cand/items/' . $id))) {
         return ['kind' => 'cand', 'id' => $id, 'n' => (string) ($d->n ?? ''), 'dob' => (string) ($d->dob ?? '')];
     }
-    if ($k === 'ats' && ($d = docGet('ats/' . $id))) {
+    if ($k === 'ats' && can('ats/' . $id, 'r') && ($d = docGet('ats/' . $id))) {
         return ['kind' => 'ats', 'id' => $id, 'n' => (string) ($d->n ?? ''), 'dob' => ''];
     }
-    if ($k === 'user' && preg_match('/^u_[a-f0-9]{8,32}$/', $id) && ($d = docGet('u/' . $id))) {
+    if ($k === 'user' && preg_match('/^u_[a-f0-9]{8,32}$/', $id) && can('u/' . $id, 'r') && ($d = docGet('u/' . $id))) {
         return ['kind' => 'user', 'id' => $id, 'n' => (string) ($d->p->n ?? ''), 'dob' => (string) ($d->p->dob ?? '')];
     }
     return null;
@@ -842,6 +844,17 @@ const IDS_VERDICT = ['ok' => 'Looks genuine', 'fake' => 'Looks fake', 'unsure' =
 /** Reads the pictures of a check: the uploaded ones (stored under sec/idscan/{id}) and files already in the portal. */
 function idsLoadPics(string $id, array $u, array $b): array
 {
+    // files already in the portal (a consultant's record, an ATS candidate, an email attachment): read where allowed;
+    // v83: checked before anything is stored, so a file that cannot be opened leaves no picture behind
+    $refs = [];
+    foreach (array_slice((array) json_decode((string) ($b['refs'] ?? '[]'), true), 0, 4) as $ref) {
+        $base = (string) ($ref['base'] ?? '');
+        $fid = (string) ($ref['fid'] ?? '');
+        if (!validPath($base, true) || !preg_match('/^[a-f0-9]{32}$/', $fid) || !can("$base/f/$fid", 'r') || !docGet("$base/f/$fid")) {
+            fail(404, 'not_found', 'One of the files could not be opened (it may have been deleted, or you cannot open it).');
+        }
+        $refs[] = ['base' => $base, 'fid' => $fid, 'side' => in_array($ref['side'] ?? '', ['front', 'back'], true) ? $ref['side'] : 'page', 'n' => (string) (docGet("$base/f/$fid")->n ?? 'file'), 'ref' => true];
+    }
     $pics = [];
     $sides = (array) ($_POST['side'] ?? []);
     if (isset($_FILES['img']) && is_array($_FILES['img']['name'] ?? null)) {
@@ -855,19 +868,33 @@ function idsLoadPics(string $id, array $u, array $b): array
             }
             $side = in_array($sides[$i] ?? '', ['front', 'back'], true) ? $sides[$i] : 'page';
             $r = storeUpload($f, 'sec/idscan/' . $id, ['c' => $side]);
+            idsUnsavedPic($id, (string) $r['id']);
             $pics[] = ['base' => 'sec/idscan/' . $id, 'fid' => (string) $r['id'], 'side' => $side, 'n' => (string) $r['n']];
         }
     }
-    // files already in the portal (a consultant's record, an ATS candidate, an email attachment): read where allowed
-    foreach (array_slice((array) json_decode((string) ($b['refs'] ?? '[]'), true), 0, 4) as $ref) {
-        $base = (string) ($ref['base'] ?? '');
-        $fid = (string) ($ref['fid'] ?? '');
-        if (!validPath($base, true) || !preg_match('/^[a-f0-9]{32}$/', $fid) || !can("$base/f/$fid", 'r') || !docGet("$base/f/$fid")) {
-            fail(404, 'not_found', 'One of the files could not be opened (it may have been deleted, or you cannot open it).');
-        }
-        $pics[] = ['base' => $base, 'fid' => $fid, 'side' => in_array($ref['side'] ?? '', ['front', 'back'], true) ? $ref['side'] : 'page', 'n' => (string) (docGet("$base/f/$fid")->n ?? 'file'), 'ref' => true];
+    return array_merge($pics, $refs);
+}
+/** A picture stored for a check whose record is never written (a later file refused, a request cut short): removed
+ *  when the request ends, so no ID picture outlives the retention sweep (v83). */
+function idsUnsavedPic(string $cid, string $fid): void
+{
+    static $list = null;
+    if ($list === null) {
+        $list = [];
+        register_shutdown_function(function () use (&$list) {
+            foreach ($list as [$c, $f]) {
+                try {
+                    if (!docGet('sec/idscan/items/' . $c)) {
+                        @unlink(filePathOf($f));
+                        docDelete('sec/idscan/' . $c . '/f/' . $f);
+                    }
+                } catch (Throwable $e) {
+                    // left for idsSweep
+                }
+            }
+        });
     }
-    return $pics;
+    $list[] = [$cid, $fid];
 }
 
 /* ---------- routes ---------- */
@@ -1277,6 +1304,7 @@ function idqRoute(string $r, array $b): never
         }
         $f = ['name' => $side . '.' . $ext, 'type' => $ext === 'png' ? 'image/png' : 'image/jpeg', 'tmp_name' => $tmp, 'error' => $_FILES['img']['error'][$i] ?? 4, 'size' => $_FILES['img']['size'][$i] ?? 0];
         $up = storeUpload($f, 'sec/idscan/' . $cid, ['c' => $side]);
+        idsUnsavedPic($cid, (string) $up['id']);
         $pics[] = (object) ['base' => 'sec/idscan/' . $cid, 'fid' => (string) $up['id'], 'side' => $side, 'n' => $side . '.' . $ext];
     }
     $have = array_map(fn($p) => $p->side, $pics);
@@ -1454,9 +1482,12 @@ function idsRun(string $id, stdClass $s, array $u, array $b, bool $final): array
         if ($oid === $id || ($o->st ?? '') !== 'done') {
             continue;
         }
-        $other = (string) ($o->who->n ?? 'someone else');
+        // v83: whose ID it was and when only for a check this person may see; the finding itself is raised either way
+        $mine = idsMaySee($o, $u);
+        $other = $mine ? (string) ($o->who->n ?? 'someone else') : 'another person';
+        $when = $mine ? ' on ' . date('M j, Y', (int) ($o->at / 1000)) : '';
         if ($numKey !== '' && (string) ($o->numh ?? '') === $numKey && idsOtherPerson($who, $o)) {
-            idsCheck($c, 'reuse', 'fail', 'This document number was already checked for ' . $other . ' on ' . date('M j, Y', (int) ($o->at / 1000)) . '.', 'person');
+            idsCheck($c, 'reuse', 'fail', 'This document number was already checked for ' . $other . $when . '.', 'person');
         }
         foreach ((array) ($o->img ?? []) as $op) {
             foreach ((array) $s->img as $p) {
@@ -1464,7 +1495,7 @@ function idsRun(string $id, stdClass $s, array $u, array $b, bool $final): array
                 $same = (($p->sha ?? '') !== '' && ($p->sha ?? '') === ($op->sha ?? ''))
                     || (($p->side ?? '') !== 'back' && ($op->side ?? '') !== 'back' && ($p->ph ?? '') !== '' && idsHam((string) $p->ph, (string) ($op->ph ?? '')) <= 10);
                 if ($same && idsOtherPerson($who, $o)) {
-                    idsCheck($c, 'samepic', 'fail', 'The same picture was checked for ' . $other . ' on ' . date('M j, Y', (int) ($o->at / 1000)) . '.', 'pictures');
+                    idsCheck($c, 'samepic', 'fail', 'The same picture was checked for ' . $other . $when . '.', 'pictures');
                     break 2;
                 }
             }
@@ -1533,7 +1564,8 @@ function idsStamp(stdClass $s, string $id): void
         return;
     }
     $path = ['cand' => 'rec/cand/items/', 'ats' => 'ats/'][(string) ($w->kind ?? '')] ?? '';
-    if ($path === '' || !($d = docGet($path . $w->id))) {
+    // v83: stamped only by someone who may change the record themselves
+    if ($path === '' || !can($path . $w->id, 'w') || !($d = docGet($path . $w->id))) {
         return;
     }
     $d->idchk = (object) ['id' => $id, 'v' => (string) ($s->v ?? ''), 'kind' => (string) ($s->kind ?? ''), 'at' => (int) ($s->at ?? 0), 'dec' => isset($s->dec) ? (string) $s->dec->st : ''];
@@ -1573,6 +1605,16 @@ function idsSweep(): void
             if ($changed) {
                 docSet('sec/idscan/items/' . $id, $s);
             }
+        }
+    }
+    // v83: pictures whose check was never saved (left by earlier versions): removed after a day
+    $s0 = db()->prepare("SELECT path FROM docs WHERE col LIKE 'sec/idscan/%/f' AND updated < ?");
+    $s0->execute([now() - 86400000]);
+    foreach ($s0->fetchAll(PDO::FETCH_COLUMN) as $fp) {
+        $seg = explode('/', (string) $fp);
+        if (count($seg) === 5 && preg_match('/^[a-f0-9]{16}$/', $seg[2]) && preg_match('/^[a-f0-9]{32}$/', $seg[4]) && !docGet('sec/idscan/items/' . $seg[2])) {
+            @unlink(filePathOf($seg[4]));
+            docDelete((string) $fp);
         }
     }
     foreach (colAll('sec/idreq/items') as [$id, $q]) {

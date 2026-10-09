@@ -43,7 +43,7 @@ const useAcctSettings = () => {
   const S = useMemo(() => acctNorm(d.data), [d.data]);
   return { S, loading: d.loading };
 };
-const fmtPct = n => rtrimZero((+n || 0).toFixed(2)) + '%';
+const fmtPct = n => rtrimZero((+n || 0).toFixed(3)) + '%';
 const rtrimZero = s => s.replace(/\.?0+$/, '');
 const remindLabel = n => (n < 0 ? `${-n} day${n === -1 ? '' : 's'} before due` : n === 0 ? 'On the due date' : `${n} day${n === 1 ? '' : 's'} after due`);
 
@@ -91,7 +91,7 @@ function AcctSettingsPage() {
         lateFee: r2(f.lateFee),
         cash: r2(f.cash),
         terms: f.terms.filter(t => String(t.n).trim()).map(t => ({ n: String(t.n).trim(), d: Math.max(0, +t.d || 0) })),
-        taxes: f.taxes.filter(t => String(t.n).trim()).map(t => ({ n: String(t.n).trim(), p: r2(t.p) })),
+        taxes: f.taxes.filter(t => String(t.n).trim()).map(t => ({ n: String(t.n).trim(), p: r3(t.p) })),
         banks: f.banks.filter(b => String(b.n).trim()).map(b => ({ n: String(b.n).trim(), bank: String(b.bank || '').trim(), last4: String(b.last4 || '').replace(/\D/g, '').slice(-4), cur: b.cur || f.cur, note: String(b.note || '').trim() })),
         remind: [...new Set(f.remind.map(x => parseInt(x, 10)).filter(x => !isNaN(x)))].sort((a, b) => a - b),
         remindCc: String(f.remindCc || '').trim(),
@@ -175,7 +175,7 @@ function AcctSettingsPage() {
           <p className="muted small" style=${{ margin: 0 }}>Picked with one click on an invoice, e.g. Texas 8.25%, GST 18%.</p>
           ${smallTbl(
             ['Name', 'Rate %'],
-            taxes.list.map((t, i) => html`<tr key=${i}><td><input value=${t.n} onInput=${e => taxes.set(i, { n: e.target.value })} aria-label="Tax name" /></td><td style=${{ width: 110 }}><input type="number" step="0.01" min="0" value=${t.p} onInput=${e => taxes.set(i, { p: e.target.value })} aria-label="Rate" /></td><td className="r"><button type="button" className="btn ghost sm icon" aria-label="Remove" onClick=${() => taxes.del(i)}><${Icon} n="trash" /></button></td></tr>`),
+            taxes.list.map((t, i) => html`<tr key=${i}><td><input value=${t.n} onInput=${e => taxes.set(i, { n: e.target.value })} aria-label="Tax name" /></td><td style=${{ width: 110 }}><input type="number" step="0.001" min="0" value=${t.p} onInput=${e => taxes.set(i, { p: e.target.value })} aria-label="Rate" /></td><td className="r"><button type="button" className="btn ghost sm icon" aria-label="Remove" onClick=${() => taxes.del(i)}><${Icon} n="trash" /></button></td></tr>`),
             taxes.add,
             'Add a preset'
           )}
@@ -320,7 +320,7 @@ function RecurringForm({ t, onClose }) {
     const contact = A && A.members.find(m => m.role === 'employer' && m.r && m.r.cid === cid);
     setF({ ...f, cid, bill: { ...f.bill, co: c ? c.n : f.bill.co, n: contact ? contact.u.p.n : f.bill.n, e: contact ? contact.u.p.e : f.bill.e, addr: c && c.loc ? c.loc : f.bill.addr } });
   };
-  const calc = invCalc(f.lines, f.taxp, f.disc);
+  const calc = invCalc(f.lines, r3(f.taxp), r2(f.disc));
   const save = async () => {
     const lines = f.lines.filter(l => (l.d || '').trim() || +l.u).map(l => ({ d: (l.d || '').trim(), q: r2(l.q), u: r2(l.u) }));
     if (!f.t.trim()) {
@@ -349,7 +349,7 @@ function RecurringForm({ t, onClose }) {
         cur: f.cur,
         terms: +f.terms || 0,
         lines,
-        taxp: r2(f.taxp),
+        taxp: r3(f.taxp), // rates keep 3 decimals (8.875%), as invoices do
         disc: r2(f.disc),
         notes: (f.notes || '').trim(),
         pay: (f.pay || '').trim(),
@@ -407,7 +407,7 @@ function RecurringForm({ t, onClose }) {
         </div>
         <div className="row3">
           <${Field} label="Payment terms"><select value=${String(f.terms)} onChange=${up('terms')}>${S.terms.map(x => html`<option key=${x.n} value=${x.d}>${x.n}</option>`)}${!S.terms.some(x => x.d === +f.terms) && html`<option value=${f.terms}>${f.terms} days</option>`}</select><//>
-          <${Field} label="Tax %"><div className="actions" style=${{ flexWrap: 'nowrap' }}><input type="number" step="0.01" min="0" value=${f.taxp} onInput=${up('taxp')} />${S.taxes.length > 0 && html`<select value="" onChange=${e => e.target.value !== '' && setF({ ...f, taxp: +e.target.value })} aria-label="Tax preset"><option value="">Preset…</option>${S.taxes.map(x => html`<option key=${x.n} value=${x.p}>${x.n} (${fmtPct(x.p)})</option>`)}</select>`}</div><//>
+          <${Field} label="Tax %"><div className="actions" style=${{ flexWrap: 'nowrap' }}><input type="number" step="0.001" min="0" value=${f.taxp} onInput=${up('taxp')} />${S.taxes.length > 0 && html`<select value="" onChange=${e => e.target.value !== '' && setF({ ...f, taxp: +e.target.value })} aria-label="Tax preset"><option value="">Preset…</option>${S.taxes.map(x => html`<option key=${x.n} value=${x.p}>${x.n} (${fmtPct(x.p)})</option>`)}</select>`}</div><//>
           <${Field} label="Discount (amount)"><input type="number" step="0.01" min="0" value=${f.disc} onInput=${up('disc')} /><//>
         </div>
         <div>

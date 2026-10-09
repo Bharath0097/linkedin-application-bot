@@ -634,7 +634,8 @@ function wsRoute(string $r, array $b): never
             $host = strtolower(trim((string) ($b['host'] ?? '')));
             if ($what === 'sub') {
                 $url = 'https://' . $slug . '.' . wsMainHost() . '/';
-                $dev = in_array(strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? ''))), ['localhost', '127.0.0.1'], true);
+                // v83: the developer address only on a developer computer (php -S or SE_EXT_MOCK), not from the Host header alone
+                $dev = (PHP_SAPI === 'cli-server' || (string) getenv('SE_EXT_MOCK') !== '') && in_array(strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? ''))), ['localhost', '127.0.0.1'], true);
                 if ($dev) {
                     $url = 'http://' . $slug . '.localhost' . (preg_match('/:(\d+)$/', (string) ($_SERVER['HTTP_HOST'] ?? ''), $pm) ? ':' . $pm[1] : '') . '/';
                 }

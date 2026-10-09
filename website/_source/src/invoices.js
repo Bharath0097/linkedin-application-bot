@@ -22,6 +22,7 @@ const invChip = d => {
           : 'amber';
 };
 const INV_LABEL = s => (s === 'overdue' ? 'Overdue' : INV_ST[s] || s);
+const r3 = n => Math.round((+n || 0) * 1000) / 1000; // tax rates keep 3 decimals (8.875%)
 const invCalc = (lines, taxp, disc) => {
   const sub = r2((lines || []).reduce((a, l) => a + (+l.q || 0) * (+l.u || 0), 0));
   const tax = r2((sub * (+taxp || 0)) / 100);
@@ -37,9 +38,16 @@ async function buildInvoicePdf(d, org) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   let logo = null;
+  // in a company workspace: its own logo (PNG or JPEG; a WebP logo is left out), never StratEdge's
+  const logoUrl = wsOn() ? (Cap.ws.brand && Cap.ws.brand.logo) || '' : LOGO_L;
   try {
-    const r = await fetch(LOGO_L);
-    if (r.ok) logo = await pdf.embedPng(new Uint8Array(await r.arrayBuffer()));
+    if (logoUrl) {
+      const r = await fetch(logoUrl);
+      const ct = r.ok ? r.headers.get('content-type') || '' : '';
+      const bytes = ct ? new Uint8Array(await r.arrayBuffer()) : null;
+      if (bytes && ct.includes('png')) logo = await pdf.embedPng(bytes);
+      else if (bytes && ct.includes('jpeg')) logo = await pdf.embedJpg(bytes);
+    }
   } catch (e) {
     /* no logo */
   }
@@ -86,7 +94,7 @@ async function buildInvoicePdf(d, org) {
   text(d.num, 440, 11, font, grey, { y: y - 22 });
   y -= 54;
   const left = [
-    org.co || 'StratEdge IT Consulting Inc.',
+    org.co || CO.legal,
     ...(org.addr || '').split('\n'),
     org.email || CO.email,
     org.phone || CO.phone,
@@ -181,7 +189,7 @@ async function buildInvoicePdf(d, org) {
     .getPages()
     .forEach((p, i, arr) =>
       p.drawText(
-        ascii(`${d.num}  ·  ${org.co || 'StratEdge IT Consulting Inc.'}  ·  Page ${i + 1} of ${arr.length}`),
+        ascii(`${d.num}  ·  ${org.co || CO.legal}  ·  Page ${i + 1} of ${arr.length}`),
         { x: 50, y: 30, size: 8, font, color: grey }
       )
     );
@@ -387,7 +395,7 @@ function InvoiceEditor({ inv, onClose, onSaved }) {
     setF(x => ({ ...x, lines: [...x.lines.filter(l => l.d || l.u), ...lines] }));
     toast(`${lines.length} approved week${lines.length === 1 ? '' : 's'} added. Check the rates.`);
   };
-  const calc = invCalc(f.lines, f.taxp, f.disc);
+  const calc = invCalc(f.lines, r3(f.taxp), r2(f.disc));
   const save = async () => {
     const lines = f.lines
       .filter(l => (l.d || '').trim() || +l.u)
@@ -406,7 +414,10 @@ function InvoiceEditor({ inv, onClose, onSaved }) {
       if (!num) num = (await api('inv_next')).num;
       const id = f.id || nid();
       const now = Date.now();
-      const c = invCalc(lines, f.taxp, f.disc);
+      // round the rate and the discount first, then work out the totals from exactly what is stored
+      const taxp = r3(f.taxp),
+        disc = r2(f.disc);
+      const c = invCalc(lines, taxp, disc);
       const doc = {
         num,
         cur: f.cur,
@@ -422,8 +433,8 @@ function InvoiceEditor({ inv, onClose, onSaved }) {
         due: f.due,
         period: { f: f.period.f || '', t: f.period.t || '' },
         lines,
-        taxp: r2(f.taxp),
-        disc: r2(f.disc),
+        taxp,
+        disc,
         sub: c.sub,
         tax: c.tax,
         total: c.total,
@@ -545,7 +556,7 @@ function InvoiceEditor({ inv, onClose, onSaved }) {
         <div className="row3">
           <${Field} label="Tax %">
             <div className="actions" style=${{ flexWrap: 'nowrap' }}>
-              <input type="number" step="0.01" min="0" value=${f.taxp} onInput=${up('taxp')} style=${{ maxWidth: 90 }} />
+              <input type="number" step="0.001" min="0" value=${f.taxp} onInput=${up('taxp')} style=${{ maxWidth: 90 }} />
               ${AS.taxes.length > 0 && html`<select value="" onChange=${e => e.target.value !== '' && setF(x => ({ ...x, taxp: +e.target.value }))} aria-label="Tax preset"><option value="">Preset…</option>${AS.taxes.map(t => html`<option key=${t.n} value=${t.p}>${t.n} (${fmtPct(t.p)})</option>`)}</select>`}
             </div>
           <//>
@@ -712,6 +723,8 @@ function InvoiceDetail({ d, onClose, onEdit }) {
     setBusy(false);
   };
   const voidIt = async () => {
+    // money already received stays in the books (a credit owed to the client) after a void
+    if ((+d.paid || 0) > 0 && !confirm(`${fmtMoney(d.paid, d.cur)} was already received on this invoice. Voiding keeps that money in the books as a credit owed to the client; refund it or apply it with a journal entry. Void anyway?`)) return;
     try {
       const now = Date.now();
       await dbMerge(`inv/${d.id}`, {
@@ -856,7 +869,7 @@ function BillingSettings({ onClose }) {
   const save = async () => {
     setBusy(true);
     try {
-      await dbMerge('org/main/x/settings', { inv: { ...f, taxp: r2(f.taxp), terms: +f.terms || 0 } });
+      await dbMerge('org/main/x/settings', { inv: { ...f, taxp: r3(f.taxp), terms: +f.terms || 0 } });
       toast('Billing settings saved.');
       onClose();
     } catch (e) {
@@ -883,7 +896,7 @@ function BillingSettings({ onClose }) {
         </div>
         <div className="row2">
           <${Field} label="Default tax %">
-            <input type="number" step="0.01" value=${f.taxp} onInput=${up('taxp')} />
+            <input type="number" step="0.001" value=${f.taxp} onInput=${up('taxp')} />
           <//>
           <${Field} label="Default terms (days)">
             <input type="number" value=${f.terms} onInput=${up('terms')} />

@@ -448,7 +448,7 @@ function booksEntries(string $from, string $to): array
     $incDefault = sysAcct('inc');
     foreach (colAll('inv') as [$id, $x]) {
         $st = (string) ($x->st ?? 'draft');
-        if (in_array($st, ['draft', 'void'], true)) {
+        if ($st === 'draft') {
             continue;
         }
         $issue = (string) ($x->issue ?? '');
@@ -459,7 +459,8 @@ function booksEntries(string $from, string $to): array
             continue;
         }
         $fx = fn($v) => (float) booksFx((float) $v, $icur);
-        if ($in($issue)) {
+        // a voided invoice leaves the books, but money already received on it stays (a credit owed to the client)
+        if ($st !== 'void' && $in($issue)) {
             $lines = [['acct' => $ar, 'dr' => $fx($x->total ?? 0), 'cr' => 0, 'name' => $client]];
             foreach ((array) ($x->lines ?? []) as $l) {
                 if (!($l instanceof stdClass)) {
@@ -635,8 +636,11 @@ function booksEntries(string $from, string $to): array
         if ($m && in_array((string) ($m->k ?? ''), ['inv', 'exp', 'payroll', 'taxdep'], true)) {
             continue; // already posted by the matched record
         }
-        if ($cat === '' || !isset(coaIndex()['byId'][$cat])) {
+        if ($cat === '') {
             continue; // uncategorized: shows up as "to review"
+        }
+        if (!isset(coaIndex()['byId'][$cat])) {
+            $cat = sysAcct('otherexp'); // its account was removed from the chart: posts to Other expenses, as the Accounts page says
         }
         $amtN = booksFx(round((float) ($x->a ?? 0), 2), (string) ($x->cur ?? booksBase()));
         if ($amtN === null) {

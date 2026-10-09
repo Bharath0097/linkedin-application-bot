@@ -445,13 +445,14 @@ function DlAdd({ L, meta, onAdded }) {
     if (r.left) parts.push(r.left + ' left it before and were not put back');
     if (r.bad) parts.push(r.bad + ' without a valid address');
     if (r.unsub) parts.push(r.unsub + ' unsubscribed from all email (on the list, but not emailed)');
+    if (r.full) parts.push('the list is full (20,000 people), so the rest were not added');
     return parts.join(', ') + '.';
   };
   const go = async body => {
     setBusy(true);
     try {
       const r = await api('dl_members_add', { id: L.id, ...body });
-      toast(said(r));
+      toast(said(r), !!r.full);
       onAdded();
       setSel([]);
       setPaste('');

@@ -101,11 +101,15 @@ function textFromFile(string $path, string $ext): string
 }
 
 /* ---------- Word (.docx) ---------- */
+const ZIP_PART_MAX = 50 * 1048576; // v83: the largest zip entry inflated (a bigger one is skipped, a zip bomb never loads)
+const ZIP_TOTAL_MAX = 100 * 1048576; // v83: and all the entries read from one file together
 function zipEntries(string $zip, string $want = '#^word/(document|header\d*|footer\d*)\.xml$#'): array
 {
     // name => contents of the entries whose names match $want (a Word document's text by default), without needing
     // the zip extension. v38.1: other patterns (a spreadsheet's xl/ parts) for the imports.
+    // v83: entries bigger than ZIP_PART_MAX unpacked are skipped, and reading stops at ZIP_TOTAL_MAX.
     $out = [];
+    $total = 0;
     if (class_exists('ZipArchive')) {
         $tmp = tempnam(sys_get_temp_dir(), 'dx');
         file_put_contents($tmp, $zip);
@@ -114,9 +118,14 @@ function zipEntries(string $zip, string $want = '#^word/(document|header\d*|foot
             for ($i = 0; $i < $z->numFiles; $i++) {
                 $n = (string) $z->getNameIndex($i);
                 if (preg_match($want, $n)) {
-                    $c = $z->getFromIndex($i);
-                    if ($c !== false) {
+                    $st = $z->statIndex($i);
+                    if (!$st || (int) $st['size'] > ZIP_PART_MAX || $total + (int) $st['size'] > ZIP_TOTAL_MAX) {
+                        continue;
+                    }
+                    $c = $z->getFromIndex($i, ZIP_PART_MAX + 1);
+                    if ($c !== false && strlen($c) <= ZIP_PART_MAX) {
                         $out[$n] = $c;
+                        $total += strlen($c);
                     }
                 }
             }
@@ -144,12 +153,21 @@ function zipEntries(string $zip, string $want = '#^word/(document|header\d*|foot
         if (!preg_match($want, $name)) {
             continue;
         }
+        // v83: the central directory's size is checked first, and gzinflate never writes more than the cap, so an
+        // entry whose header lies about its size fails instead of growing to gigabytes (zip bomb).
+        if ($h['usize'] > ZIP_PART_MAX || $total + $h['usize'] > ZIP_TOTAL_MAX) {
+            continue;
+        }
         $lh = unpack('vnlen/vxlen', substr($zip, $h['off'] + 26, 4));
         $start = $h['off'] + 30 + $lh['nlen'] + $lh['xlen'];
         $raw = substr($zip, $start, $h['csize']);
-        $c = $h['method'] === 8 ? @gzinflate($raw) : ($h['method'] === 0 ? $raw : false);
-        if ($c !== false) {
+        $c = $h['method'] === 8 ? @gzinflate($raw, ZIP_PART_MAX) : ($h['method'] === 0 ? $raw : false);
+        if ($c !== false && strlen($c) <= ZIP_PART_MAX) {
             $out[$name] = $c;
+            $total += strlen($c);
+            if ($total > ZIP_TOTAL_MAX) {
+                break;
+            }
         }
     }
     return $out;

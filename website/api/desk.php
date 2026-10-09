@@ -1296,6 +1296,8 @@ function deskFull(array $u, array $t): array
             }
         }
         $out['groups'] = array_values(array_map(fn($g) => ['id' => $g['id'], 'n' => $g['n'], 'members' => array_values(array_filter(array_map(fn($uid) => isset($names[$uid]) ? ['id' => $uid, 'n' => $names[$uid]] : null, $g['members'])))], $groups));
+        // the areas a ticket can be moved to (the "Priority & area" panel)
+        $out['cats'] = array_map(fn($c) => $c[0], DESK_CATS);
         // the requester's other tickets, for context. v83: only the ones this person may open, and a website ticket (no
         // account: by_uid '') matches the same address, not every other guest's ticket
         $rows = [];

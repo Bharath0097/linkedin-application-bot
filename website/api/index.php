@@ -730,6 +730,11 @@ switch ($r) {
                 }
             }
         }
+        // v83: a file record ({base}/f/{fid}) is made by an upload only: a record written here for a file id from some
+        // other record would open that file (route file) and let delfile remove it from disk
+        if (preg_match('#/f/[a-f0-9]{32}$#', $path) && !docGet($path)) {
+            fail(403, 'invalid_argument', 'Upload the file instead.');
+        }
         // v83: a person's documents (u/{id}/f/{fid}) are created by uploads only, and HR's marks on them (verified or
         // sent back, replaced, expiry, approval source) are set by HR and the server, never by the person
         if (preg_match('#^u/[^/]+/f/[^/]+$#', $path) && userLevel($cu) < 2) {
@@ -899,6 +904,11 @@ switch ($r) {
         $path = "$base/f/$id";
         if (!can($path, 'w')) {
             fail(403, 'invalid_argument', 'You can\'t delete this file.');
+        }
+        // v83: only a file that belongs to this record; files_dir is shared by every upload in the workspace (before,
+        // naming someone else's file id under a base you may write removed their file from disk)
+        if (!docGet($path)) {
+            fail(404, 'not_found', 'That file no longer exists.');
         }
         docDelete($path);
         $f = cfg('files_dir') . "/$id";
