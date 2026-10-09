@@ -148,6 +148,13 @@ function fwIp(): string
 {
     return clientIp();
 }
+/** v83: the browser says another web site made this request (a picture or link on someone else's page or in an email):
+ *  it is refused or logged as usual, but it never bans or scores the visitor's address (a scanner sends no such header,
+ *  a typed address sends 'none'; only GET pictures and links get this far, guardFetchMeta refuses every other kind). */
+function fwCrossSite(): bool
+{
+    return strtolower((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '')) === 'cross-site';
+}
 /** An address matches a list entry when equal, or when the entry is a prefix ending in a dot (e.g. 203.0.113.) or a CIDR block. */
 function fwIpMatches(string $ip, array $list): bool
 {
@@ -210,13 +217,25 @@ function fwBlocked(string $ip): ?array
 {
     $c = fwSettings();
     if (fwIpMatches($ip, fwLines($c['block_ips']))) {
-        return ['why' => 'Blocked address (Security settings)', 'until' => 0];
+        return ['why' => 'Blocked address (Security settings)', 'until' => 0, 'auto' => false];
     }
-    $s = fwdb()->prepare('SELECT until, why FROM fw_block WHERE k = ? AND kind = ?');
-    $s->execute([$ip, 'ip']);
-    $r = $s->fetch();
-    if ($r && ((int) $r['until'] === 0 || (int) $r['until'] > now())) {
-        return ['why' => (string) $r['why'], 'until' => (int) $r['until']];
+    // v83: the exact address, then its IPv6 /64 (automatic bans are kept per /64), then the prefixes and CIDR blocks a
+    // person added under Blocked addresses (those rows were stored but never matched before)
+    $s = fwdb()->prepare('SELECT until, why, by_uid FROM fw_block WHERE k = ? AND kind = ?');
+    foreach (array_values(array_unique([$ip, ipBucket($ip)])) as $k) {
+        $s->execute([$k, 'ip']);
+        $r = $s->fetch();
+        if ($r && ((int) $r['until'] === 0 || (int) $r['until'] > now())) {
+            // v83: 'auto' = banned by strikes, the attack score or the scanner trap (a person's block always names them)
+            return ['why' => (string) $r['why'], 'until' => (int) $r['until'], 'auto' => (string) ($r['by_uid'] ?? '') === ''];
+        }
+    }
+    $s = fwdb()->prepare("SELECT k, until, why, by_uid FROM fw_block WHERE kind = 'ip' AND (k LIKE '%/%' OR k LIKE '%.') AND (until = 0 OR until > ?)");
+    $s->execute([now()]);
+    foreach ($s->fetchAll() as $r) {
+        if (fwIpMatches($ip, [(string) $r['k']])) {
+            return ['why' => (string) $r['why'], 'until' => (int) $r['until'], 'auto' => (string) ($r['by_uid'] ?? '') === ''];
+        }
     }
     return null;
 }
@@ -232,15 +251,16 @@ function fwStrike(string $kind, string $detail): void
     $c = fwSettings();
     $ip = fwIp();
     fwLog($kind, $detail);
-    if (!$c['enabled'] || fwAllowed($ip)) {
+    if (!$c['enabled'] || fwAllowed($ip) || fwCrossSite()) {
         return;
     }
     // v78: strikes also count towards the web application firewall's score for the address
     if (function_exists('wafStrike')) {
         wafStrike($kind);
     }
-    if (throttleHit('fw:strike:' . $ip, (int) $c['strikes'], 3600)) {
-        fwBlock($ip, 'ip', (int) $c['ban_min'], 'Automatic: repeated ' . $kind . ' problems');
+    $key = ipBucket($ip); // v83: an IPv6 /64 counts (and is banned) as one address
+    if (throttleHit('fw:strike:' . $key, (int) $c['strikes'], 3600)) {
+        fwBlock($key, 'ip', (int) $c['ban_min'], 'Automatic: repeated ' . $kind . ' problems');
         fwLog('ban', 'Banned for ' . $c['ban_min'] . ' minutes after repeated problems');
     }
 }
@@ -254,7 +274,10 @@ function fwGuard(string $route, string $method): void
         return;
     }
     $b = fwBlocked($ip);
-    if ($b) {
+    // v83: an automatic ban (strikes, attack score, scanner trap) never stops someone already signed in: they are
+    // accountable by name, and a ban caused by a decoy picture on another site must not lock the office out. Blocks a
+    // person set (Security settings, Admin > Security, StratEdge AI) still apply to everyone.
+    if ($b && (empty($b['auto']) || empty($_SESSION['uid']))) {
         header('Retry-After: 600');
         fail(403, 'blocked', 'Requests from this network address are blocked. If you think this is a mistake, email ' . (string) cfg('mail_from') . '.');
     }
@@ -268,14 +291,14 @@ function fwGuard(string $route, string $method): void
     $poll = $route === 'batch' || $route === 'jobs_tick' || $route === 'me';
     // v34: signed delivery events from mail and payment services arrive in bursts during a big campaign
     $hook = in_array($route, ['mail_webhook', 'mail_inbound', 'mail_postal_hook', 'mail_postal_inbound', 'mail_ses_hook', 'stripe_webhook', 'plaid_webhook'], true) || str_starts_with($route, 'phw_');
-    $key = 'fw:' . ($hook ? 'hook' : ($poll ? 'poll' : 'api')) . ':' . $ip;
+    $key = 'fw:' . ($hook ? 'hook' : ($poll ? 'poll' : 'api')) . ':' . ipBucket($ip);
     if (throttleHit($key, (int) ($hook ? max(6000, (int) $c['api_per_min']) : ($poll ? $c['poll_per_min'] : $c['api_per_min'])), 60)) {
         fwStrike('rate', 'Over the per-minute request budget (' . $route . ')');
         header('Retry-After: 30');
         fail(429, 'rate_limited', 'Too many requests from this network address. Wait a moment and try again.');
     }
     if ($method === 'POST' && in_array($route, FW_PUBLIC_FORMS, true) && !currentUser()) {
-        if (throttleHit('fw:form:' . $ip, (int) $c['form_per_hour'], 3600)) {
+        if (throttleHit('fw:form:' . ipBucket($ip), (int) $c['form_per_hour'], 3600)) {
             fwStrike('rate', 'Over the hourly form budget (' . $route . ')');
             fail(429, 'rate_limited', 'Too many submissions from this network. Try again in an hour.');
         }
@@ -368,6 +391,7 @@ function secRoute(string $r, array $b): never
             $k = strtolower(trim(str($b, 'k', 190)));
             $pdo->prepare('DELETE FROM fw_block WHERE k = ?')->execute([$k]);
             throttleClear('fw:strike:' . $k);
+            throttleClear('fw:strike:' . ipBucket($k));
             fwLog('unblock', $k . ' unblocked by ' . $me['name']);
             ok(['ok' => true]);
         case 'sec_clear':

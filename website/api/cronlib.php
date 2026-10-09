@@ -221,6 +221,14 @@ function cronAll(bool $cli): array
             } catch (Throwable $e) {
                 $log[] = ' firewall retention failed: ' . $e->getMessage();
             }
+            // v83: rate-limit and bot-check counters whose window has ended
+            try {
+                $tp = throttlePrune();
+                if ($tp) {
+                    $log[] = ' rate-limit counters pruned: ' . $tp;
+                }
+            } catch (Throwable $e) {
+            }
             require_once __DIR__ . '/privacy.php';
             $ret = privRetentionRun();
             if (!empty($ret['ran'])) {

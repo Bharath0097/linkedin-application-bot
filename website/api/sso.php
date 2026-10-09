@@ -388,6 +388,31 @@ function ssoAccount(string $p, string $email, string $name, callable $back): arr
     $s = db()->prepare('SELECT * FROM users WHERE email = ?');
     $s->execute([$email]);
     $u = $s->fetch();
+    if ($u) {
+        require_once __DIR__ . '/auth.php';
+        $uid = (string) $u['id'];
+        $ad = json_decode((string) authUser($uid)['data'], true) ?: [];
+        if (!empty($ad['selfReg'])) {
+            // v83: a password sign-up nobody confirmed (anyone can register someone else's address): the provider just
+            // proved who owns the address, so whatever that sign-up set up to get back in (password, two-step sign-in,
+            // passkeys, remembered devices, sessions, a connected mailbox) stops working before the owner is let in
+            db()->prepare('UPDATE users SET pass = ? WHERE id = ?')->execute([password_hash(rid(16), PASSWORD_DEFAULT), $uid]);
+            secdb()->prepare('DELETE FROM auth_keys WHERE uid = ?')->execute([$uid]);
+            secdb()->prepare('DELETE FROM auth_mfa WHERE uid = ?')->execute([$uid]);
+            secdb()->prepare('UPDATE auth_devices SET trust = 0 WHERE uid = ?')->execute([$uid]);
+            try {
+                mymailDb()->prepare('DELETE FROM mail_user_acct WHERE uid = ?')->execute([$uid]);
+            } catch (Throwable $e) {
+                // no mailbox store yet: nothing connected
+            }
+            unset($ad['selfReg']);
+            authUserSet($uid, ['data' => json_encode((object) $ad), 'pw_at' => now(), 'must_pw' => 0, 'why' => '']);
+            $n = sessRevokeAll($uid, 'address confirmed by ' . SSO_PROVIDERS[$p]['n'] . ' sign-in');
+            audit('auth', 'Unconfirmed sign-up secured by the address owner', (string) $u['email'], ['how' => 'sso:' . $p, 'sessions' => $n], $u);
+            $s->execute([$email]);
+            $u = $s->fetch();
+        }
+    }
     if (!$u && wsSlug() !== '' && empty(wsCurrent()['setupDone'])) {
         $back('blocked'); // v37: no accounts in a company workspace before its first administrator sets it up
     }

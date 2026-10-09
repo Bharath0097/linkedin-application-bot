@@ -372,7 +372,9 @@ switch ($r) {
             'active',
             now(),
         ]);
-        authUserSet($id, ['pw_at' => now(), 'pw_check' => now()]);
+        // v83: nobody proved this address yet (selfReg): a later Google/Microsoft/LinkedIn sign-in by its owner, or a
+        // reset link from its mailbox, confirms it; the provider sign-in first shuts out whatever this sign-up set up
+        authUserSet($id, ['pw_at' => now(), 'pw_check' => now()] + ($first ? [] : ['data' => json_encode(['selfReg' => now()])]));
         authFinish(['id' => $id, 'name' => $name, 'email' => $email, 'role' => $first ? 'admin' : 'user', 'status' => 'active', 'access' => ''], 'register', '', 0, '');
         ok([
             'user' => [
@@ -500,7 +502,7 @@ switch ($r) {
         if (password_verify($new, $oldHash)) {
             fail(400, 'weak_password', 'Choose a password different from the current one.');
         }
-        $weak = pwProblem($new, ['email' => $u['email'], 'name' => $u['name'], 'mfa' => (bool) mfaMethods($u) || authMfaRequired($u), 'check' => true]);
+        $weak = pwProblem($new, ['email' => $u['email'], 'name' => $u['name'], 'mfa' => pwMfaApplies($u), 'check' => true]); // v83: grace period counts as no second step
         if ($weak !== '') {
             fail(400, 'weak_password', $weak);
         }
@@ -543,6 +545,9 @@ switch ($r) {
             ok(['e' => false, 'd' => null, 'v' => 'x']);
         }
         $row = docRow($path);
+        if ($row) {
+            guardDlpDoc($path); // v83: candidate records opened one at a time count toward the data-theft guard
+        }
         ok(
             $row
                 ? ['e' => true, 'd' => redactDoc($path, json_decode($row['data'])), 'v' => (string) $row['seq']]
@@ -554,7 +559,7 @@ switch ($r) {
             fail(400, 'invalid_argument', 'Bad path.');
         }
         ok([
-            'v' => colVersion($path),
+            'v' => colVersionFor($path, (string) ($_GET['x'] ?? '')), // v83: counted over readable records only
             'docs' => colList(
                 $path,
                 $_GET['o'] ?? null,
@@ -583,6 +588,11 @@ switch ($r) {
                 }
                 $row = docRow($p);
                 $nv = $row ? (string) $row['seq'] : 'x';
+                // v83: a candidate record actually sent counts toward the data-theft guard (unchanged polls do not)
+                if ($row && $nv !== $v && !guardDlpDoc($p, true)) {
+                    $res[] = ['err' => 'Profile views are paused on your account. Ask an administrator to allow them again.'];
+                    continue;
+                }
                 $res[] =
                     $nv === $v
                         ? ['v' => $nv, 'same' => true]
@@ -594,7 +604,7 @@ switch ($r) {
                     $res[] = ['err' => 'Bad path.'];
                     continue;
                 }
-                $nv = colVersion($p);
+                $nv = colVersionFor($p, (string) ($q['x'] ?? '')); // v83: counted over readable records only
                 if ($nv === $v) {
                     $res[] = ['v' => $nv, 'same' => true];
                 } elseif (isset($q['since']) && is_numeric($q['since']) && (int) $q['since'] > 0 && (int) ($q['l'] ?? 0) === 0) {
@@ -715,7 +725,15 @@ switch ($r) {
                 }
             }
         }
+        $upTx = false;
         if ($r === 'update') {
+            // v83: read, merge, check and write in one locked transaction, so two updates of one record at once both
+            // land (the meta row update takes the write lock before the read, on SQLite and MySQL; a refusal below ends
+            // the request and the open transaction is rolled back)
+            $upTx = !db()->inTransaction() && db()->beginTransaction();
+            if ($upTx) {
+                db()->exec("UPDATE meta SET v = v WHERE k = 'seq'");
+            }
             $cur = docGet($path);
             if (!$cur) {
                 fail(400, 'invalid_argument', 'That record does not exist yet.');
@@ -730,6 +748,10 @@ switch ($r) {
         if (userLevel($cu) < 2 && $path === 'u/' . (string) ($cu['id'] ?? '')) {
             leaveLockDecided((string) $cu['id'], $before instanceof stdClass ? $before : null, $data);
         }
+        // v83: own clock-ins count as punched only with the punch route's signature; anything else is marked edited
+        if (userLevel($cu) < 2 && preg_match('#^u/' . preg_quote((string) ($cu['id'] ?? ''), '#') . '/att/[^/]+$#', $path)) {
+            attStampGuard((string) $cu['id'], $before instanceof stdClass ? $before : null, $data);
+        }
         if (tsApprovedTamper($path, $before, $data, $cu)) {
             fail(409, 'conflict', 'This week is approved and locked. Ask your manager or HR to reopen it.');
         }
@@ -739,6 +761,9 @@ switch ($r) {
         }
         colRoomFor($path, $data); // v83: no filling a list with huge records nobody can load
         docSet($path, $data);
+        if ($upTx) {
+            db()->commit();
+        }
         if (financialPath($path)) {
             require_once __DIR__ . '/payroll.php';
             auditLog($before ? 'change' : 'create', $path, $before ? 'Record changed' : 'Record created', auditDiff($before, $data));
@@ -799,7 +824,12 @@ switch ($r) {
             exit('Not found');
         }
         $path = "$base/f/$id";
-        if (!can($path, 'r') && !tokenAllows($path, (string) ($_GET['tok'] ?? ''))) {
+        $ftok = (string) ($_GET['tok'] ?? '');
+        // v83: a public signer's files are allowed by the cookie sig_public_get set (no token in the URL)
+        if ($ftok === '' && preg_match('#^sig/([A-Za-z0-9_-]{1,20})$#', $base, $sm)) {
+            $ftok = (string) ($_COOKIE['se_sig_' . $sm[1]] ?? '');
+        }
+        if (!can($path, 'r') && !tokenAllows($path, $ftok)) {
             http_response_code(404);
             exit('Not found');
         }
@@ -877,6 +907,11 @@ switch ($r) {
             'at' => now(),
             'fid' => null,
         ];
+        // v83: the profile link becomes a web address: "linkedin.com/in/x" gets https://, any other scheme
+        // (javascript:, data:, vbscript: …) is dropped, so the inbox and the ATS card only ever link to a web page
+        if ($m['li'] !== '' && !preg_match('#^https?://#i', $m['li'])) {
+            $m['li'] = preg_match('#^[a-z][a-z0-9+\-]*:#i', $m['li']) ? '' : 'https://' . $m['li'];
+        }
         if ($m['n'] === '' || !filter_var($m['e'], FILTER_VALIDATE_EMAIL)) {
             fail(400, 'invalid_argument', 'Add your name and a valid email.');
         }
@@ -1323,12 +1358,17 @@ switch ($r) {
         docSet($base, $d);
         ok(['id' => $id]);
     case 'sig_public_get':
-        $id = str($_GET, 'id', 20);
-        $tok = str($_GET, 'tok', 40);
+        // v83: the signer's token comes in the POST body, never the query string (access logs, history); the
+        // document's file links then ride on a short-lived HttpOnly cookie instead of ?tok=
+        $id = str($b, 'id', 20);
+        $tok = str($b, 'tok', 40);
         $d = docGet("sig/$id");
         $i = $d ? sigIndexByTok($d, $tok) : -1;
         if ($i < 0) {
             fail(404, 'not_found', 'This signing link is not valid.');
+        }
+        if (preg_match('/^[A-Za-z0-9_-]{1,20}$/', $id)) {
+            setcookie('se_sig_' . $id, $tok, ['expires' => time() + 43200, 'path' => '/', 'secure' => sessSecure(), 'httponly' => true, 'samesite' => 'Strict']);
         }
         $pub = [
             'id' => $id,
@@ -1631,12 +1671,15 @@ switch ($r) {
         $d->seen = $now;
         $d->lastEv = $rec;
         docSet("log/{$u['id']}", $d);
+        $g = $geo ? (string) ($geo['label'] ?? '') : '';
         ok([
             't' => $now,
             'ip' => $ip,
-            'g' => $geo ? $geo['label'] ?? '' : '',
+            'g' => $g,
             'pos' => $pos,
             'posErr' => $posErr,
+            // v83: signed, so the attendance record can show this punch as real (attStampGuard)
+            'k' => punchMac((string) $u['id'], $ev, $now, (string) $ip, $g, $pos),
         ]);
 
     /* ---------- precise sign-in location (browser geolocation, with the person's permission) ---------- */
@@ -1679,8 +1722,13 @@ switch ($r) {
 
     /* ---------- ATS and payroll email ---------- */
     case 'ats_email':
-        $me = requireAdmin();
-        $id = str($b, 'id', 20);
+        // v83: ATS staff only (admins, HR, the ATS feature), as every other ATS route; a plain candidate id
+        require_once __DIR__ . '/ats.php';
+        $me = atsStaff(true);
+        $id = preg_replace('/[^A-Za-z0-9_\-]/', '', str($b, 'id', 40));
+        if ($id === '') {
+            fail(404, 'not_found', 'No such candidate.');
+        }
         $d = docGet("ats/$id");
         if (!$d) {
             fail(404, 'not_found', 'No such candidate.');
@@ -1877,23 +1925,28 @@ switch ($r) {
     /* ---------- end-of-day report: share by email too ---------- */
     case 'eod_notify':
         $u = requireUser();
+        // v83: the daily report is for the recruiting team (the same people who may write rec/eod/items), and it is
+        // throttled: it mails the site's own EOD inbox from the site's From address
+        if (userLevel($u) < 2 && !isRecruiter((string) $u['id']) && !isBench((string) $u['id'])) {
+            fail(403, 'forbidden', 'Only the recruiting team sends daily reports.');
+        }
+        if (throttleHit('eod:' . $u['id'], 6, 3600)) {
+            fail(429, 'rate_limited', 'Daily reports were sent several times in the last hour. Try again later.');
+        }
         $to = array_values(
             array_filter(
                 array_map('trim', explode(',', (string) cfg('eod_emails'))),
                 fn($x) => filter_var($x, FILTER_VALIDATE_EMAIL),
             ),
         );
-        $subject = 'EOD report: ' . $u['name'] . ' ' . str($b, 'date', 20);
+        $subject = 'EOD report: ' . preg_replace('/[\r\n\t]+/', ' ', (string) $u['name']) . ' ' . preg_replace('/[^0-9-]/', '', str($b, 'date', 20));
         $text = str($b, 'text', 6000);
         $sent = false;
         if ($to && $text !== '') {
-            $from = (string) (cfg('mail_from') ?: 'no-reply@' . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
-            $sent = @mail(
-                implode(',', $to),
-                $subject,
-                $text,
-                "From: $from\r\nReply-To: " . $u['email'] . "\r\nContent-Type: text/plain; charset=UTF-8",
-            );
+            // v83: through the site's mailer (configured transport, sent log, suppression, encoded subject), not raw mail()
+            foreach ($to as $addr) {
+                $sent = sendMail($addr, '', $subject, $text, '', [], (string) $u['email']) || $sent;
+            }
         }
         ok(['mailed' => (bool) $sent, 'recipients' => count($to)]);
 
@@ -2234,6 +2287,9 @@ switch ($r) {
     case 'vms_contact_grab_save':
     case 'vms_dice':
     case 'vms_dice_import':
+    case 'vms_agent_get':
+    case 'vms_agent_run':
+    case 'vms_agent_retry':
         require_once __DIR__ . '/vms.php';
         vmsRoute($r, $method, $b);
     /* ---------- the talent marketplace ---------- */
@@ -2354,6 +2410,7 @@ switch ($r) {
     case 'acct_next_num':
     case 'acct_next_peek':
     case 'acct_bank_import':
+    case 'acct_bank_match':
     case 'acct_cron':
         require_once __DIR__ . '/acct.php';
         acctRoute($r, $method, $b);
@@ -2775,6 +2832,18 @@ switch ($r) {
                 $s->execute([now(), $k]);
                 if (!$s->rowCount()) {
                     $p->prepare('INSERT INTO csp_reports (id, at, ip, page, dir, blocked, n) VALUES (?,?,?,?,?,?,1)')->execute([$k, now(), mb_substr(clientIp(), 0, 64), $page, $dir, $blocked]);
+                    // v83: the reports age out like the firewall log, and the table keeps at most the newest 2000 rows
+                    if (random_int(1, 50) === 1) {
+                        try {
+                            $p->prepare('DELETE FROM csp_reports WHERE at < ?')->execute([now() - max(1, (int) (fwSettings()['log_days'] ?? 30)) * 86400000]);
+                            $cut = $p->query('SELECT at FROM csp_reports ORDER BY at DESC LIMIT 1 OFFSET 2000')->fetchColumn();
+                            if ($cut !== false) {
+                                $p->prepare('DELETE FROM csp_reports WHERE at <= ?')->execute([(int) $cut]);
+                            }
+                        } catch (Throwable $e) {
+                            // pruning never blocks a report
+                        }
+                    }
                 }
             }
         }
@@ -2782,10 +2851,13 @@ switch ($r) {
     case 'trap':
         $probe = mb_substr((string) ($_GET['p'] ?? ($_SERVER['REQUEST_URI'] ?? '')), 0, 160);
         if (!fwAllowed(fwIp())) {
-            fwLog('trap', 'Probed ' . $probe, 'trap');
-            fwBlock(fwIp(), 'ip', 1440, 'Scanned for ' . $probe);
-            // v78: the address also carries the points, so it is banned longer if it comes back
-            wafPoints(fwIp(), 25, 'trap-route');
+            fwLog('trap', 'Probed ' . $probe . (fwCrossSite() ? ' (sent by another web site through a browser: not banned)' : ''), 'trap');
+            // v83: a picture or link on another site pointing here comes from a visitor's browser, not a scanner
+            if (!fwCrossSite()) {
+                fwBlock(ipBucket(fwIp()), 'ip', 1440, 'Scanned for ' . $probe); // v83: an IPv6 scanner's whole /64
+                // v78: the address also carries the points, so it is banned longer if it comes back
+                wafPoints(fwIp(), 25, 'trap-route');
+            }
         }
         http_response_code(404);
         echo json_encode(['error' => 'not_found']);

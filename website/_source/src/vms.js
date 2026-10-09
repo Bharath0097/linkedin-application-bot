@@ -937,12 +937,13 @@ function VendorAgentPanel({ onClose }) {
   const toast = useToast();
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState('');
-  const load = () => api('vms_agent_get').then(setD).catch(e => toast(errText(e), true));
+  const [err, setErr] = useState(null);
+  const load = () => api('vms_agent_get').then(x => { setErr(null); setD(x); }).catch(e => { setErr(e); toast(errText(e), true); });
   useEffect(() => { load(); }, []);
   const run = async () => { setBusy('run'); try { const r = await api('vms_agent_run', {}, { timeout: 360000 }); toast(`Vendor agent: ${r.sent || 0} sent · ${r.tailored || 0} tailored · ${r.follow || 0} follow-ups · ${r.review || 0} to review.`); await load(); } catch(e) { toast(errText(e), true); } setBusy(''); };
   const retry = async id => { setBusy(id); try { const r = await api('vms_agent_retry', { id }); setD(r); toast('Queued for another agent pass.'); } catch(e) { toast(errText(e), true); } setBusy(''); };
   return html`<${Modal} wide title="Vendor auto-reply agent" onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button><button className="btn" disabled=${!!busy || !(d && d.cfg && d.cfg.on)} onClick=${run}>${busy==='run'?'Running…':'Run agent now'}</button>`}>
-    ${!d ? html`<${Spinner} />` : html`<div className="stack">
+    ${!d ? (err ? html`<${LoadError} title="The vendor agent didn't load." error=${err} onRetry=${load} />` : html`<${Spinner} />`) : html`<div className="stack">
       <div className=${'note ' + (d.cfg.on ? 'ok' : 'amber')}><span><b>${d.cfg.on ? 'Agent enabled' : 'Agent is off'}</b> · ATS gate ${d.cfg.threshold}% · ${d.cfg.follow ? 'up to 3 follow-ups at 9/10/3 ET' : 'follow-ups off'}. Change these under Requirements desk → Settings.</span></div>
       <div className="chips">${Object.entries(d.counts || {}).map(([k,n]) => html`<${Chip} key=${k} s=${k==='sent'?'ok':k==='review'?'amber':''}>${k}: ${n}<//>`)}</div>
       ${(d.rows || []).length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>Status</th><th>Candidate</th><th>ATS</th><th>Tailored</th><th>Follow-ups</th><th>Latest decision</th><th></th></tr></thead><tbody>${d.rows.map(x => { const lg=x.log||[]; const last=lg.length?lg[lg.length-1]:null; return html`<tr key=${x.id}><td><${Chip} s=${x.st==='sent'?'ok':x.st==='review'?'amber':''}>${x.st}<//></td><td>${x.cand||'—'}</td><td>${x.score||0}% → <b>${x.finalScore||x.score||0}%</b></td><td>${x.tailored?'Yes':'No'}</td><td>${x.followN||0}${x.nextFollow?html`<div className="muted small">next ${fmtTs(x.nextFollow)}</div>`:''}</td><td className="small">${last?last.ev:'—'}</td><td className="r">${x.st==='review'&&html`<button className="btn ghost sm" disabled=${!!busy} onClick=${()=>retry(x.id)}>Retry</button>`}</td></tr>`; })}</tbody></table></div>` : html`<${Empty} title="No vendor-agent items yet">New vendor-email requirements are queued here after the agent is enabled.<//>`}

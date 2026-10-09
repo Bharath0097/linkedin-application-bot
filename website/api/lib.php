@@ -46,7 +46,7 @@ const RULES = [
     ['vms/dice', 'interact', 'admin'], // v83: cached Dice search results are written by the server (vms_dice_import trusts them)
     ['org/vms', 'admin', 'admin'],
     ['org/box', 'interact', 'interact'],
-    ['org/mkt', 'interact', 'interact'],
+    ['org/mkt', 'admin', 'admin'], // v83: the talent marketplace (profiles, requests, settings) goes through the mkt_ routes
     // v30: compliance hub, learning platform, project vault and live projects (own records; HR reads everyone's)
     ['comp', 'admin', 'admin'],
     ['comp/x', 'interact', 'admin'],
@@ -109,6 +109,8 @@ const SCOPES = [
     'esd' => [[], []],
     'esx' => [[], []],
     'esb' => [[], []],
+    // v83: talent marketplace: profiles, requests and settings are read and changed only through the mkt_ routes
+    'org/mkt' => [[], []],
 ];
 // Keys a manager may change on a direct report's record: timesheet reviews, time-off decisions, clock-in approvals and tasks.
 const MANAGER_KEYS = ['rev', 'lvd', 'attA', 'tasks'];
@@ -1184,6 +1186,11 @@ function can(string $path, string $mode): bool
         require_once __DIR__ . '/esign.php';
         return esCanRead(docGet("sig/{$segs[1]}"), $u);
     }
+    if ($lvl < 2 && $mode === 'r' && $uid !== null && preg_match('#^inbox/m[a-f0-9]{16}/f/[a-f0-9]{32}$#', $path)) {
+        // v83: inbound email attachments: whoever may read the shared inbox (mail_inbox_get) may open them; writes,
+        // deletes and the website form inbox (inbox/public) keep the admin rule
+        return wsFeatureOn('mail') && mailCanUse($u);
+    }
     [$r, $w] = ruleFor($path, $uid);
     $base = $lvl >= LEVELS[$mode === 'r' ? $r : $w];
     $scope = scopeFor($path);
@@ -1229,6 +1236,14 @@ function can(string $path, string $mode): bool
     if ($lvl < 2 && ($path === 'rec' || str_starts_with($path, 'rec/') || $path === 'vms' || str_starts_with($path, 'vms/') || str_starts_with($path, 'org/mkt'))) {
         // recruiting workspace and the requirements desk: internal recruiters and recruiting team only
         if ($uid === null || (!isRecruiter($uid) && !isBench($uid))) {
+            return false;
+        }
+    }
+    if ($lvl < 2 && ($path === 'org/hr' || str_starts_with($path, 'org/hr/'))) {
+        // v83: HR policies, the handbook and templates are for the team (approved employees and consultants, anyone
+        // HR has started a checklist for, managers and people with the HR feature); not client contacts, students or
+        // accounts HR has not approved
+        if ($uid === null || !hrDocsReader($u)) {
             return false;
         }
     }
@@ -1430,6 +1445,110 @@ function leaveLockDecided(string $uid, ?stdClass $before, stdClass $data): void
         $data->lv->$id = $keep;
     }
 }
+/** v83: the signature on a clock punch (r=punch): who, which punch, the server's time, network address, place and the
+ *  browser location the server accepted. The attendance record keeps it, so the server can tell a real punch apart. */
+function punchMac(string $uid, string $ev, int $t, string $ip, string $g, $pos): string
+{
+    $p = is_array($pos) ? (object) $pos : $pos;
+    $ps = $p instanceof stdClass && is_numeric($p->lat ?? null) && is_numeric($p->lng ?? null) ? sprintf('%.5F,%.5F,%d', (float) $p->lat, (float) $p->lng, (int) ($p->acc ?? 0)) : '';
+    return secMac('punch', "$uid|$ev|$t|$ip|$g|$ps");
+}
+/** v83: $m is the stamp the punch route returned for event $ev at time $t (li/lo of a session or break). */
+function attStampOk($m, string $uid, string $ev, $t): bool
+{
+    return $m instanceof stdClass && is_string($m->k ?? null) && is_numeric($t) && (int) $t > 0 && is_numeric($m->t ?? null) && (int) $m->t === (int) $t
+        && hash_equals(punchMac($uid, $ev, (int) $t, (string) ($m->ip ?? ''), (string) ($m->g ?? ''), $m->pos ?? null), $m->k);
+}
+/** v83: a person's own clock-ins (u/{uid}/att/{month}, written by the portal): a session whose clock-in or clock-out is
+ *  not backed by a server punch is marked edited (e) and loses the made-up place, so the approver sees "Edited" /
+ *  "Manual entry" instead of evidence the browser wrote; breaks already recorded cannot be shortened or removed, and a
+ *  new break keeps only verified places. $before = the stored month, $data = the month as it will be saved. */
+function attStampGuard(string $uid, ?stdClass $before, stdClass $data): void
+{
+    $was = $before && ($before->days ?? null) instanceof stdClass ? $before->days : new stdClass();
+    if (!(($data->days ?? null) instanceof stdClass)) {
+        $data->days = new stdClass();
+    }
+    $days = $data->days;
+    $same = fn($a, $b): bool => json_encode($a) === json_encode($b);
+    foreach (get_object_vars($was) as $dk => $wd) {
+        $wb = $wd instanceof stdClass && is_array($wd->b ?? null) ? $wd->b : [];
+        if (!$wb) {
+            continue;
+        }
+        if (!(($days->$dk ?? null) instanceof stdClass)) {
+            $days->$dk = new stdClass();
+        }
+        $nb = is_array($days->$dk->b ?? null) ? $days->$dk->b : [];
+        foreach ($wb as $x) {
+            if (!($x instanceof stdClass)) {
+                continue;
+            }
+            $hit = false;
+            foreach ($nb as $i => $y) {
+                if ($y instanceof stdClass && ($y->i ?? null) === ($x->i ?? null)) {
+                    $nb[$i] = $x;
+                    $hit = true;
+                    break;
+                }
+            }
+            if (!$hit) {
+                $nb[] = $x;
+            }
+        }
+        $days->$dk->b = array_values($nb);
+    }
+    foreach (get_object_vars($days) as $dk => $d) {
+        if (!($d instanceof stdClass)) {
+            continue;
+        }
+        $old = ($was->$dk ?? null) instanceof stdClass ? $was->$dk : new stdClass();
+        $oldS = is_array($old->s ?? null) ? $old->s : [];
+        foreach ((is_array($d->s ?? null) ? $d->s : []) as $x) {
+            if (!($x instanceof stdClass)) {
+                continue;
+            }
+            $prev = null;
+            foreach ($oldS as $o) {
+                if ($o instanceof stdClass && ($o->i ?? null) === ($x->i ?? null)) {
+                    $prev = $o;
+                    break;
+                }
+            }
+            if ($prev && $same($prev, $x)) {
+                continue;
+            }
+            // the clock-in stays good when it is the one already saved (unedited), or a signed punch at that time
+            $inOk = ($prev && empty($prev->e) && isset($x->li) && $same($prev->li ?? null, $x->li)) || attStampOk($x->li ?? null, $uid, 'in', $x->i ?? 0);
+            $hasOut = isset($x->o);
+            $outOk = !$hasOut || ($prev && empty($prev->e) && isset($x->lo) && ($prev->o ?? null) === $x->o && $same($prev->lo ?? null, $x->lo)) || attStampOk($x->lo ?? null, $uid, 'out', $x->o);
+            if ($hasOut && is_numeric($x->o) && is_numeric($x->i ?? null) && $x->o - $x->i > 86400000) {
+                $outOk = false; // real punches of different days paired into one session
+            }
+            if (!$inOk) {
+                unset($x->li);
+            }
+            if (!$outOk) {
+                unset($x->lo);
+            }
+            if (!$inOk || !$outOk) {
+                $x->e = 1;
+            }
+        }
+        $oldB = is_array($old->b ?? null) ? $old->b : [];
+        foreach ((is_array($d->b ?? null) ? $d->b : []) as $x) {
+            if (!($x instanceof stdClass) || in_array($x, $oldB, false)) {
+                continue; // a break already saved stays as it was
+            }
+            if (isset($x->li) && !attStampOk($x->li, $uid, 'bi', $x->i ?? 0)) {
+                unset($x->li);
+            }
+            if (isset($x->lo) && !attStampOk($x->lo, $uid, 'bo', $x->o ?? 0)) {
+                unset($x->lo);
+            }
+        }
+    }
+}
 function fmtCloseDate(string $d): string
 {
     $t = strtotime($d . ' 12:00:00');
@@ -1486,6 +1605,23 @@ function scopeFor(string $path): ?array
         }
     }
     return $best;
+}
+/** Who below HR level reads org/hr (Policies): approved team members (not client contacts or students), people with
+ *  an onboarding or offboarding checklist, managers, people with the HR feature or the Policies page switched on. */
+function hrDocsReader(array $u): bool
+{
+    $uid = (string) $u['id'];
+    if (hasRole($u, 'manager') || grantOf($uid, 'hr') || featureMode($uid, 'policies') === 'allow') {
+        return true;
+    }
+    $d = myR($uid);
+    if (!$d) {
+        return false;
+    }
+    if (is_object($d->onb ?? null) && ($d->onb->kind ?? '') !== 'done') {
+        return true; // an open onboarding or offboarding checklist
+    }
+    return ($d->st ?? '') === 'active' && !in_array($d->role ?? '', ['employer', 'student', 'ext'], true) && !in_array(portalOf($uid), ['employer', 'student'], true);
 }
 /** A feature switched on for a person from their Team card (r/{id}.ft.{key}). */
 function grantOf(string $uid, string $key): bool
@@ -1935,6 +2071,22 @@ function colVersion(string $col): string
     $r = $s->fetch();
     return $r['m'] . '-' . $r['c'];
 }
+/** v83: colVersion over only the records the caller may read (what col and batch send to a client), so the size of a
+ *  collection and the global sequence never show to someone who cannot read it */
+function colVersionFor(string $col, string $only = ''): string
+{
+    $s = db()->prepare('SELECT path, seq FROM docs WHERE col = ?' . colOnlySql($only));
+    $s->execute([$col]);
+    $m = 0;
+    $c = 0;
+    while ($r = $s->fetch()) {
+        if (can($r['path'], 'r')) {
+            $m = max($m, (int) $r['seq']);
+            $c++;
+        }
+    }
+    return $m . '-' . $c;
+}
 /**
  * What changed in a collection since a sequence number the client already has: the changed records (readable ones,
  * redacted like colList) and the ids of every readable record, so the client can drop deletions. Sent instead of the
@@ -2159,6 +2311,9 @@ function throttleHit(string $key, int $max, int $windowSec): bool
             1,
             $t + $windowSec * 1000,
         ]);
+        if (random_int(1, 200) === 1) {
+            throttlePrune(); // v83: now and then, as the firewall logs do
+        }
         return false;
     }
     $p->prepare('UPDATE throttle SET n = n + 1 WHERE k = ?')->execute([$key]);
@@ -2169,6 +2324,18 @@ function throttleClear(string $key): void
     db()
         ->prepare('DELETE FROM throttle WHERE k = ?')
         ->execute([$key]);
+}
+/** v83: drops counters whose window ended a minute ago or more (an expired row already counts as absent), so the
+ *  table stays small instead of keeping one row per visitor address and bot-check puzzle for ever */
+function throttlePrune(): int
+{
+    try {
+        $s = db()->prepare('DELETE FROM throttle WHERE until < ?');
+        $s->execute([now() - 60000]);
+        return $s->rowCount();
+    } catch (Throwable $e) {
+        return 0;
+    }
 }
 /* v62: the visitor's address. Plain REMOTE_ADDR, unless the request came through Cloudflare (REMOTE_ADDR is one of its
    published networks: then CF-Connecting-IP) or through a proxy the administrator trusts (Security & spam firewall >
@@ -2273,6 +2440,19 @@ function clientEdge(): array
 function clientIp(): string
 {
     return clientEdge()['ip'];
+}
+/** v83: the key an address is scored, rate-limited and banned under: IPv4 (and IPv4-mapped IPv6) as is, any other IPv6
+ *  address as its /64 network (one host usually owns the whole /64). Anything that is not an address comes back as is. */
+function ipBucket(string $ip): string
+{
+    $b = @inet_pton($ip);
+    if ($b === false || strlen($b) !== 16) {
+        return $ip;
+    }
+    if (substr($b, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
+        return (string) inet_ntop(substr($b, 12));
+    }
+    return inet_ntop(substr($b, 0, 8) . str_repeat("\0", 8)) . '/64';
 }
 function str(array $src, string $k, int $max = 500): string
 {
@@ -2465,6 +2645,12 @@ function buildMime(
     array $extra = [],
 ): array {
     $enc = fn($s) => '=?UTF-8?B?' . base64_encode($s) . '?=';
+    // v83: addresses never carry a line break into the headers (no injected Bcc or other header lines)
+    $clean = fn($s) => trim(str_replace(["\r", "\n"], ' ', (string) $s));
+    $from = $clean($from);
+    $to = $clean($to);
+    $cc = $clean($cc);
+    $replyTo = $clean($replyTo);
     // v34: the Message-ID names the sender's own domain (not the web server's host, which is "localhost" when the
     // scheduled task sends), or the one a caller sets (mass email: one per recipient, naming the campaign)
     $host = str_contains($from, '@') ? substr($from, (int) strrpos($from, '@') + 1) : preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));

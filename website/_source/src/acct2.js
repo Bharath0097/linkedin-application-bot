@@ -669,25 +669,16 @@ function BankImportPage() {
   const [tab, setTab] = useState('open');
   const [q, setQ] = useState('');
   const [pick, setPick] = useState(null); // {row, k}
+  const [busy, setBusy] = useState(false);
   const fileRef = useRef();
   const today = dkey();
   const list = rows.docs.filter(r => (tab === 'all' || (tab === 'open' ? !r.m : !!r.m)) && (!acct || r.acct === acct) && (!q || (r.desc + ' ' + r.ref).toLowerCase().includes(q.toLowerCase())));
   const openCount = rows.docs.filter(r => !r.m).length;
+  // v83: the server adds the payment under its write lock (two quick matches, or two people, no longer overwrite each other)
   const matchInv = async (row, d, note) => {
-    const amt = r2(+row.a);
-    const paid = r2((+d.paid || 0) + amt);
-    const st = paid >= d.total - 0.005 ? 'paid' : 'part';
-    const now = Date.now();
-    await dbMerge(`inv/${d.id}`, {
-      paid,
-      st,
-      pays: [...(d.pays || []), { a: amt, dt: row.dt, m: 'Bank transfer', ref: row.ref || row.desc.slice(0, 40), at: now, bank: row.id }],
-      log: [...(d.log || []), { t: now, who: (P.prof && P.prof.n) || '', ev: `Payment matched from the bank statement: ${fmtMoney(amt, d.cur)}${row.ref ? ' (' + row.ref + ')' : ''}`, ip: '' }],
-      u: now,
-    });
-    if (d.cid && d.st !== 'draft') await dbMerge(`pub/${d.cid}/inv/${d.id}`, { paid, st, u: now });
-    await dbMerge(`org/acct/bank/${row.id}`, { m: { k: 'inv', id: d.id, n: d.num, at: now, note: note || '' }, u: now });
-    toast(st === 'paid' ? `${d.num} marked paid.` : `Part payment recorded on ${d.num}.`);
+    const r = await api('acct_bank_match', { row: row.id, inv: d.id, note: note || '' });
+    Sync.kick();
+    toast(r.st === 'paid' ? `${r.num} marked paid.` : `Part payment recorded on ${r.num}.`);
   };
   const matchExp = async (row, x) => {
     const now = Date.now();
@@ -707,12 +698,19 @@ function BankImportPage() {
     if (!confirm('Delete this bank row?')) return;
     await dbDel(`org/acct/bank/${row.id}`);
   };
+  // one match at a time: the buttons wait until the last one is saved
+  const busyRef = useRef(false);
   const act = fn => async (...a) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await fn(...a);
     } catch (e) {
       toast(errText(e), true);
     }
+    busyRef.current = false;
+    setBusy(false);
   };
   const exportCsv = async () => {
     try {
@@ -773,11 +771,11 @@ function BankImportPage() {
                         <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                           ${
                             r.m
-                              ? html`<button type="button" className="btn ghost sm" onClick=${() => act(unmatch)(r)}>Unmatch</button>`
-                              : html`${s && html`<button type="button" className="btn go sm" onClick=${() => (s.k === 'inv' ? act(matchInv)(r, s.d) : act(matchExp)(r, s.d))}>Match</button>`}
+                              ? html`<button type="button" className="btn ghost sm" disabled=${busy} onClick=${() => act(unmatch)(r)}>Unmatch</button>`
+                              : html`${s && html`<button type="button" className="btn go sm" disabled=${busy} onClick=${() => (s.k === 'inv' ? act(matchInv)(r, s.d) : act(matchExp)(r, s.d))}>Match</button>`}
                                   <button type="button" className="btn ghost sm" onClick=${() => setPick({ row: r })}>Choose…</button>`
                           }
-                          <button type="button" className="btn ghost sm icon" aria-label="Delete row" onClick=${() => act(del)(r)}><${Icon} n="trash" /></button>
+                          <button type="button" className="btn ghost sm icon" aria-label="Delete row" disabled=${busy} onClick=${() => act(del)(r)}><${Icon} n="trash" /></button>
                         </div></td>
                       </tr>`;
                   })}

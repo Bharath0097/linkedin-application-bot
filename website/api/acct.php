@@ -34,6 +34,8 @@ function acctSettings(): array
     $out['prefix'] = preg_replace('/[^A-Za-z0-9\-]/', '', (string) $out['prefix']) ?: 'INV';
     $out['remind'] = array_values(array_unique(array_map('intval', array_filter((array) $out['remind'], 'is_numeric'))));
     sort($out['remind']);
+    // v83: the reminder copy address is only ever a list of valid emails (it goes into the Cc header)
+    $out['remindCc'] = implode(', ', array_filter(array_map('trim', explode(',', str_replace(["\r", "\n"], ',', (string) $out['remindCc']))), fn($x) => (bool) filter_var($x, FILTER_VALIDATE_EMAIL)));
     return $out;
 }
 function acctInvNext(): string
@@ -382,6 +384,75 @@ function acctRoute(string $r, string $method, array $b): never
                 $added++;
             }
             ok(['added' => $added, 'skipped' => $skipped]);
+        /* v83: one bank deposit recorded on one invoice, read and written under the write lock, so two quick matches
+         * (or two people matching at once) no longer rebuild the payments from a stale copy and lose one. */
+        case 'acct_bank_match':
+            $u = acctStaff();
+            $rid = (string) preg_replace('/[^A-Za-z0-9_\-]/', '', str($b, 'row', 40));
+            $iid = (string) preg_replace('/[^A-Za-z0-9_\-]/', '', str($b, 'inv', 40));
+            $note = str($b, 'note', 200);
+            if ($rid === '' || $iid === '' || !can('inv/' . $iid, 'w') || !can('org/acct/bank/' . $rid, 'w')) {
+                fail(403, 'forbidden', 'You can\'t record this payment.');
+            }
+            [$res, $before, $after] = dbBatch(function () use ($rid, $iid, $note, $u) {
+                nextSeq(); // a write first, so the lock is held before anything is read (SQLite and MySQL)
+                $row = docGet('org/acct/bank/' . $rid);
+                if (!$row) {
+                    fail(404, 'not_found', 'No such bank row.');
+                }
+                if (!empty($row->m)) {
+                    fail(409, 'already_matched', 'This bank row is already matched. The list will refresh.');
+                }
+                $inv = docGet('inv/' . $iid);
+                if (!$inv) {
+                    fail(404, 'not_found', 'Invoice not found.');
+                }
+                $amt = round((float) ($row->a ?? 0), 2);
+                if (!($amt > 0)) {
+                    fail(400, 'invalid_argument', 'Only money in can be matched to an invoice.');
+                }
+                $before = json_decode(json_encode($inv));
+                $now = now();
+                $cur = (string) ($inv->cur ?? 'USD');
+                $ref = (string) ($row->ref ?? '');
+                $paid = round((float) ($inv->paid ?? 0) + $amt, 2);
+                $st = $paid >= (float) ($inv->total ?? 0) - 0.005 ? 'paid' : 'part';
+                $wasDraft = (string) ($inv->st ?? '') === 'draft';
+                $pays = array_values((array) ($inv->pays ?? []));
+                $pays[] = (object) ['a' => $amt, 'dt' => (string) ($row->dt ?? ''), 'm' => 'Bank transfer', 'ref' => $ref !== '' ? $ref : mb_substr((string) ($row->desc ?? ''), 0, 40), 'at' => $now, 'bank' => $rid];
+                $log = array_values((array) ($inv->log ?? []));
+                $log[] = (object) ['t' => $now, 'who' => (string) $u['name'], 'ev' => 'Payment matched from the bank statement: ' . money($amt, $cur) . ($ref !== '' ? ' (' . $ref . ')' : ''), 'ip' => ''];
+                $after = json_decode(json_encode($inv));
+                $after->paid = $paid;
+                $after->st = $st;
+                $after->pays = $pays;
+                $after->log = $log;
+                $after->u = $now;
+                // closed periods stay closed (a payment dated after the close is allowed, as with any record write)
+                booksGuard('inv/' . $iid, (object) ['paid' => $paid, 'st' => $st, 'pays' => $pays, 'log' => $log, 'u' => $now], $after);
+                $rowAfter = json_decode(json_encode($row));
+                $rowAfter->m = (object) ['k' => 'inv', 'id' => $iid, 'n' => (string) ($inv->num ?? $iid), 'at' => $now, 'note' => $note];
+                $rowAfter->u = $now;
+                booksGuard('org/acct/bank/' . $rid, (object) ['m' => $rowAfter->m, 'u' => $now], $rowAfter);
+                docSet('inv/' . $iid, $after);
+                if (!empty($after->cid) && !$wasDraft) {
+                    $pp = 'pub/' . $after->cid . '/inv/' . $iid;
+                    $pub = docGet($pp);
+                    if ($pub) {
+                        $pub->paid = $paid;
+                        $pub->st = $st;
+                        $pub->u = $now;
+                        docSet($pp, $pub);
+                    } else {
+                        docSet($pp, invMirror($after, $iid));
+                    }
+                }
+                docSet('org/acct/bank/' . $rid, $rowAfter);
+                return [['st' => $st, 'paid' => $paid, 'num' => (string) ($inv->num ?? $iid)], $before, $after];
+            });
+            require_once __DIR__ . '/payroll.php';
+            auditLog('change', 'inv/' . $iid, 'Record changed', auditDiff($before, $after));
+            ok($res);
         case 'acct_cron':
             // "run the scheduled jobs now": recurring invoices due today and scheduled reminders
             acctStaff();

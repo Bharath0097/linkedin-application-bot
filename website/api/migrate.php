@@ -665,15 +665,32 @@ function migRoute(string $r, array $b): never
             $old = migConn($src);
             $in = is_array($b['cred'] ?? null) ? $b['cred'] : [];
             $cred = [];
+            // v83: a kept secret is reused only for the same address and account, so a changed address cannot
+            // carry it to another host; the Salesforce address must be a Salesforce one
+            $kept = false;
+            $moved = '';
             foreach ($S[$src]['f'] as [$fk, $fl, $ft]) {
                 $v = trim((string) ($in[$fk] ?? ''));
                 if ($v === '' && $ft === 'secret' && $old) {
                     $v = (string) ($old['cred'][$fk] ?? '');
+                    $kept = $kept || $v !== '';
+                }
+                if ($ft !== 'secret' && $old && $moved === '' && $v !== (string) ($old['cred'][$fk] ?? '')) {
+                    $moved = $fl;
                 }
                 if ($ft === 'dc' && !isset(MIG_ZDC[$v])) {
                     $v = 'com';
                 }
+                if ($src === 'salesforce' && $fk === 'domain' && $v !== '') {
+                    $v = strtolower(trim((string) preg_replace('#^https?://#i', '', $v), '/'));
+                    if (!preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)*\.(salesforce\.com|salesforce\.mil|force\.com|sfcrmproducts\.cn)$/', $v)) {
+                        fail(400, 'invalid_argument', 'Enter your Salesforce My Domain address, like yourcompany.my.salesforce.com.');
+                    }
+                }
                 $cred[$fk] = mb_substr($v, 0, 2000);
+            }
+            if ($kept && $moved !== '') {
+                fail(400, 'invalid_argument', 'You changed "' . $moved . '": enter the secret keys again too (kept keys are only reused for the same account).');
             }
             if (in_array($src, ['zohocrm', 'zohorecruit'], true)) {
                 // the grant code from Zoho's API console is changed for a lasting refresh token now (it works once)

@@ -2305,7 +2305,7 @@ function AdminWebsite({ q }) {
                               <a href=${'mailto:' + x.e}>
                                 ${x.e}
                               </a>
-                              ${x.ph ? ', ' + x.ph : ''}${x.co ? ', ' + x.co : ''}${x.sv ? '. Service: ' + x.sv : ''}${x.jt ? '. Role: ' + x.jt : ''}${x.li ? html`. <a href=${x.li} target="_blank" rel="noopener">Profile link</a>` : ''}
+                              ${x.ph ? ', ' + x.ph : ''}${x.co ? ', ' + x.co : ''}${x.sv ? '. Service: ' + x.sv : ''}${x.jt ? '. Role: ' + x.jt : ''}${x.li ? html`. <a href=${/^https?:\/\//i.test(x.li) ? x.li : 'https://' + x.li} target="_blank" rel="noopener">Profile link</a>` : ''}
                             </div>
                             ${x.msg && html`<p style=${{ marginTop: 6, fontSize: 15, whiteSpace: 'pre-wrap' }}>${x.msg}</p>`}
                             ${

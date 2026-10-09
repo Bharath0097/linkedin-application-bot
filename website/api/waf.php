@@ -70,7 +70,7 @@ const WAF_SKIP_BODY = ['unsub', 'mail_webhook', 'mail_inbound', 'mail_postal_hoo
 // decoy routes: the portal has none of these, so a request for one is a scanner guessing
 const WAF_DECOYS = ['phpinfo', 'debug', 'shell', 'cmd', 'eval', 'exec', 'env', 'dump', 'sql', 'adminer', 'install', 'setup', 'upgrade', 'backup_download', 'admin_backup', 'admin_login', 'config', 'wp_login', 'xmlrpc', 'phpmyadmin'];
 // public routes where a blocked country is checked even without Cloudflare (one cached location lookup per address)
-const WAF_GEO_ROUTES = ['login', 'register', 'pw_forgot', 'public_contact', 'chat', 'public_share', 'vms_post', 'pub_support_create', 'ws_signup', 'sso_start', 'mfa_verify', 'pk_auth_options'];
+const WAF_GEO_ROUTES = ['login', 'register', 'pw_forgot', 'public_contact', 'chat', 'ai_visitor', 'public_share', 'vms_post', 'pub_support_create', 'ws_signup', 'sso_start', 'mfa_verify', 'pk_auth_options'];
 
 /**
  * The signatures: [id, family, points, pattern, where]. Patterns run on the decoded, lower-cased text; 'c' runs on
@@ -526,9 +526,12 @@ function wafScoreOf(string $ip): array
  */
 function wafPoints(string $ip, float $pts, string $rule, string $cc = ''): float
 {
-    if ($ip === '' || $pts <= 0) {
+    // v83: a request another web site made through a visitor's browser never scores (or bans) the visitor's address
+    if ($ip === '' || $pts <= 0 || fwCrossSite()) {
         return 0.0;
     }
+    $real = $ip;
+    $ip = ipBucket($ip); // v83: an IPv6 /64 is scored and banned as one address (rotating within it no longer escapes)
     try {
         $c = wafCfg();
         [$score, $row] = wafScoreOf($ip);
@@ -540,7 +543,7 @@ function wafPoints(string $ip, float $pts, string $rule, string $cc = ''): float
             $bans = 0;
         }
         $ban = 0;
-        if ($c['on'] && $c['mode'] !== 'watch' && $score >= (float) $c['banAt'] && !fwAllowed($ip) && !fwBlocked($ip)) {
+        if ($c['on'] && $c['mode'] !== 'watch' && $score >= (float) $c['banAt'] && !fwAllowed($real) && !fwBlocked($real)) {
             $ban = WAF_BAN_STEPS[min($bans, count(WAF_BAN_STEPS) - 1)];
             $bans++;
             $banAt = $t;
@@ -750,7 +753,7 @@ function wafStrike(string $kind): void
 /** Counts one refused/probing request against the address, over the behavioral window. */
 function wafNoteProbe(string $ip): void
 {
-    if ($ip === '' || !function_exists('guardCount')) {
+    if ($ip === '' || !function_exists('guardCount') || fwCrossSite()) {
         return;
     }
     $c = wafCfg();
@@ -758,7 +761,7 @@ function wafNoteProbe(string $ip): void
         return;
     }
     try {
-        guardCount('wafprobe:' . $ip, max(1, (int) $c['probeWindow']) * 60, 1);
+        guardCount('wafprobe:' . ipBucket($ip), max(1, (int) $c['probeWindow']) * 60, 1);
     } catch (Throwable $e) {
         // counting never blocks a request
     }
@@ -776,16 +779,17 @@ function wafBehavior(string $ip, string $r, bool $signed, bool $allowed): void
         return;
     }
     $watch = $c['mode'] === 'watch';
+    $key = ipBucket($ip); // v83: counted per IPv6 /64
     try {
-        $n = guardCount('wafprobe:' . $ip, max(1, (int) $c['probeWindow']) * 60, 0);
-        if ($n >= max(4, (int) $c['probeMax']) && !throttleHit('wafbhv:probe:' . $ip, 1, 60)) {
+        $n = guardCount('wafprobe:' . $key, max(1, (int) $c['probeWindow']) * 60, 0);
+        if ($n >= max(4, (int) $c['probeMax']) && !throttleHit('wafbhv:probe:' . $key, 1, 60)) {
             $pts = min(20, 8 + intdiv(max(0, $n - (int) $c['probeMax']), 5) * 4);
             wafLogRow($watch ? 'watch' : 'log', $pts, ['bhv-probe'], 'address', $n . ' refused or probing requests in ' . $c['probeWindow'] . ' min');
             wafPoints($ip, (float) $pts, 'bhv-probe');
         }
         if ($r === 'login') {
-            $f = guardCount('guard:ipfail:' . $ip, 900, 0);
-            if ($f >= max(3, (int) $c['stuffMax']) && !throttleHit('wafbhv:stuff:' . $ip, 1, 60)) {
+            $f = guardCount('guard:ipfail:' . $key, 900, 0);
+            if ($f >= max(3, (int) $c['stuffMax']) && !throttleHit('wafbhv:stuff:' . $key, 1, 60)) {
                 $pts = min(20, 6 + intdiv(max(0, $f - (int) $c['stuffMax']), 5) * 3);
                 wafLogRow($watch ? 'watch' : 'log', $pts, ['bhv-stuffing'], 'login', $f . ' wrong sign-ins from this address in 15 min');
                 wafPoints($ip, (float) $pts, 'bhv-stuffing');
@@ -863,7 +867,7 @@ function wafBrief(int $hours = 24): array
     $s->execute([$since]);
     $hl = max(1, (int) wafCfg()['halfLife']) * 3600000;
     foreach ($s->fetchAll() as $x) {
-        [$score, $row] = wafScoreOf((string) $x['ip']);
+        [$score, $row] = wafScoreOf(ipBucket((string) $x['ip']));
         $b = fwBlocked((string) $x['ip']);
         $top[] = ['ip' => (string) $x['ip'], 'n' => (int) $x['n'], 'max' => (int) $x['mx'], 'last' => (int) $x['last'], 'cc' => (string) ($x['cc'] ?: ($row['cc'] ?? '')), 'score' => round($score, 1), 'bans' => (int) ($row['bans'] ?? 0), 'blocked' => $b ? ($b['until'] ?: 0) : null, 'allowed' => fwAllowed((string) $x['ip'])];
     }
@@ -873,7 +877,7 @@ function wafBrief(int $hours = 24): array
     foreach ($s->fetchAll() as $x) {
         $sc = (float) $x['score'] * pow(0.5, max(0, now() - (int) $x['at']) / $hl);
         $ipx = (string) $x['ip'];
-        if (($sc >= 15 || (int) $x['bans'] >= 2) && !fwBlocked($ipx) && !fwAllowed($ipx) && $ipx !== clientIp()) {
+        if (($sc >= 15 || (int) $x['bans'] >= 2) && !fwBlocked($ipx) && !fwAllowed($ipx) && $ipx !== ipBucket(clientIp())) {
             $suggest[] = ['ip' => $ipx, 'score' => round($sc, 1), 'bans' => (int) $x['bans'], 'hits' => (int) $x['hits'], 'rule' => (string) $x['rule'], 'why' => WAF_RULE_NAMES[(string) $x['rule']] ?? (string) $x['rule'], 'cc' => (string) $x['cc'], 'minutes' => (int) $x['bans'] >= 3 ? 43200 : ((int) $x['bans'] >= 2 ? 10080 : 1440)];
         }
         if (count($suggest) >= 8) {
@@ -907,7 +911,7 @@ function wafBrief(int $hours = 24): array
 /** Everything known about one address: its score, bans, what it sent, and who signed in from it. */
 function wafIpProfile(string $ip, bool $geo = false): array
 {
-    [$score, $row] = wafScoreOf($ip);
+    [$score, $row] = wafScoreOf(ipBucket($ip));
     $p = wafdb();
     $s = $p->prepare('SELECT id, at, route, uid, act, score, rules, field, sample, ua, cc, method FROM waf_log WHERE ip = ? ORDER BY at DESC LIMIT 60');
     $s->execute([$ip]);
@@ -936,7 +940,7 @@ function wafIpProfile(string $ip, bool $geo = false): array
         'cc' => (string) ($row['cc'] ?? ''),
         'blocked' => $b,
         'allowed' => fwAllowed($ip),
-        'you' => $ip === clientIp(),
+        'you' => ipBucket($ip) === ipBucket(clientIp()),
         'waf' => $waf,
         'fw' => $fw,
         'people' => $people,
@@ -1056,7 +1060,7 @@ function wafRoute(string $r, array $b): never
         }
         case 'waf_forgive': {
             $ip = trim(str($b, 'ip', 64));
-            wafdb()->prepare('DELETE FROM waf_ip WHERE ip = ?')->execute([$ip]);
+            wafdb()->prepare('DELETE FROM waf_ip WHERE ip IN (?, ?)')->execute([$ip, ipBucket($ip)]);
             audit('settings', 'Firewall score cleared for an address', $ip, [], $me);
             ok(['ok' => true]);
         }

@@ -378,7 +378,7 @@ function SignPanel({ d, mine, signer, tok, me, onDone, reload }) {
   const myFields = (d.fields || []).filter(f => f.s === me);
   const latest = d.sfid || d.fid;
   const pdfLike = d.sfid || d.fty === 'application/pdf';
-  const pv = useEsPages(mine && myFields.length && pdfLike ? fileUrl(base, latest, false, tok) : null);
+  const pv = useEsPages(mine && myFields.length && pdfLike ? fileUrl(base, latest, false) : null);
   useEffect(() => {
     if (mine) api('sig_viewed', { id: d.id, tok: tok || undefined }).catch(() => {});
   }, [d.id]);
@@ -405,7 +405,7 @@ function SignPanel({ d, mine, signer, tok, me, onDone, reload }) {
     try {
       const cur = again || d;
       const onCopy = cur.sfid || cur.fid;
-      const res = await fetch(fileUrl(base, onCopy, false, tok), { credentials: 'same-origin' });
+      const res = await fetch(fileUrl(base, onCopy, false), { credentials: 'same-origin' });
       if (!res.ok) throw { message: 'The document could not be loaded.' };
       const bytes = new Uint8Array(await res.arrayBuffer());
       const when = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + ' (' + Intl.DateTimeFormat().resolvedOptions().timeZone + ')';
@@ -498,13 +498,13 @@ function SignPanel({ d, mine, signer, tok, me, onDone, reload }) {
           ? pv.pages
             ? html`<div className="esdoc"><${EsPageView} pages=${pv.pages} fields=${myFields} show=${fieldShow} only=${me} /></div>`
             : pv.err
-              ? html`<div className="docview"><iframe src=${fileUrl(base, latest, false, tok)} title="Document to sign" /></div>`
+              ? html`<div className="docview"><iframe src=${fileUrl(base, latest, false)} title="Document to sign" /></div>`
               : html`<${Spinner} label="Opening the pages…" />`
           : html`<div className="docview">
-              ${isPdf || d.sfid ? html`<iframe src=${fileUrl(base, latest, false, tok)} title="Document to sign" />` : html`<img src=${fileUrl(base, d.fid, false, tok)} alt="Document to sign" />`}
+              ${isPdf || d.sfid ? html`<iframe src=${fileUrl(base, latest, false)} title="Document to sign" />` : html`<img src=${fileUrl(base, d.fid, false)} alt="Document to sign" />`}
             </div>`
       }
-      <p className="muted small">Can't see it? <a href=${fileUrl(base, latest, false, tok)} target="_blank" rel="noopener">Open the document in a new tab</a> or <a href=${fileUrl(base, latest, true, tok)}>download it</a>.${d.sfid && d.st === 'sent' ? ' This copy already carries the earlier signatures.' : ''}</p>
+      <p className="muted small">Can't see it? <a href=${fileUrl(base, latest, false)} target="_blank" rel="noopener">Open the document in a new tab</a> or <a href=${fileUrl(base, latest, true)}>download it</a>.${d.sfid && d.st === 'sent' ? ' This copy already carries the earlier signatures.' : ''}</p>
       ${
         expired
           ? html`<div className="note"><span>This request has expired. Ask ${d.byn} to send it again.</span></div>`
@@ -560,7 +560,7 @@ function SignPanel({ d, mine, signer, tok, me, onDone, reload }) {
         d.sfid &&
         html`<div className="note ok">
             <span><b>Completed ${fmtDay(d.done)}.</b></span>
-            <div className="actions"><a className="btn sm" href=${fileUrl(base, d.sfid, true, tok)}>Download signed copy</a></div>
+            <div className="actions"><a className="btn sm" href=${fileUrl(base, d.sfid, true)}>Download signed copy</a></div>
           </div>`
       }
     </div>`;
@@ -580,7 +580,7 @@ function SignModal({ d, onClose }) {
 function SignPublic({ id, tok }) {
   const [d, setD] = useState(undefined);
   const get = () =>
-    api('sig_public_get&id=' + encodeURIComponent(id) + '&tok=' + encodeURIComponent(tok)).then(r => {
+    api('sig_public_get', { id, tok }).then(r => {
       setD(r.d);
       return r.d;
     });

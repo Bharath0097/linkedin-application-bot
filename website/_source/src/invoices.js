@@ -641,15 +641,17 @@ function RecordPayment({ d, onClose }) {
     }
     setBusy(true);
     try {
-      const paid = r2((+d.paid || 0) + a);
-      const st = paid >= d.total - 0.005 ? 'paid' : 'part';
+      // v83: built from the invoice as saved now, not as the page loaded it (a bank match made since then is kept)
+      const c = (await dbGet(`inv/${d.id}`)) || d;
+      const paid = r2((+c.paid || 0) + a);
+      const st = paid >= c.total - 0.005 ? 'paid' : 'part';
       const now = Date.now();
       await dbMerge(`inv/${d.id}`, {
         paid,
         st,
-        pays: [...(d.pays || []), { a, dt: f.dt, m: f.m, ref: f.ref.trim(), at: now }],
+        pays: [...(c.pays || []), { a, dt: f.dt, m: f.m, ref: f.ref.trim(), at: now }],
         log: [
-          ...(d.log || []),
+          ...(c.log || []),
           {
             t: now,
             who: (P.prof && P.prof.n) || '',
@@ -659,7 +661,7 @@ function RecordPayment({ d, onClose }) {
         ],
         u: now,
       });
-      if (d.cid && d.st !== 'draft') await dbMerge(`pub/${d.cid}/inv/${d.id}`, { paid, st, u: now });
+      if (c.cid && c.st !== 'draft') await dbMerge(`pub/${c.cid}/inv/${d.id}`, { paid, st, u: now });
       toast(st === 'paid' ? 'Invoice marked paid.' : 'Payment recorded.');
       onClose();
     } catch (e) {

@@ -116,10 +116,17 @@ function pwProblem(string $pw, array $ctx): string
     }
     return '';
 }
+/** Whether the shorter 'with two-step sign-in' password length applies: the person has a second step, or must set one
+ *  up at their next sign-in. v83: not while the grace period is open (they could then sign in with the password alone). */
+function pwMfaApplies(array $u): bool
+{
+    $u += ['roles' => rolesOf($u)];
+    return (bool) mfaMethods($u) || (authMfaRequired($u) && now() >= authMfaDue());
+}
 /** For the forms: how long a password must be for this person (or a new account). */
 function pwPolicyFor(?array $u): array
 {
-    $mfa = $u ? (bool) mfaMethods($u) || authMfaRequired($u) : false;
+    $mfa = $u ? pwMfaApplies($u) : false;
     return ['min' => pwMinFor($mfa), 'minMfa' => pwMinFor(true), 'minSolo' => pwMinFor(false), 'max' => pwMaxLen(), 'breached' => !empty(authCfg()['breached'])];
 }
 
@@ -1079,13 +1086,16 @@ function authRoute(string $r, array $b): never
                 fail(400, 'bad_token', 'This link has expired or was already used. Ask for a new one.');
             }
             $pw = (string) ($b['password'] ?? '');
-            $why = pwProblem($pw, ['email' => $u['email'], 'name' => $u['name'], 'mfa' => (bool) mfaMethods($u + ['roles' => rolesOf($u)]) || authMfaRequired($u + ['roles' => rolesOf($u)]), 'check' => true]);
+            $why = pwProblem($pw, ['email' => $u['email'], 'name' => $u['name'], 'mfa' => pwMfaApplies($u), 'check' => true]);
             if ($why !== '') {
                 fail(400, 'weak_password', $why);
             }
             db()->prepare('UPDATE users SET pass = ? WHERE id = ?')->execute([pwHash($pw), (string) $u['id']]);
             tokUse((string) $row['h']);
-            authUserSet((string) $u['id'], ['must_pw' => 0, 'why' => '', 'locked_until' => 0, 'fails' => 0, 'pw_at' => now(), 'pw_check' => now()]);
+            // v83: the link came from the address's own mailbox, so an unconfirmed sign-up (selfReg) is confirmed now
+            $ad = json_decode((string) authUser((string) $u['id'])['data'], true) ?: [];
+            unset($ad['selfReg']);
+            authUserSet((string) $u['id'], ['must_pw' => 0, 'why' => '', 'locked_until' => 0, 'fails' => 0, 'pw_at' => now(), 'pw_check' => now(), 'data' => json_encode((object) $ad)]);
             $n = sessRevokeAll((string) $u['id'], 'password reset');
             audit('auth', $row['kind'] === 'invite' ? 'Password chosen from invitation' : 'Password reset', (string) $u['email'], ['sessions' => $n], $u);
             if ($row['kind'] !== 'invite') {

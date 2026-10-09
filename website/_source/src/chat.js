@@ -30,6 +30,7 @@ const ChatStore = {
   busy: false,
   started: false,
   err: null,
+  gen: 0, // v83: bumped when the signed-in person changes; answers for the previous person are thrown away
   sub(f) {
     this.subs.add(f);
     return () => this.subs.delete(f);
@@ -50,9 +51,31 @@ const ChatStore = {
     }
     return this.bootP;
   },
+  /** v83: another person (or nobody) signed in on this tab: forget the last person's conversations, messages and drafts.
+   *  subs and open belong to mounted views, which remove themselves as they unmount. */
+  reset() {
+    clearTimeout(this.t);
+    this.gen++;
+    this.boot = null;
+    this.bootP = null;
+    this.people = new Map();
+    this.names = new Map();
+    this.convs = [];
+    this.h = '';
+    this.online = new Set();
+    this.views = new Map();
+    this.focus = '';
+    this.busy = false;
+    this.started = false;
+    this.err = null;
+    ChatDrafts.clear();
+    this.emit();
+  },
   async load() {
+    const gen = this.gen;
     try {
       const r = await api('chat_boot', {});
+      if (gen !== this.gen) return;
       this.boot = r;
       this.people = new Map(r.people.map(p => [p.id, p]));
       this.people.set(r.me.id, { id: r.me.id, n: r.me.n, k: r.me.k, t: 'You' });
@@ -60,6 +83,7 @@ const ChatStore = {
       this.online = new Set(r.online || []);
       this.err = null;
     } catch (e) {
+      if (gen !== this.gen) return;
       this.err = e;
       this.started = false; // a later page opens it again
     }
@@ -115,8 +139,10 @@ const ChatStore = {
     if (v.loading) return;
     v.loading = true;
     v.err = '';
+    const gen = this.gen;
     try {
       const r = await api('chat_history', { conv: id });
+      if (gen !== this.gen) return;
       this.learn(r.names);
       v.msgs = new Map(r.msgs.map(m => [m.s, m]));
       v.since = Math.max(r.top || 0, ...r.msgs.map(m => m.v));
@@ -130,6 +156,7 @@ const ChatStore = {
       v.newFrom = first ? first.s : 0;
       v.loaded = true;
     } catch (e) {
+      if (gen !== this.gen) return;
       v.err = errText(e);
     }
     v.loading = false;
@@ -140,9 +167,11 @@ const ChatStore = {
     if (!v.more || v.loadingOlder) return 0;
     v.loadingOlder = true;
     let n = 0;
+    const gen = this.gen;
     try {
       const before = Math.min(...v.msgs.keys());
       const r = await api('chat_history', { conv: id, before });
+      if (gen !== this.gen) return 0;
       this.learn(r.names);
       r.msgs.forEach(m => v.msgs.set(m.s, m));
       v.more = r.more;
@@ -219,8 +248,10 @@ const ChatStore = {
     this.busy = true;
     const id = this.open.has(this.focus) ? this.focus : [...this.open.keys()][0] || '';
     const v = id ? this.views.get(id) : null;
+    const gen = this.gen;
     try {
       const r = await api('chat_poll', { h: this.h, open: v && v.loaded ? id : '', since: v ? v.since : 0 });
+      if (gen !== this.gen) return; // reset() already cleared busy and the timer; a new start() polls again
       this.h = r.h;
       if (r.convs) this.setConvs(r.convs);
       this.online = new Set(r.online || []);
@@ -230,6 +261,7 @@ const ChatStore = {
       if (v) v.typing = r.typing || [];
       this.emit();
     } catch (e) {
+      if (gen !== this.gen) return;
       /* the next poll tries again */
     }
     this.busy = false;
@@ -237,7 +269,9 @@ const ChatStore = {
   },
   /** Conversation actions answer with the new list. */
   async act(route, body) {
+    const gen = this.gen;
     const r = await api(route, body);
+    if (gen !== this.gen) return r;
     if (r.convs) {
       this.convs = r.convs;
       this.h = '';
@@ -249,6 +283,7 @@ const ChatStore = {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && ChatStore.started) ChatStore.schedule(300);
 });
+window.addEventListener('se-who', () => ChatStore.reset());
 function useChat() {
   const [, setT] = useState(0);
   useEffect(() => ChatStore.sub(() => setT(t => t + 1)), []);
@@ -1095,8 +1130,8 @@ function MessagesButton({ href }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     S.href = href;
-    S.start();
-  }, [href]);
+    if (Cap.uid) S.start();
+  }, [href, Cap.uid]); // v83: and again for the next person signed in on this tab (the store was reset)
   useEffect(() => {
     const other = e => e.detail !== 'chat' && setOpen(false);
     window.addEventListener('se-panel', other);

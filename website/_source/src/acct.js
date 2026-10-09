@@ -945,7 +945,8 @@ function PayrollRuns() {
     loadPayInputs(emps, cyc, mk)
       .then(list => {
         if (!live) return;
-        payCacheSet(key, list);
+        // v83: the quick-open copy keeps only what the table needs (no date of birth, address or contacts)
+        payCacheSet(key, list.map(x => ({ att: x.att, prior: x.prior, stub: x.stub, rec: { bank: String(obj(x.rec).bank || '') } })));
         build(list);
         setStale(false);
       })

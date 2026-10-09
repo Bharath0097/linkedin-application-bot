@@ -679,7 +679,8 @@ function mktRoute(string $r, string $method, array $b): never
             ok(['rows' => $rows, 'vendors' => $vendors, 'autoApprove' => $S['autoApprove']]);
         case 'mkt_settings_save':
             $me = mktStaff();
-            if (userLevel($me) < 2) {
+            // v83: administrators and HR (as the message says), not bookkeepers
+            if (!hasRole($me, 'admin') && !hasRole($me, 'hr')) {
                 fail(403, 'forbidden', 'Administrators and HR change the marketplace settings.');
             }
             $d = docGet('org/mkt/x/settings') ?? new stdClass();

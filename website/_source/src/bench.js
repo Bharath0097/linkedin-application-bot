@@ -31,6 +31,10 @@ const bdBootLoad = force => {
     });
   return BD_BOOT_P;
 };
+// v83: another person signed in on this tab: the next Bench desk asks the server for their boot, not the last one's
+window.addEventListener('se-who', () => {
+  BD_BOOT_P = null;
+});
 function useBdBoot() {
   const [st, setSt] = useState({ b: null, err: null });
   const load = force =>

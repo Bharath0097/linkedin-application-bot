@@ -41,8 +41,8 @@ const GUARD_DEFAULTS = [
     'staffNets' => '', // network addresses staff may sign in from (empty = anywhere)
     'av' => true, // scan uploads with ClamAV when api/config.php names it
 ];
-// forms visitors send without signing in: each needs a solved bot check
-const GUARD_POW_FORMS = ['public_contact', 'register', 'chat', 'public_share', 'priv_request', 'sec_report', 'pw_forgot', 'vms_post', 'pub_support_create', 'pub_support_reply', 'ws_signup'];
+// forms visitors send without signing in: each needs a solved bot check (v83: 'ai_visitor' is the site assistant)
+const GUARD_POW_FORMS = ['public_contact', 'register', 'chat', 'public_share', 'priv_request', 'sec_report', 'pw_forgot', 'vms_post', 'pub_support_create', 'pub_support_reply', 'ws_signup', 'ai_visitor'];
 // routes other sites may call from a visitor's browser (the autofill bookmarklet, feeds, security.txt)
 const GUARD_XSITE_OK = ['apply_used', 'apply_resume', 'security_txt', 'jobs_feed'];
 // services that post to the site directly (no browser): they prove themselves with a signature instead
@@ -59,7 +59,10 @@ const GUARD_POW_MAX = ['normal' => 60000, 'strong' => 300000];
 // (v83: atc_save too: the Ceipal/Oorwin addresses decide where the stored ATS credentials are sent)
 const GUARD_REAUTH_ROUTES = [
     'admin_access', 'admin_feature_access', 'admin_role', 'admin_member_role', 'admin_manager', 'admin_status', 'admin_reset', 'admin_books_access',
-    'mail_settings_save', 'plaid_settings_save', 'qbo_settings_save', 'sso_settings_save', 'ai_settings_save', 'bill_settings_save', 'cx_save', 'src_save', 'src_dice_feed_mode', 'oorwin_login', 'oorwin_disconnect', 'atc_save', 'oorwin_import', 'vms_settings_save', 'vms_agent_run', 'vms_agent_retry', 'sec_save',
+    'mail_settings_save', 'plaid_settings_save', 'qbo_settings_save', 'sso_settings_save', 'ai_settings_save', 'bill_settings_save', 'cx_save', 'cx_auto', 'src_save', 'src_dice_feed_mode', 'oorwin_login', 'oorwin_disconnect', 'atc_save', 'oorwin_import', 'vms_settings_save', 'vms_agent_run', 'vms_agent_retry', 'sec_save',
+    // v83: the import connections (mig_save/mig_drop) like the other outside keys, and finishing an access review,
+    // which pauses and signs out every account marked Remove, like admin_status does for one
+    'mig_save', 'mig_drop', 'gov_rev_done',
     'ach_settings_save', 'dd_save', 'dd_release', 'pay_nacha',
     'ats_export', 'books_export', 'priv_export', 'priv_send_copy', 'priv_erase', 'priv_run', 'gov_audit_csv',
 ];
@@ -106,6 +109,9 @@ function guardCount(string $key, int $windowSec, int $inc = 1): int
     if (!$r || (int) $r['until'] < $t) {
         if ($inc > 0) {
             $p->prepare('REPLACE INTO throttle (k, n, until) VALUES (?,?,?)')->execute([$key, $inc, $t + $windowSec * 1000]);
+            if (random_int(1, 200) === 1) {
+                throttlePrune(); // v83: expired counters are removed now and then (lib.php)
+            }
         }
         return max(0, $inc);
     }
@@ -185,7 +191,7 @@ function guardPowReason(string $r, string $method): string
         if ((int) secKv('guard_attack', 0) > now()) {
             return 'attack';
         }
-        if (guardCount('guard:ipfail:' . $ip, 900, 0) >= max(1, (int) $c['powIpFails'])) {
+        if (guardCount('guard:ipfail:' . ipBucket($ip), 900, 0) >= max(1, (int) $c['powIpFails'])) { // v83: per IPv6 /64
             return 'fails';
         }
     }
@@ -214,7 +220,7 @@ function guardLoginFailed(): void
         return;
     }
     try {
-        guardCount('guard:ipfail:' . fwIp(), 900);
+        guardCount('guard:ipfail:' . ipBucket(fwIp()), 900); // v83: per IPv6 /64
         $n = guardCount('guard:fails', 600);
         if ($n >= max(5, (int) $c['powAttack']) && (int) secKv('guard_attack', 0) < now()) {
             secKvSet('guard_attack', now() + 30 * 60000);
@@ -271,6 +277,24 @@ function guardDlpRoute(string $r): void
     if ($u) {
         guardDlp($u, GUARD_DLP_ROUTES[$r], $r);
     }
+}
+/** v83: a candidate record (ats/<id>) read one at a time through the generic record routes (doc, batch) counts as a
+ *  profile opened; the ATS list itself (col) is not counted. In a batch ($soft) a paused person gets false, so only
+ *  that one entry is refused and the rest of the page keeps updating. */
+function guardDlpDoc(string $path, bool $soft = false): bool
+{
+    if ($path === 'ats/x' || !preg_match('#^ats/[A-Za-z0-9_\-]+$#', $path)) {
+        return true;
+    }
+    $u = currentUser();
+    if (!$u) {
+        return true;
+    }
+    if ($soft && !empty(guardCfg()['dlp']) && !hasRole($u, 'admin') && guardPaused((string) $u['id'])) {
+        return false;
+    }
+    guardDlp($u, 'profile', $path);
+    return true;
 }
 
 /* ---------- 5. staff networks ---------- */

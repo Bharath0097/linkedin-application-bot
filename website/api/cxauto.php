@@ -1377,7 +1377,8 @@ function cxDiscover(string $prov, string $base): array
         return [null, $found];
     }
     $api = cxApi($prov);
-    [$h] = cxAuth($prov, $api);
+    // v83: the saved sign-in goes only to the connection's own API host; another address is looked at without it
+    [$h] = cxApiHostOf($api, $base) ? cxAuth($prov, $api) : [[]];
     $origin = preg_match('#^(https?://[^/]+)#i', $base, $m) ? $m[1] : $base;
     $tries = [];
     foreach ([$base, $origin] as $root) {
@@ -2240,7 +2241,8 @@ function cxAutoRoute(array $u, string $prov, array $b): array
             fail(400, 'invalid_argument', 'Documents address: ' . $why);
         }
         $api = cxApi($prov);
-        [$h] = cxAuth($prov, $api);
+        // v83: the saved sign-in goes only to the connection's own API host; documents elsewhere are fetched without it
+        [$h] = cxApiHostOf($api, $url) ? cxAuth($prov, $api) : [[]];
         [$code, $body] = cxHttp('GET', $url, array_merge($h, ['Accept: application/json, application/yaml, text/yaml, text/html, */*']), null, 20);
         $looked[] = $url . ' → ' . ($code ?: 'no answer');
         if ($code === 200 && $body !== '') {

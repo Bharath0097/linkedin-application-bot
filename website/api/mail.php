@@ -782,6 +782,22 @@ function mailDeliver(array $m, ?SmtpSession $session = null): bool
             $m['reply'] = $dr;
         }
     }
+    // v83: Cc and Reply-To carry only valid addresses (no line breaks into the headers); the header, the envelope
+    // and the mail service's API all use the same cleaned values
+    $ccList = [];
+    foreach (explode(',', str_replace(["\r", "\n"], ',', $cc)) as $x) {
+        $x = trim($x);
+        if ($x !== '' && filter_var($x, FILTER_VALIDATE_EMAIL) && strcasecmp($x, $to) !== 0 && !in_array($x, $ccList, true)) {
+            $ccList[] = $x;
+        }
+    }
+    $cc = implode(', ', $ccList);
+    $m['cc'] = $cc;
+    $reply = trim(str_replace(["\r", "\n"], ' ', (string) ($m['reply'] ?? '')));
+    if ($reply !== '' && !filter_var($reply, FILTER_VALIDATE_EMAIL) && !(preg_match('/^[^<>]*<([^<>\s]+)>$/', $reply, $rm) && filter_var($rm[1], FILTER_VALIDATE_EMAIL))) {
+        $reply = '';
+    }
+    $m['reply'] = $reply;
     [$headers, $body] = buildMime(
         $fromName,
         $from,

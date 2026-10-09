@@ -536,6 +536,14 @@ const SnapCache = {
     } catch (e) {
       /* fine */
     }
+    // v83: the payroll page's quick-open copies (se_pay_*) go too at sign-out
+    try {
+      Object.keys(sessionStorage)
+        .filter(k => k.startsWith('se_pay_'))
+        .forEach(k => sessionStorage.removeItem(k));
+    } catch (e) {
+      /* fine */
+    }
   },
 };
 const Sync = {
@@ -1016,6 +1024,7 @@ function Lazy({ get, props, label, load }) {
 
 async function reloadCaps() {
   const booting = Cap.state === 'loading';
+  const wasUid = Cap.uid || null;
   try {
     // index.html starts the "me" request before app.js has arrived; the first boot uses that answer
     let early = null;
@@ -1132,6 +1141,8 @@ async function reloadCaps() {
   } catch (e) {
     Cap.state = 'none';
   }
+  // v83: another person (or nobody) is signed in now: stores that keep the last person's data in memory drop it
+  if (!booting && (Cap.uid || null) !== wasUid) window.dispatchEvent(new CustomEvent('se-who', { detail: Cap.uid || '' }));
   capNotify();
   return Cap;
 }
@@ -1159,6 +1170,8 @@ async function logout() {
   Sync.subs.clear();
   SnapCache.clearAll();
   SnapCache.load(null);
+  // v83: the Messages store, the Bench desk boot and the like forget this person even if the next "me" fails
+  window.dispatchEvent(new CustomEvent('se-who', { detail: '' }));
   await reloadCaps();
   location.hash = '#/';
 }
@@ -2505,7 +2518,7 @@ function FilePick({ onFiles, busy, progress, label, hint }) {
         ${label || 'Drop a file here, or choose one from your device.'}
         <br />
         <small className="muted">
-          ${hint || 'PDF, image, Excel (.xlsx), Word (.docx) or CSV, up to 5 MB.'}
+          ${hint || 'PDF, image, Word, Excel, PowerPoint, CSV, text, Markdown, JSON or zip, up to ' + Math.round(MAX_FILE / 1048576) + ' MB.'}
         </small>
       </p>
       <button type="button" className="btn ghost" disabled=${busy} onClick=${() => inp.current && inp.current.click()}>
@@ -2601,12 +2614,22 @@ function useHashRoute() {
   const raw = h.replace(/^#/, '') || '/';
   const [path, qs] = raw.split('?');
   const q = {};
+  // v83: a link with a broken escape (%E0, a lone %) keeps that part as typed instead of crashing the whole site
+  const dec = s => {
+    try {
+      return decodeURIComponent(s);
+    } catch (e) {
+      return s;
+    }
+  };
   (qs || '')
     .split('&')
     .filter(Boolean)
     .forEach(p => {
       const [k, v] = p.split('=');
-      q[decodeURIComponent(k)] = decodeURIComponent(v || '');
+      const key = dec(k);
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') return;
+      q[key] = dec(v || '');
     });
   return { path: path.replace(/\/+$/, '') || '/', q };
 }

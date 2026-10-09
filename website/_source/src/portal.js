@@ -733,7 +733,8 @@ function useClockActions() {
     const pos = g.pos || null;
     try {
       const r = await api('punch', { ev, pos, posErr: g.err || '' });
-      return { t: r.t, ip: r.ip, g: r.g || '', pos: r.pos || pos || null, posErr: pos ? '' : g.err || '' };
+      // v83: k is the server's signature over this punch; the attendance record keeps it (a stamp without it is marked edited)
+      return { t: r.t, ip: r.ip, g: r.g || '', pos: r.pos || null, posErr: pos ? '' : g.err || '', k: r.k || '' };
     } catch (e) {
       return { t: Date.now(), ip: '', g: '', pos, posErr: pos ? '' : g.err || '' };
     }
