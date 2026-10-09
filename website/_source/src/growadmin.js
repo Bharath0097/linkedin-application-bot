@@ -142,7 +142,7 @@ function ComplianceAdminPage({ q }) {
           <${CompliancePage} uid=${person} embedded />
         <//>`
       }
-      ${editRule && html`<${RuleEditModal} rule=${editRule} cats=${rules.cats} statuses=${rules.statuses} onClose=${() => setEditRule(null)} onSave=${r => { const items = rules.items.some(x => x.id === r.id) ? rules.items.map(x => (x.id === r.id ? r : x)) : [...rules.items, r]; saveRules(items); setEditRule(null); }} />`}
+      ${editRule && html`<${RuleEditModal} rule=${editRule} cats=${rules.cats} statuses=${rules.statuses} onClose=${() => setEditRule(null)} onSave=${r => { let items; if (editRule.id) items = rules.items.map(x => (x.id === editRule.id ? { ...r, id: editRule.id } : x)); else { const base = r.id || 'rule'; let id = base, n = 2; while (rules.items.some(x => x.id === id)) id = base.slice(0, 36) + '-' + n++; items = [...rules.items, { ...r, id }]; } saveRules(items); setEditRule(null); }} />`}
     </div>`;
 }
 
@@ -290,9 +290,12 @@ function CourseEditor({ course, ai, aiCourses, onClose, onSaved }) {
   const [c, setC] = useState(() => JSON.parse(JSON.stringify({ t: '', desc: '', cat: '', level: '', min: 30, pass: 70, cert: false, req: [], pub: false, ord: 50, mods: [], ...course })));
   const [sel, setSel] = useState(() => (course.mods && course.mods[0] && course.mods[0].ls[0] ? [0, 0] : null));
   const [busy, setBusy] = useState(false);
+  // v83: the AI calls below finish after the person may have kept editing, so their results are merged into the latest course (cRef / functional updates), never into the copy captured on click.
+  const cRef = useRef(c);
+  cRef.current = c;
   const set = (k, v) => setC(x => ({ ...x, [k]: v }));
-  const setMod = (mi, patch) => set('mods', c.mods.map((m, i) => (i === mi ? { ...m, ...patch } : m)));
-  const setLesson = (mi, li, patch) => setMod(mi, { ls: c.mods[mi].ls.map((l, j) => (j === li ? { ...l, ...patch } : l)) });
+  const setMod = (mi, patch) => setC(x => ({ ...x, mods: x.mods.map((m, i) => (i === mi ? { ...m, ...patch } : m)) }));
+  const setLesson = (mi, li, patch) => setC(x => ({ ...x, mods: x.mods.map((m, i) => (i !== mi ? m : { ...m, ls: m.ls.map((l, j) => (j === li ? { ...l, ...(typeof patch === 'function' ? patch(l) : patch) } : l)) })) }));
   const lesson = sel ? ((c.mods[sel[0]] || {}).ls || [])[sel[1]] : null;
   const save = async () => {
     if (!c.t.trim()) {
@@ -311,10 +314,18 @@ function CourseEditor({ course, ai, aiCourses, onClose, onSaved }) {
   };
   const genQuiz = async () => {
     if (!lesson || !lesson.body) return;
+    const [mi, li] = sel;
+    const lid = lesson.id;
     setBusy(true);
     try {
       const r = await api('learn_ai_quiz', { text: lesson.body, n: 5 });
-      setLesson(sel[0], sel[1], { quiz: [...(lesson.quiz || []), ...r.items] });
+      // add the questions to the lesson the text came from, as it is now (it may have moved or been removed meanwhile)
+      setC(x => {
+        let at = x.mods[mi] && x.mods[mi].ls[li] && x.mods[mi].ls[li].id === lid ? [mi, li] : null;
+        if (!at && lid) x.mods.some((m, i) => { const j = m.ls.findIndex(l => l.id === lid); if (j >= 0) at = [i, j]; return j >= 0; });
+        if (!at) return x;
+        return { ...x, mods: x.mods.map((m, i) => (i !== at[0] ? m : { ...m, ls: m.ls.map((l, j) => (j === at[1] ? { ...l, quiz: [...(l.quiz || []), ...r.items] } : l)) })) };
+      });
       toast(`${r.items.length} questions added - review them before publishing.`);
     } catch (e) {
       toast(errText(e), true);
@@ -347,7 +358,7 @@ function CourseEditor({ course, ai, aiCourses, onClose, onSaved }) {
                 <${Field} label="New module about"><input value=${aiMod.t} onInput=${e => setAiMod({ ...aiMod, t: e.target.value })} placeholder="e.g. Reporting a suspected breach" /><//>
                 <div className="actions">
                   <input type="number" min="1" max="6" value=${aiMod.n} onInput=${e => setAiMod({ ...aiMod, n: Number(e.target.value) })} style=${{ width: 70 }} aria-label="Lessons" /><span className="muted small">lessons</span>
-                  <button type="button" className="btn sm" disabled=${busy || !aiMod.t.trim()} onClick=${async () => { setBusy(true); try { const r = await api('learn_ai_module', { course: { t: c.t, desc: c.desc, level: c.level }, module: { t: aiMod.t, ls: [] }, lessons: aiMod.n, quiz: 4, puzzles: true }, { timeout: 180000 }); set('mods', [...c.mods, r.module]); setSel([c.mods.length, 0]); setAiMod(null); toast('Module written - review it before saving.'); } catch (e) { toast(errText(e), true); } setBusy(false); }}>${busy ? 'Writing…' : 'Write it'}</button>
+                  <button type="button" className="btn sm" disabled=${busy || !aiMod.t.trim()} onClick=${async () => { setBusy(true); try { const r = await api('learn_ai_module', { course: { t: c.t, desc: c.desc, level: c.level }, module: { t: aiMod.t, ls: [] }, lessons: aiMod.n, quiz: 4, puzzles: true }, { timeout: 180000 }); const at = cRef.current.mods.length; setC(x => ({ ...x, mods: [...x.mods, r.module] })); setSel([at, 0]); setAiMod(null); toast('Module written - review it before saving.'); } catch (e) { toast(errText(e), true); } setBusy(false); }}>${busy ? 'Writing…' : 'Write it'}</button>
                   <button type="button" className="btn ghost sm" onClick=${() => setAiMod(null)}>Cancel</button>
                 </div>
               </div>`
@@ -435,6 +446,8 @@ function LearningAdminPage({ q }) {
   const [build, setBuild] = useState(false);
   const [busy, setBusy] = useState(false);
   const [assignUid, setAssignUid] = useState('');
+  const assignRef = useRef(null);
+  const assignQ = useRef(Promise.resolve());
   const load = () => api('learn_courses_admin').then(setData, e => toast(errText(e), true));
   useEffect(() => {
     load();
@@ -447,16 +460,28 @@ function LearningAdminPage({ q }) {
   if (!data) return html`<${Spinner} />`;
   const courses = data.courses;
   const assign = data.assign;
-  const saveAssign = async a => {
-    setBusy(true);
-    try {
-      const r = await api('learn_assign_save', a);
-      setData({ ...data, assign: r });
-      toast('Assignments saved.');
-    } catch (e) {
-      toast(errText(e), true);
-    }
-    setBusy(false);
+  // each change is applied to the latest record (including changes still being saved) and saves go out one after another,
+  // because learn_assign_save replaces the whole record: a quick second change must not undo the first
+  const saveAssign = mutate => {
+    const next = mutate(assignRef.current || data.assign);
+    assignRef.current = next;
+    setData(d => ({ ...d, assign: next }));
+    assignQ.current = assignQ.current.then(async () => {
+      setBusy(true);
+      try {
+        const r = await api('learn_assign_save', next);
+        if (assignRef.current === next) {
+          assignRef.current = null;
+          setData(d => ({ ...d, assign: r }));
+        }
+        toast('Assignments saved.');
+      } catch (e) {
+        assignRef.current = null;
+        toast(errText(e), true);
+        load();
+      }
+      setBusy(false);
+    });
   };
   const people = kitPeople(P);
   return html`<div className="stack learn">
@@ -499,8 +524,8 @@ function LearningAdminPage({ q }) {
               <tbody>
                 ${courses.map(c => html`<tr key=${c.id}>
                   <td><b>${c.t}</b></td>
-                  ${['consultant', 'employee'].map(role => html`<td key=${role}><input type="checkbox" checked=${(c.req || []).includes(role) || ((assign.byRole || {})[role] || []).includes(c.id)} disabled=${(c.req || []).includes(role)} onChange=${e => { const list = ((assign.byRole || {})[role] || []).filter(x => x !== c.id); saveAssign({ ...assign, byRole: { ...(assign.byRole || {}), [role]: e.target.checked ? [...list, c.id] : list } }); }} /></td>`)}
-                  <td><input type="number" min="0" style=${{ width: 90 }} defaultValue=${(assign.due || {})[c.id] || ''} onBlur=${e => saveAssign({ ...assign, due: { ...(assign.due || {}), [c.id]: Number(e.target.value) || 0 } })} /></td>
+                  ${['consultant', 'employee'].map(role => html`<td key=${role}><input type="checkbox" checked=${(c.req || []).includes(role) || ((assign.byRole || {})[role] || []).includes(c.id)} disabled=${(c.req || []).includes(role)} onChange=${e => { const on = e.target.checked; saveAssign(a => { const list = ((a.byRole || {})[role] || []).filter(x => x !== c.id); return { ...a, byRole: { ...(a.byRole || {}), [role]: on ? [...list, c.id] : list } }; }); }} /></td>`)}
+                  <td><input type="number" min="0" style=${{ width: 90 }} defaultValue=${(assign.due || {})[c.id] || ''} onBlur=${e => { const v = Number(e.target.value) || 0; saveAssign(a => ({ ...a, due: { ...(a.due || {}), [c.id]: v } })); }} /></td>
                 </tr>`)}
               </tbody>
             </table></div>
@@ -510,7 +535,7 @@ function LearningAdminPage({ q }) {
             <div className="form" style=${{ marginTop: 10 }}>
               <div className="row2">
                 <${Field} label="Person"><select value=${assignUid} onChange=${e => setAssignUid(e.target.value)}><option value="">Choose…</option>${people.map(([id, n]) => html`<option key=${id} value=${id}>${n}</option>`)}</select><//>
-                ${assignUid && html`<div className="checks" style=${{ alignSelf: 'end' }}>${courses.map(c => html`<label key=${c.id} className="check small"><input type="checkbox" checked=${((assign.byUid || {})[assignUid] || []).includes(c.id)} onChange=${e => { const list = ((assign.byUid || {})[assignUid] || []).filter(x => x !== c.id); saveAssign({ ...assign, byUid: { ...(assign.byUid || {}), [assignUid]: e.target.checked ? [...list, c.id] : list } }); }} /> ${c.t}</label>`)}</div>`}
+                ${assignUid && html`<div className="checks" style=${{ alignSelf: 'end' }}>${courses.map(c => html`<label key=${c.id} className="check small"><input type="checkbox" checked=${((assign.byUid || {})[assignUid] || []).includes(c.id)} onChange=${e => { const on = e.target.checked, uid = assignUid; saveAssign(a => { const list = ((a.byUid || {})[uid] || []).filter(x => x !== c.id); return { ...a, byUid: { ...(a.byUid || {}), [uid]: on ? [...list, c.id] : list } }; }); }} /> ${c.t}</label>`)}</div>`}
               </div>
             </div>
           </section>

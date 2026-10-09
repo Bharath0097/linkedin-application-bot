@@ -29,7 +29,9 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(r)
         .then(res => {
-          if (res.ok) {
+          // v83: only the page shell itself (/, /index.html, /w/<name>/ served as HTML) replaces the stored shell;
+          // robots.txt, security.txt and other same-origin pages no longer take its place for offline use
+          if (res.ok && /\/(index\.html)?$/.test(u.pathname) && (res.headers.get('content-type') || '').includes('text/html')) {
             const copy = res.clone();
             caches.open(CACHE).then(c => c.put('index.html', copy));
           }

@@ -165,13 +165,18 @@ function pfProg(stdClass $g): int
     }
     return (int) round($t / count($krs) * 100);
 }
+// v83: one delete rule shared by pf_goal_delete and pfView's mayDel flag (HR, or the person who set the goal while it has no check-ins).
+function pfMayDelete(array $u, stdClass $g): bool
+{
+    return pfIsHR($u) || ((string) ($g->by ?? '') === $u['id'] && !count((array) ($g->ci ?? [])));
+}
 function pfView(stdClass $g, array $u, bool $full = false): array
 {
     $out = [
         'id' => (string) $g->id, 'kind' => (string) $g->kind, 'owner' => (string) $g->owner, 'ownerN' => (string) $g->owner === '' ? 'Company' : pfName((string) $g->owner),
         'title' => (string) $g->title, 'why' => (string) ($g->why ?? ''), 'start' => (string) ($g->start ?? ''), 'due' => (string) ($g->due ?? ''), 'parent' => (string) ($g->parent ?? ''),
         'vis' => (string) ($g->vis ?? 'mgr'), 'st' => (string) ($g->st ?? 'active'), 'health' => (string) ($g->health ?? ''), 'prog' => pfProg($g), 'krs' => array_values(json_decode((string) json_encode($g->krs ?? []), true) ?: []),
-        'ciAt' => (int) ($g->ciAt ?? 0), 'at' => (int) ($g->at ?? 0), 'u' => (int) ($g->u ?? 0), 'by' => (string) ($g->by ?? ''), 'canEdit' => pfMayEdit($u, $g), 'nCm' => count((array) ($g->cm ?? [])),
+        'ciAt' => (int) ($g->ciAt ?? 0), 'at' => (int) ($g->at ?? 0), 'u' => (int) ($g->u ?? 0), 'by' => (string) ($g->by ?? ''), 'canEdit' => pfMayEdit($u, $g), 'mayDel' => pfMayDelete($u, $g), 'nCm' => count((array) ($g->cm ?? [])),
     ];
     foreach ($out['krs'] as &$k) {
         $k['p'] = (int) round(pfKrProg($k) * 100);
@@ -606,9 +611,9 @@ function pfRoute(string $r, array $b): never
 
         case 'pf_goal_delete':
             $g = pfGoal($str('id', 30), $u);
-            $mayDel = pfIsHR($u) || ((string) $g->by === $u['id'] && !count((array) ($g->ci ?? [])));
-            if (!$mayDel) {
-                fail(403, 'forbidden', 'A goal with check-ins stays on record: mark it achieved or dropped instead.');
+            if (!pfMayDelete($u, $g)) {
+                // v83: the message now says why (check-ins on record, or not the person who set the goal); the rule is unchanged.
+                fail(403, 'forbidden', (string) ($g->by ?? '') === $u['id'] ? 'A goal with check-ins stays on record: mark it achieved or dropped instead.' : 'Only the person who set this goal, or HR, can delete it.');
             }
             foreach (colAll('pfg') as [$id, $k]) {
                 if ((string) ($k->parent ?? '') === (string) $g->id) {

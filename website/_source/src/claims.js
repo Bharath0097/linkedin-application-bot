@@ -156,6 +156,11 @@ function XcEditor({ c, onClose, onChanged }) {
     setD(x => ({ ...(x || {}), ...r, settings: r.settings || (x && x.settings), st: r.st || (x && x.st) }));
     setF({ title: r.claim.title, lines: r.claim.lines.map(l => ({ ...l, a: l.a, mi: l.mi || '' })) });
   };
+  // v83: after a receipt is added or removed, reload only the saved claim (files, checks); the form keeps unsaved edits and lines
+  const refresh = async id => {
+    const r = await api('xc_get', { id });
+    setD(x => ({ ...(x || {}), ...r, settings: r.settings || (x && x.settings), st: r.st || (x && x.st) }));
+  };
   useEffect(() => {
     if (c && c.id)
       api('xc_get', { id: c.id })
@@ -213,7 +218,7 @@ function XcEditor({ c, onClose, onChanged }) {
       fd.append('line', l.id);
       fd.append('file', file, file.name);
       await upload('xc_upload', fd, setProg);
-      take(await api('xc_get', { id: cl.id }));
+      await refresh(cl.id);
       toast('Receipt added.');
     } catch (e) {
       toast(errText(e), true);
@@ -224,7 +229,7 @@ function XcEditor({ c, onClose, onChanged }) {
   const unFile = async fid => {
     try {
       await api('xc_unfile', { id: C.id, fid });
-      take(await api('xc_get', { id: C.id }));
+      await refresh(C.id);
     } catch (e) {
       toast(errText(e), true);
     }

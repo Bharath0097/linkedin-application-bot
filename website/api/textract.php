@@ -28,6 +28,24 @@ function cleanText(string $s, int $max = 300000): string
     $s = preg_replace("/\n{3,}/u", "\n\n", $s) ?? $s;
     return mb_substr(trim($s), 0, $max);
 }
+/** Removes <tag ...>...</tag> blocks in linear time; an opening tag with no closing tag after it is left as it is (strip_tags drops it later).
+ *  v83: replaces '#<(script|...)\b[^>]*>.*?</\1>#is', whose back-reference made every unclosed opener scan to the end (O(n^2)). */
+function stripHtmlBlocks(string $h, array $tags): string
+{
+    foreach ($tags as $t) {
+        $out = '';
+        $pos = 0;
+        while (preg_match('#<' . $t . '\b[^>]*+>#i', $h, $m, PREG_OFFSET_CAPTURE, $pos)) {
+            if (!preg_match('#</' . $t . '\s*>#i', $h, $e, PREG_OFFSET_CAPTURE, $m[0][1] + strlen($m[0][0]))) {
+                break; // no closing tag after this one, so none after any later one either
+            }
+            $out .= substr($h, $pos, $m[0][1] - $pos) . ' ';
+            $pos = $e[0][1] + strlen($e[0][0]);
+        }
+        $h = $out . substr($h, $pos);
+    }
+    return $h;
+}
 function htmlToText(string $h): string
 {
     if ($h === '') {
@@ -37,7 +55,7 @@ function htmlToText(string $h): string
     if (!preg_match('/<[a-z!\/]/i', $h)) {
         return cleanText(html_entity_decode($h, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
-    $h = preg_replace('#<(script|style|head)\b[^>]*>.*?</\1>#is', ' ', $h) ?? $h;
+    $h = stripHtmlBlocks($h, ['script', 'style', 'head']);
     $h = preg_replace('#<li\b[^>]*>#i', "\n• ", $h) ?? $h;
     $h =
         preg_replace(

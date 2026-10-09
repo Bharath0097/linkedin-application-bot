@@ -256,7 +256,7 @@ function AgentBlocklist() {
       <${Field} label="Value"><input value=${f.v} onInput=${e => setF({ ...f, v: e.target.value })} /><//>
       <${Field} label="Why"><input value=${f.why} onInput=${e => setF({ ...f, why: e.target.value })} /><//>
     </div><div className="actions"><button type="button" className="btn" onClick=${() => op('add', f)}>Add to the blocklist</button></div></div>
-    ${items.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>What</th><th>Value</th><th>Why</th><th>By</th><th></th></tr></thead><tbody>${items.map((x, i) => html`<tr key=${i}><td>${{ email: 'Email', phone: 'Phone', li: 'LinkedIn', domain: 'Domain' }[x.k] || x.k}</td><td>${x.v}</td><td className="small">${x.why}</td><td className="small">${x.by} · ${fmtDay(x.at)}</td><td><button type="button" className="btn ghost sm" onClick=${() => op('remove', { i })}>Remove</button></td></tr>`)}</tbody></table></div>` : html`<${Empty} title="Nothing blocked yet" />`}
+    ${items.length ? html`<div className="tblwrap"><table className="tbl"><thead><tr><th>What</th><th>Value</th><th>Why</th><th>By</th><th></th></tr></thead><tbody>${items.map((x, i) => html`<tr key=${i}><td>${{ email: 'Email', phone: 'Phone', li: 'LinkedIn', domain: 'Domain' }[x.k] || x.k}</td><td>${x.v}</td><td className="small">${x.why}</td><td className="small">${x.by} · ${fmtDay(x.at)}</td><td><button type="button" className="btn ghost sm" onClick=${() => op('remove', { k: x.k, v: x.v, at: x.at })}>Remove</button></td></tr>`)}</tbody></table></div>` : html`<${Empty} title="Nothing blocked yet" />`}
   </div>`;
 }
 function AgentPage({ q }) {
@@ -268,10 +268,13 @@ function AgentPage({ q }) {
   const [open, setOpen] = useState((q && q.c) || null);
   const [busy, setBusy] = useState('');
   const [qs, setQs] = useState('');
+  // v83: an answer for a tab that is no longer selected is dropped (a quick switch could show the wrong tab's rows)
+  const tabNow = useRef(tab);
+  tabNow.current = tab;
   const loadOv = () => api('ag_overview').then(setOv, e => toast(errText(e), true));
   const loadRows = t => {
-    if (['you', 'wait', 'done', 'all'].includes(t)) api('ag_list', { tab: t }).then(r => setRows(r.rows), e => toast(errText(e), true));
-    if (t === 'log') api('ag_log').then(r => setLog(r.rows), e => toast(errText(e), true));
+    if (['you', 'wait', 'done', 'all'].includes(t)) api('ag_list', { tab: t }).then(r => { if (tabNow.current === t) setRows(r.rows); }, e => toast(errText(e), true));
+    if (t === 'log') api('ag_log').then(r => { if (tabNow.current === t) setLog(r.rows); }, e => toast(errText(e), true));
   };
   useEffect(() => {
     loadOv();

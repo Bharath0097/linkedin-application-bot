@@ -125,25 +125,34 @@ function owNormKey(string $k): string
 {
     return strtolower((string) preg_replace('/[^a-z0-9]/i', '', $k));
 }
-/** Flatten useful scalar values, preferring top-level fields when names repeat. */
-function owFlat(array $row, int $depth = 0, array &$out = []): array
+/** Nested objects that describe someone or something else (owner, recruiter, client...): their fields are kept only
+ *  under the parent's name (client.name -> clientname, owner.email -> owneremail), never as the record's own fields. */
+const OW_REF_KEYS = ['owner','createdby','updatedby','modifiedby','recruiter','assignedto','assignee','accountmanager','recruitmentmanager','hiringmanager','manager','user','author','client','customer','company','account','vendor','department','team'];
+/** Flatten useful scalar values. The record's own fields always win: this level's scalars and lists are read first, then
+ *  nested objects only fill what is still missing; objects that describe others and items of lists keep a prefix.
+ *  v83: was depth-first, so an owner/client/skill object's id, name, email or status replaced the record's own. */
+function owFlat(array $row, int $depth = 0, array &$out = [], string $pfx = ''): array
 {
+    $nested = [];
     foreach ($row as $k => $v) {
         $nk = owNormKey((string) $k);
+        $key = $pfx . $nk;
         if (is_scalar($v) || $v === null) {
-            if ($nk !== '' && !array_key_exists($nk, $out)) $out[$nk] = trim((string) $v);
+            if ($nk !== '' && !array_key_exists($key, $out)) $out[$key] = trim((string) $v);
         } elseif (is_array($v) && $depth < 3) {
-            if (!owIsAssoc($v)) {
+            $list = !owIsAssoc($v);
+            if ($list) {
                 $vals = [];
                 foreach ($v as $vv) {
                     if (is_scalar($vv)) $vals[] = trim((string) $vv);
                     elseif (is_array($vv)) foreach (['name','label','value','title','skill'] as $kk) if (isset($vv[$kk]) && is_scalar($vv[$kk])) { $vals[] = trim((string) $vv[$kk]); break; }
                 }
-                if ($nk !== '' && $vals && !isset($out[$nk])) $out[$nk] = implode(', ', array_filter($vals));
+                if ($nk !== '' && $vals && !isset($out[$key])) $out[$key] = implode(', ', array_filter($vals));
             }
-            owFlat($v, $depth + 1, $out);
+            $nested[] = [$v, ($pfx !== '' || $list || in_array($nk, OW_REF_KEYS, true)) ? $key : ''];
         }
     }
+    foreach ($nested as [$v, $childPfx]) owFlat($v, $depth + 1, $out, $childPfx);
     return $out;
 }
 function owPick(array $f, array $keys, int $max = 600): string

@@ -1195,6 +1195,12 @@ function booksRoute(string $r, string $method, array $b): never
             booksGuard('org/acct/bank/' . $id, $x);
             $act = str($b, 'act', 12);
             $now = now();
+            // v83: finished reconciliations lock their lines; a reconciled line not reviewed yet can still be categorized
+            // or matched once
+            $done = !empty($x->m) || (string) ($x->cat ?? '') !== '' || !empty($x->excl);
+            if (!empty($x->recon) && ($done || $act === 'excl')) {
+                fail(423, 'reconciled', 'This line is part of a finished reconciliation, so it stays as it was reconciled.');
+            }
             if ($act === 'cat') {
                 $cat = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) ($b['cat'] ?? '')) ?? '';
                 if (!isset(coaIndex()['byId'][$cat])) {

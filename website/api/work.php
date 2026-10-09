@@ -453,6 +453,10 @@ function wkRoute(string $r, array $b): never
                 }
             }
             $people = wkPeople();
+            if ($old && !wkMayCreate($u)) {
+                // v83: a lead who is not staff (consultant, client contact, student) keeps or removes people and hands the lead to one of them; adding new people stays with administrators, managers and HR
+                $people = array_intersect_key($people, array_flip($old['members']));
+            }
             $members = array_values(array_unique(array_filter(array_map('strval', (array) ($b['members'] ?? [])), fn($x) => isset($people[$x]))));
             $lead = (string) ($b['lead'] ?? ($old['lead'] ?? $u['id']));
             if (!isset($people[$lead])) {
@@ -501,7 +505,7 @@ function wkRoute(string $r, array $b): never
             $sprints = array_map('wkSprintRow', $sp->fetchAll());
             $done2 = $pdo->prepare("SELECT * FROM wk_sprint WHERE proj = ? AND st = 'done' ORDER BY ended DESC LIMIT 12");
             $done2->execute([$P['id']]);
-            ok(['project' => $P, 'items' => $items, 'sprints' => $sprints, 'past' => array_map('wkSprintRow', $done2->fetchAll()), 'people' => array_values(wkPeople($P['members'])), 'manage' => wkMayManage($P, $u), 'all' => wkMayManage($P, $u) ? array_values(wkPeople()) : []]);
+            ok(['project' => $P, 'items' => $items, 'sprints' => $sprints, 'past' => array_map('wkSprintRow', $done2->fetchAll()), 'people' => array_values(wkPeople($P['members'])), 'manage' => wkMayManage($P, $u), 'all' => wkMayManage($P, $u) ? array_values(wkMayCreate($u) ? wkPeople() : array_intersect_key(wkPeople(), array_flip($P['members']))) : []]); // v83: the whole directory only for those who may pick from it (as wk_people)
 
         case 'wk_item_get':
             [$P, $I] = wkItem($str('id', 20), $u);
@@ -889,6 +893,10 @@ function wkRoute(string $r, array $b): never
         case 'wk_daily_save':
             $P = wkProj($str('id', 20), $u);
             $day = date('Y-m-d');
+            $want = $str('day', 10);
+            if ($want !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $want) && checkdate((int) substr($want, 5, 2), (int) substr($want, 8, 2), (int) substr($want, 0, 4)) && abs(strtotime($want . ' 00:00:00 UTC') - strtotime($day . ' 00:00:00 UTC')) <= 86400) {
+                $day = $want; // the poster's local day: at most one day either side of the server's day
+            }
             $y = $str('y', 2000);
             $t = $str('t', 2000);
             $bk = $str('b', 2000);
@@ -965,10 +973,13 @@ function wkRoute(string $r, array $b): never
 
         case 'wk_mine':
             // My work: what is assigned to me across projects (not done), and my notes
-            $s = $pdo->prepare('SELECT i.*, p.pkey, p.n AS pn, p.cols FROM wk_item i JOIN wk_proj p ON p.id = i.proj WHERE i.who = ? AND p.arch = 0 ORDER BY i.due = \'\', i.due, i.rk');
+            $s = $pdo->prepare('SELECT i.*, p.pkey, p.n AS pn, p.cols, p.members AS pmem, p.lead AS plead FROM wk_item i JOIN wk_proj p ON p.id = i.proj WHERE i.who = ? AND p.arch = 0 ORDER BY i.due = \'\', i.due, i.rk');
             $s->execute([$u['id']]);
             $mine = [];
             foreach ($s->fetchAll() as $row) {
+                if (!hasRole($u, 'admin') && !in_array($u['id'], json_decode((string) $row['pmem'], true) ?: [], true) && (string) $row['plead'] !== $u['id']) {
+                    continue; // v83: no longer on the project: the same rule as wkProj()
+                }
                 $cols = json_decode((string) $row['cols'], true) ?: [];
                 $doneK = array_column(array_filter($cols, fn($c) => !empty($c['done'])), 'k');
                 if (in_array((string) $row['st'], $doneK, true)) {

@@ -327,7 +327,10 @@ function wsMake(array $u, array $b, string $intro = ''): array
         'features' => WS_PRESETS[$preset]['f'] ?? WS_PRESETS['staffing']['f'],
         'brand' => ['color' => '', 'tagline' => '', 'addr' => '', 'logo' => '', 'logoAt' => 0],
         'plan' => ['kind' => 'pilot', 'until' => date('Y-m-d', time() + 86400 * max(1, min(365, (int) ($b['pilotDays'] ?? 90))))],
-        'hosts' => [], 'sub' => false, 'primary' => 'path', 'shareAi' => false, 'notes' => '', '_slug' => $slug,
+        'hosts' => [], 'sub' => false, 'primary' => 'path',
+        // v83: a workspace StratEdge makes or approves uses its AI connection unless told otherwise; one made automatically
+        // from a sign-up does not (wsjoin.php passes shareAi false) until StratEdge ticks it under Workspaces > Manage
+        'shareAi' => !array_key_exists('shareAi', $b) || !empty($b['shareAi']), 'notes' => '', '_slug' => $slug,
     ];
     if (!empty($b['signup'])) {
         // the sign-up request it came from (Workspaces > Sign-up requests)

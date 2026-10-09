@@ -20,8 +20,8 @@ function payrollStaff(): array
     if (!hasRole($u, 'acct') || ($r && !empty($r->nopay))) {
         fail(403, 'forbidden', 'Payroll is for administrators and accounting staff.');
     }
-    if ($r && in_array((string) ($r->books ?? ''), ['view', 'reports'], true) && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
-        // view-only bookkeepers read payroll pages but change nothing
+    if ($r && in_array((string) ($r->books ?? ''), ['view', 'reports'], true)) {
+        // view-only bookkeepers read payroll pages but change nothing (v83: whatever the method; a GET was let through)
         $route = (string) ($_GET['r'] ?? '');
         if (!in_array($route, ['pay_tax_summary', 'dd_get', 'ach_settings'], true)) {
             fail(403, 'forbidden', 'Your books access is view-only.');

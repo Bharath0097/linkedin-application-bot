@@ -122,7 +122,7 @@ function TrustOverview({ go }) {
   const s = d.scan;
   const bk = d.backup || {};
   const iv = d.integrity;
-  const ivBad = iv ? iv.changed.length + iv.missing.length + iv.unexpected.length : 0;
+  const ivBad = iv ? iv.changed.length + iv.missing.length + iv.unexpected.length + (iv.truncated ? 1 : 0) : 0;
   const a7 = d.auth7 || {};
   const head = !s ? 'Run the first self-check' : s.sum.fail ? s.sum.fail + ' to fix now' + (s.sum.warn ? ', ' + s.sum.warn + ' to improve' : '') : s.sum.warn ? s.sum.warn + ' things to improve' : 'Everything checked is in order';
   return html`<div className="stack">
@@ -373,6 +373,7 @@ function TrustMonitor() {
             ${list('Changed since the build', v.changed)}
             ${list('Missing', v.missing)}
             ${list('Settings files edited on the server since you last accepted them', v.edited)}
+            ${v.truncated ? html`<p className="note warn" style=${{ margin: 0 }}><span>The check stopped early because the site holds too many files; not every folder was searched for unexpected program files.</span></p>` : null}
           <//>`
         }
       </section>

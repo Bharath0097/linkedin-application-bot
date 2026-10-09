@@ -1504,7 +1504,8 @@ const TS_LABEL = {
 };
 function tsStatus(sum, rev) {
   if (!sum) return 'none';
-  if (rev && rev.v === sum.u) {
+  // v83: an approval also names the hours it approved (t); older approvals without t still count
+  if (rev && rev.v === sum.u && (rev.t === undefined || rev.t === sum.t)) {
     if (rev.s === 'reopened') return 'reopened';
     if (sum.s === 'submitted') return rev.s;
   }
@@ -2079,7 +2080,8 @@ const approvedLeaves = (root, asg) => {
   const lvd = obj(asg && asg.lvd);
   return Object.entries(obj(root && root.lv))
     .filter(([id, l]) => l && typeof l === 'object' && !l.x && lvd[id] && typeof lvd[id] === 'object' && lvd[id].s === 'approved')
-    .map(([, l]) => l);
+    // v83: the dates approved are the ones in the decision (older decisions without them fall back to the request)
+    .map(([id, l]) => (lvd[id].f && lvd[id].t ? { ...l, k: lvd[id].k || l.k, f: lvd[id].f, t: lvd[id].t } : l));
 };
 const ROLE_LABEL = { consultant: 'Consultant', employer: 'Client contact' };
 const REQ_ST = {

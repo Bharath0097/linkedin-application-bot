@@ -226,6 +226,17 @@ function privLastActivity(stdClass $c): int
     }
     return $t;
 }
+/** The deletion date announced for this record, or 0 when none is pending. v83: an announcement made before the person's latest activity no longer counts (they were active again, so a new notice is due). */
+function privRetDue(stdClass $d): int
+{
+    $due = (int) ($d->retDue ?? 0);
+    if ($due <= 0) {
+        return 0;
+    }
+    // when it was announced (older records: notice is at most 90 days, so the announcement was no earlier than this)
+    $at = (int) ($d->retAt ?? 0) ?: $due - 90 * 86400000;
+    return privLastActivity($d) > $at ? 0 : $due;
+}
 /** Candidates whose records are past the retention period: [kind, id, name, email, last, due]. */
 function privDue(): array
 {
@@ -251,7 +262,7 @@ function privDue(): array
         }
         $last = privLastActivity($x);
         if ($last > 0 && $last < $cut) {
-            $out[] = ['kind' => 'ats', 'id' => (string) $id, 'n' => (string) ($x->n ?? ''), 'e' => (string) ($x->e ?? ''), 'last' => $last, 'due' => (int) ($x->retDue ?? 0)];
+            $out[] = ['kind' => 'ats', 'id' => (string) $id, 'n' => (string) ($x->n ?? ''), 'e' => (string) ($x->e ?? ''), 'last' => $last, 'due' => privRetDue($x)];
         }
     }
     foreach (colAll('rec/cand/items') as [$id, $x]) {
@@ -260,7 +271,7 @@ function privDue(): array
         }
         $last = privLastActivity($x);
         if ($last > 0 && $last < $cut) {
-            $out[] = ['kind' => 'cand', 'id' => (string) $id, 'n' => (string) ($x->n ?? $x->name ?? ''), 'e' => (string) ($x->e ?? ''), 'last' => $last, 'due' => (int) ($x->retDue ?? 0)];
+            $out[] = ['kind' => 'cand', 'id' => (string) $id, 'n' => (string) ($x->n ?? $x->name ?? ''), 'e' => (string) ($x->e ?? ''), 'last' => $last, 'due' => privRetDue($x)];
         }
     }
     usort($out, fn($a, $b) => $a['last'] <=> $b['last']);
@@ -287,12 +298,15 @@ function privRetentionRun(bool $force = false): array
         if (!$d) {
             continue;
         }
-        if ((int) ($d->retDue ?? 0) === 0) {
+        // v83: an old announcement does not count once the person was active again after it (announce anew)
+        $due = privRetDue($d);
+        if ($due === 0) {
             $d->retDue = now() + max(1, (int) $c['notice']) * 86400000;
+            $d->retAt = now();
             docSet($path, $d);
             $announced++;
             $list[] = $x['n'] . ($x['e'] !== '' ? ' <' . $x['e'] . '>' : '');
-        } elseif ((int) $d->retDue < now()) {
+        } elseif ($due < now()) {
             foreach (colAll($path . '/f') as [$fid]) {
                 docDelete($path . '/f/' . $fid);
                 @unlink(filePathOf((string) $fid));
@@ -463,7 +477,7 @@ function privRoute(string $r, array $b): never
                     continue;
                 }
                 $d->keptAt = now();
-                unset($d->retDue);
+                unset($d->retDue, $d->retAt);
                 if (!empty($b['hold'])) {
                     $d->hold = true;
                 }

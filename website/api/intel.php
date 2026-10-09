@@ -257,6 +257,8 @@ function intelWorkQueue(array $u): array
 }
 function intelDeliverability(bool $live=false): array
 {
+    // v83: mkvGet() and mailSettings() live in mail.php; without it this route always answered 500.
+    require_once __DIR__ . '/mail.php';
     require_once __DIR__ . '/mailbulk.php';
     $d=$live?mailDelivCheck(''):(mkvGet('deliv_check',[])?:mailDelivCheck(''));
     $rep=mailRepStats(30);$warm=mailWarmCap();$mail=intelMail();

@@ -22,6 +22,8 @@ function StoragePage() {
         setD(r);
       })
       .catch(e => setErr(e));
+  // a new search starts at page 1: setPage(1) reloads through the effect, on page 1 already load directly
+  const search = () => (page === 1 ? load({ page: 1 }) : setPage(1));
   const loadBox = () =>
     api('storage_box')
       .then(r => setBox(r.items))
@@ -116,7 +118,7 @@ function StoragePage() {
         tab === 'all' &&
         html`<div className="stack">
             <div className="toolbar">
-              <input type="search" style=${{ maxWidth: 300 }} placeholder="Search file names and where they belong" value=${q} onInput=${e => setQ(e.target.value)} onKeyDown=${e => e.key === 'Enter' && load({ page: 1 })} aria-label="Search files" />
+              <input type="search" style=${{ maxWidth: 300 }} placeholder="Search file names and where they belong" value=${q} onInput=${e => setQ(e.target.value)} onKeyDown=${e => e.key === 'Enter' && search()} aria-label="Search files" />
               <select value=${kind} onChange=${e => {
                 setKind(e.target.value);
                 setPage(1);
@@ -124,7 +126,7 @@ function StoragePage() {
                 <option value="">All kinds</option>
                 ${d && Object.entries(d.kinds).map(([k, n]) => html`<option key=${k} value=${k}>${n}${d.byKind[k] ? ' (' + d.byKind[k] + ')' : ''}</option>`)}
               </select>
-              <button className="btn ghost" onClick=${() => load({ page: 1 })}>Search</button>
+              <button className="btn ghost" onClick=${search}>Search</button>
               <div className="push">
                 ${d && d.orphans > 0 && d.canDelete && html`<button className="btn ghost" onClick=${cleanup}>Clean up ${d.orphans} unused file${d.orphans === 1 ? '' : 's'} (${fmtBytes(d.orphanBytes)})</button>`}
               </div>
@@ -141,12 +143,12 @@ function StoragePage() {
                             <tbody>
                               ${d.files.map(
                                 f => html`<tr key=${f.base + f.id}>
-                                    <td><a href=${fileUrl(f.base, f.id)} target="_blank" rel="noopener"><b style=${{ fontWeight: 600 }}>${f.n}</b></a><div className="muted small">${f.ty}</div></td>
+                                    <td><a href=${f.ids ? API + 'ids_img&id=' + encodeURIComponent(f.ids) + '&f=' + encodeURIComponent(f.id) : fileUrl(f.base, f.id)} target="_blank" rel="noopener"><b style=${{ fontWeight: 600 }}>${f.n}</b></a><div className="muted small">${f.ty}</div></td>
                                     <td className="small">${f.where}</td>
                                     <td className="small">${d.kinds[f.kind] || f.kind}</td>
                                     <td className="r num small">${fmtBytes(f.sz)}</td>
                                     <td className="small nowrap">${fmtTs(f.at)}</td>
-                                    <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}><a className="btn ghost sm" href=${fileUrl(f.base, f.id, true)}><${Icon} n="down" />Download</a>${d.canDelete && html`<button className="btn ghost sm" onClick=${() => del(f)}><${Icon} n="trash" /></button>`}</div></td>
+                                    <td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>${!f.ro && html`<a className="btn ghost sm" href=${fileUrl(f.base, f.id, true)}><${Icon} n="down" />Download</a>`}${f.del && html`<button className="btn ghost sm" onClick=${() => del(f)}><${Icon} n="trash" /></button>`}</div></td>
                                   </tr>`
                               )}
                             </tbody>

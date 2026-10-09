@@ -575,6 +575,12 @@ function authBegin(array $u, string $how, string $asKey, string $go, string $pas
             secAlertAdmins('bg:' . $uid, 'Two-step sign-in was reset through config.php', 'The mfa_reset_email line in api/config.php removed the second steps of ' . $u['email'] . ' at their sign-in. Remove that line from config.php now.');
         }
     }
+    // v83: the administrator password from config.php (shipped in the package) is never kept: an install made before
+    // the first-sign-in rule still has to replace it
+    $cfgPw = (string) cfg('admin_password');
+    if ($password !== '' && $cfgPw !== '' && hash_equals($cfgPw, $password)) {
+        authUserSet($uid, ['must_pw' => 1, 'why' => 'first']);
+    }
     // a password seen in a breach since it was set must be changed (checked at most once a month)
     if ($password !== '' && !empty(authCfg()['breached'])) {
         $a = authUser($uid);

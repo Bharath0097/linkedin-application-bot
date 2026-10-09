@@ -91,8 +91,10 @@ function PaystubView({ s, org, onClose, onPdf, onEmail, staff }) {
       window.print();
       return;
     }
+    /* v83: the name and period come from the person's own profile, so escape them before writing the popup's title. */
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
     w.document.write(
-      `<!doctype html><html><head><title>Paystub ${s.n || ''} ${s.period || s.mk || ''}</title><style>body{font:14px/1.5 Arial,sans-serif;color:#111;margin:32px}table{width:100%;border-collapse:collapse;margin:8px 0 16px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd}td.r,th.r{text-align:right}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 4px;text-transform:uppercase;letter-spacing:.05em;color:#555}.stubhead{display:flex;justify-content:space-between;gap:24px}.kp{display:flex;gap:24px;margin:14px 0}.kp div{border:1px solid #ddd;border-radius:8px;padding:10px 14px;flex:1}.kp b{display:block;font-size:18px}.muted{color:#666;font-size:12px}.note{font-size:12px;color:#555}</style></head><body>${el.innerHTML}</body></html>`
+      `<!doctype html><html><head><title>Paystub ${esc(s.n || '')} ${esc(s.period || s.mk || '')}</title><style>body{font:14px/1.5 Arial,sans-serif;color:#111;margin:32px}table{width:100%;border-collapse:collapse;margin:8px 0 16px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd}td.r,th.r{text-align:right}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 4px;text-transform:uppercase;letter-spacing:.05em;color:#555}.stubhead{display:flex;justify-content:space-between;gap:24px}.kp{display:flex;gap:24px;margin:14px 0}.kp div{border:1px solid #ddd;border-radius:8px;padding:10px 14px;flex:1}.kp b{display:block;font-size:18px}.muted{color:#666;font-size:12px}.note{font-size:12px;color:#555}</style></head><body>${el.innerHTML}</body></html>`
     );
     w.document.close();
     w.focus();

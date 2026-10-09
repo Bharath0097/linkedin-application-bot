@@ -929,14 +929,18 @@ function RecEOD() {
   const toast = useToast();
   const subs = useCol('rec/sub/items', 'd:desc');
   const cands = useCol('rec/cand/items', 'n:asc');
-  const mine = useCol('rec/eod/items', 'd:desc', 60);
+  // v83: the 60 newest reports were shared by the whole team, so a recruiter's own older reports (and the
+  // 'already sent' note for them) went missing; read a wider window and the chosen day's report directly
+  const mine = useCol('rec/eod/items', 'd:desc', 600);
   const [d, setD] = useState(dkey());
+  const curPath = P.uid ? `rec/eod/items/${P.uid}_${d}` : null;
+  const cur = useDoc(curPath);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const st = recStats(subs.docs, cands.docs, P.uid, d, d);
   const items = subs.docs.filter(s => s.by === P.uid && s.d === d && subSent(s));
   const reports = mine.docs.filter(r => r.uid === P.uid);
-  const existing = reports.find(r => r.d === d);
+  const existing = (cur.for === curPath && cur.exists && cur.data) || reports.find(r => r.d === d);
   const send = async () => {
     setBusy(true);
     try {

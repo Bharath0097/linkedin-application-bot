@@ -29,14 +29,17 @@ const txUsd = n => (n < -0.5 ? '−' : '') + '$' + Math.round(Math.abs(+n || 0))
 const txPct = n => (Math.round((+n || 0) * 1000) / 10).toLocaleString('en-US') + '%';
 const txLong = dk => fmtDate(dk, { month: 'long', day: 'numeric', year: 'numeric' });
 const txGet = (o, path) => String(path).split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
-/* A copy of o with path set to v (undefined removes it); objects and arrays on the way are copied, not changed. */
+/* A copy of o with path set to v (undefined removes it); objects and arrays on the way are copied, not changed.
+   v83: an empty object comes back from the server as [] (PHP arrays), and a named key on an array is dropped by
+   JSON.stringify, so an array that gets a named (non-numeric) key becomes an object again; numeric keys keep arrays. */
 function txSet(o, path, v) {
   const ks = String(path).split('.');
-  const out = Array.isArray(o) ? [...o] : { ...(o || {}) };
+  const num = i => /^\d+$/.test(ks[i]);
+  const out = Array.isArray(o) && num(0) ? [...o] : { ...(o || {}) };
   let cur = out;
   for (let i = 0; i < ks.length - 1; i++) {
     const nxt = cur[ks[i]];
-    cur[ks[i]] = Array.isArray(nxt) ? [...nxt] : nxt && typeof nxt === 'object' ? { ...nxt } : /^\d+$/.test(ks[i + 1]) ? [] : {};
+    cur[ks[i]] = Array.isArray(nxt) ? (num(i + 1) ? [...nxt] : { ...nxt }) : nxt && typeof nxt === 'object' ? { ...nxt } : num(i + 1) ? [] : {};
     cur = cur[ks[i]];
   }
   const last = ks[ks.length - 1];

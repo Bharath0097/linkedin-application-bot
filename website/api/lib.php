@@ -162,7 +162,9 @@ function aiCfg(bool $reset = false): array
     // v82: a StratEdge-managed company workspace with no assistant of its own inherits StratEdge's saved assistant
     // settings (set up under Admin > Website & messages > Assistant on the main site), read from StratEdge's database
     // and unsealed with StratEdge's key. Falls through to config.php as before when StratEdge has none saved either.
-    if (($url === '' || $sealed === '') && function_exists('wsSlug') && wsSlug() !== '') {
+    // v83: only a workspace StratEdge lets use its AI connection (Workspaces > Manage: "Let it use StratEdge's AI
+    // connection"); with the switch off, config.php's values are blanked too (wsOverlay), so its AI features stay off
+    if (($url === '' || $sealed === '') && function_exists('wsSlug') && wsSlug() !== '' && !empty(wsCurrent()['shareAi'])) {
         $m = wsMainDoc('sec/x/ai/cfg');
         $mk = wsMainKey();
         if ($mk !== '' && is_array($m) && trim((string) ($m['url'] ?? '')) !== '' && (string) ($m['key'] ?? '') !== '') {
@@ -552,17 +554,21 @@ function db(): PDO
         cfg('admin_password') &&
         !$pdo->query('SELECT id FROM users LIMIT 1')->fetch()
     ) {
+        require_once __DIR__ . '/auth.php';
+        $id = 'u_' . rid(8);
         $pdo->prepare(
             'INSERT INTO users (id, email, name, pass, role, status, created) VALUES (?,?,?,?,?,?,?)',
         )->execute([
-            'u_' . rid(8),
+            $id,
             strtolower(trim(cfg('admin_email'))),
             cfg('admin_name') ?: 'Administrator',
-            password_hash(cfg('admin_password'), PASSWORD_DEFAULT),
+            pwHash((string) cfg('admin_password')),
             'admin',
             'active',
             now(),
         ]);
+        // v83: the password in config.php ships in the package: it must be replaced at the first sign-in
+        authUserSet($id, ['must_pw' => 1, 'why' => 'first']);
     }
     return $pdo;
 }
@@ -1265,8 +1271,10 @@ function recordDate(string $path, ?stdClass $d): string
     }
     return '';
 }
-/** Writes to a closed period are refused unless an administrator reopens the books (Admin > Books > Settings). */
-function booksGuard(string $path, ?stdClass $d): void
+/** Writes to a closed period are refused unless an administrator reopens the books (Admin > Books > Settings).
+ *  v83: recording a payment dated after the close on an invoice or bill from a closed period is allowed ($after = the
+ *  record as it will be saved); the payment posts on its own date, so nothing in the closed period changes. */
+function booksGuard(string $path, ?stdClass $d, ?stdClass $after = null): void
 {
     $bs = booksSettings();
     if ($bs['close'] === '') {
@@ -1276,8 +1284,103 @@ function booksGuard(string $path, ?stdClass $d): void
     $prev = docGet($path);
     $dtPrev = recordDate($path, $prev);
     $closed = ($dt !== '' && $dt <= $bs['close']) || ($dtPrev !== '' && $dtPrev <= $bs['close']);
+    if ($closed && $prev && $after && booksLatePayment($path, $prev, $after, $bs['close'])) {
+        return;
+    }
     if ($closed) {
         fail(423, 'books_closed', 'The books are closed through ' . fmtCloseDate($bs['close']) . '. ' . (hasRole(currentUser(), 'admin') ? 'Reopen them under Books › Settings before changing this record.' : 'An administrator can reopen them under Books › Settings.'));
+    }
+}
+/** v83: the only change is a payment dated after the close: new pays[] entries on an invoice (earlier payments and log
+ *  lines kept as they were), or an unpaid bill marked paid; every other field stays as it was. */
+function booksLatePayment(string $path, stdClass $prev, stdClass $after, string $close): bool
+{
+    $inv = (bool) preg_match('#^inv/[^/]+$#', $path);
+    if (!$inv && !preg_match('#^exp/[^/]+$#', $path)) {
+        return false;
+    }
+    $may = $inv ? ['paid', 'st', 'pays', 'log', 'u'] : ['st', 'od', 'paidOn', 'paidAt', 'm', 'ref', 'u'];
+    $same = fn($x, $y): bool => is_numeric($x) && is_numeric($y) ? abs((float) $x - (float) $y) < 0.005 : json_encode($x) === json_encode($y);
+    $a = get_object_vars($after);
+    $b = get_object_vars($prev);
+    foreach (array_unique(array_merge(array_keys($a), array_keys($b))) as $k) {
+        if (!in_array($k, $may, true) && !$same($a[$k] ?? null, $b[$k] ?? null)) {
+            return false;
+        }
+    }
+    $late = fn($v): bool => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) === 1 && $v > $close;
+    if ($inv) {
+        foreach (['pays', 'log'] as $k) {
+            $old = array_values((array) ($prev->$k ?? []));
+            $new = array_values((array) ($after->$k ?? []));
+            if (count($new) < count($old) || json_encode(array_slice($new, 0, count($old))) !== json_encode($old)) {
+                return false; // earlier payments and log lines stay as they were
+            }
+        }
+        $added = array_slice(array_values((array) ($after->pays ?? [])), count((array) ($prev->pays ?? [])));
+        if (!$added) {
+            return false;
+        }
+        $sum = 0.0;
+        foreach ($added as $p) {
+            if (!($p instanceof stdClass) || !$late($p->dt ?? '') || !is_numeric($p->a ?? null) || (float) $p->a <= 0) {
+                return false;
+            }
+            $sum += (float) $p->a;
+        }
+        // the amount received goes up by exactly the payments added
+        if (abs((float) ($after->paid ?? 0) - (float) ($prev->paid ?? 0) - $sum) >= 0.005) {
+            return false;
+        }
+        return in_array((string) ($after->st ?? ''), ['paid', 'part'], true);
+    }
+    return (string) ($after->st ?? '') === 'paid' && (string) ($prev->st ?? '') !== 'paid' && $late($after->paidOn ?? '');
+}
+/** v83: a bank line of a finished reconciliation keeps its amount, date, account and cleared state, and is not deleted
+ *  ($data null = delete; $replace = a full set, where a missing field counts as a change). Notes, receipts and
+ *  categorizing stay open (books_line has its own check). */
+function bankReconGuard(string $path, ?stdClass $data, bool $replace): void
+{
+    if (!preg_match('#^org/acct/bank/[^/]+$#', $path)) {
+        return;
+    }
+    $prev = docGet($path);
+    if (!$prev || empty($prev->recon)) {
+        return;
+    }
+    if ($data === null) {
+        fail(423, 'reconciled', 'This bank line is part of a finished reconciliation and cannot be deleted.');
+    }
+    $v = fn(stdClass $o, string $k) => in_array($k, ['excl', 'clr'], true) ? !empty($o->$k) : ($k === 'a' ? round((float) ($o->$k ?? 0), 2) : (string) ($o->$k ?? ''));
+    foreach (['a', 'dt', 'acct', 'cur', 'excl', 'clr', 'recon'] as $k) {
+        if (($replace || property_exists($data, $k)) && $v($data, $k) !== $v($prev, $k)) {
+            fail(423, 'reconciled', 'This bank line is part of a finished reconciliation: its amount, date, account and cleared state cannot change.');
+        }
+    }
+}
+/** v83: a time-off request someone has decided (approved or declined, r/{uid}.lvd[id]) keeps its type, dates and note
+ *  when the person writes their own record (u/{uid}); they can still withdraw it (x). New and pending requests stay
+ *  editable. $before = the stored record, $data = the record as it will be saved. */
+function leaveLockDecided(string $uid, ?stdClass $before, stdClass $data): void
+{
+    $prev = $before && ($before->lv ?? null) instanceof stdClass ? $before->lv : null;
+    $dec = docGet("r/$uid")->lvd ?? null;
+    if (!$prev || !($dec instanceof stdClass)) {
+        return;
+    }
+    foreach (get_object_vars($prev) as $id => $was) {
+        if (!isset($dec->$id) || !($was instanceof stdClass)) {
+            continue;
+        }
+        if (!(($data->lv ?? null) instanceof stdClass)) {
+            $data->lv = new stdClass();
+        }
+        $now = $data->lv->$id ?? null;
+        $keep = clone $was;
+        if ($now instanceof stdClass && !empty($now->x)) {
+            $keep->x = 1;
+        }
+        $data->lv->$id = $keep;
     }
 }
 function fmtCloseDate(string $d): string
@@ -1398,6 +1501,43 @@ function managerReads(string $path, array $u): bool
         return false;
     }
     return managedBy($u['id'], $segs[1]);
+}
+/**
+ * v83: an approved timesheet week is locked. The person's own writes may not change (or delete) the week record
+ * u/{uid}/ts/{week} or its line in the u/{uid}.ts summary while r/{uid}.rev[week] approves that version; staff
+ * (administrators, HR, accounting) still may, and a reopened or returned week is editable again.
+ */
+function tsLockedWeeks(string $uid, $ud, array $weeks): array
+{
+    $r = docGet("r/$uid");
+    $out = [];
+    foreach ($weeks as $w) {
+        $w = (string) $w;
+        $rev = $r && isset($r->rev) && $r->rev instanceof stdClass ? $r->rev->$w ?? null : null;
+        $sum = $ud && isset($ud->ts) && $ud->ts instanceof stdClass ? $ud->ts->$w ?? null : null;
+        if ($rev instanceof stdClass && $sum instanceof stdClass && ($rev->s ?? '') === 'approved' && ($sum->s ?? '') === 'submitted' && (int) ($rev->v ?? -1) === (int) ($sum->u ?? -2)) {
+            $out[] = $w;
+        }
+    }
+    return $out;
+}
+function tsApprovedTamper(string $path, $before, $after, ?array $u): bool
+{
+    if (!str_starts_with($path, 'u/') || userLevel($u) >= 2) {
+        return false;
+    }
+    if (preg_match('#^u/([^/]+)/ts/([^/]+)$#', $path, $m)) {
+        return tsLockedWeeks($m[1], docGet('u/' . $m[1]), [$m[2]]) && json_encode($before) !== json_encode($after);
+    }
+    if (preg_match('#^u/([^/]+)$#', $path, $m) && ($before->ts ?? null) instanceof stdClass) {
+        $at = $after->ts ?? null;
+        foreach (tsLockedWeeks($m[1], $before, array_keys(get_object_vars($before->ts))) as $w) {
+            if (json_encode($before->ts->$w) !== json_encode($at instanceof stdClass ? $at->$w ?? null : null)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 /** A manager may merge approvals and tasks into a direct report's record, nothing else. */
 function managerWrites(string $path, array $u, stdClass $patch): bool
@@ -2493,6 +2633,63 @@ function sigNotify(stdClass $d, string $id, int $i, bool $remind = false): bool
     $d->log = $log;
     return $ok;
 }
+/** The streams of a PDF (the newest version of each object; object and cross-reference streams left out). */
+function sigPdfStreams(string $pdf): array
+{
+    $out = [];
+    if (!preg_match_all('/(?<![0-9])(\d+)\s+(\d+)\s+obj\b/', $pdf, $m, PREG_OFFSET_CAPTURE)) {
+        return $out;
+    }
+    foreach ($m[0] as $k => $hit) {
+        $end = strpos($pdf, 'endobj', $hit[1]);
+        if ($end === false) {
+            continue;
+        }
+        $body = substr($pdf, $hit[1], $end - $hit[1]);
+        $num = $m[1][$k][0];
+        $s = strpos($body, 'stream');
+        if ($s === false || preg_match('#/Type\s*/(ObjStm|XRef)\b#', substr($body, 0, $s))) {
+            unset($out[$num]);
+            continue;
+        }
+        $s += 6;
+        if (($body[$s] ?? '') === "\r") {
+            $s++;
+        }
+        if (($body[$s] ?? '') === "\n") {
+            $s++;
+        }
+        $e = strrpos($body, 'endstream');
+        if ($e === false || $e <= $s) {
+            unset($out[$num]);
+            continue;
+        }
+        $out[$num] = rtrim(substr($body, $s, $e - $s), "\r\n");
+    }
+    return array_values(array_filter($out, fn($x) => $x !== ''));
+}
+/**
+ * v83: true when the signed copy $got still carries the copy it was signed on ($was, of type $ty) byte for byte: every
+ * page, image and font stream of it (the browser only adds stamps, fields and a certificate page).
+ */
+function sigKeepsCopy(string $was, string $ty, string $got): bool
+{
+    if (!str_contains(substr($got, 0, 1024), '%PDF-')) {
+        return false;
+    }
+    if ($ty === 'image/jpeg') {
+        return str_contains($got, $was); // pdf-lib embeds a JPEG unchanged
+    }
+    if ($ty !== 'application/pdf') {
+        return true; // a PNG is re-encoded into the first page: nothing to compare
+    }
+    foreach (sigPdfStreams($was) as $s) {
+        if (!str_contains($got, $s)) {
+            return false;
+        }
+    }
+    return true;
+}
 function sigComplete(stdClass $d, string $id): void
 {
     $pdf = fileRead((string) $d->sfid);
@@ -2500,6 +2697,12 @@ function sigComplete(stdClass $d, string $id): void
         return;
     }
     $att = [['name' => (string) ($d->sfn ?? 'signed.pdf'), 'type' => 'application/pdf', 'data' => $pdf]];
+    // v83: the original as sent travels with the signed copy, so every party can compare the two
+    $orig = fileRead((string) $d->fid);
+    if ($orig !== null) {
+        $att[] = ['name' => 'original-' . (string) ($d->fn ?? 'document'), 'type' => (string) ($d->fty ?? 'application/pdf'), 'data' => $orig];
+    }
+    $origNote = ' The original document as sent (SHA-256 ' . (string) ($d->fh ?? '') . ') is attached too.';
     $sent = [];
     foreach ((array) $d->signers as $s) {
         if (!empty($s->e) && !isset($sent[$s->e])) {
@@ -2508,9 +2711,9 @@ function sigComplete(stdClass $d, string $id): void
                 (string) $s->e,
                 (string) $s->n,
                 'Signed copy: ' . $d->ti,
-                "All parties have signed \"{$d->ti}\". The signed copy is attached.",
+                "All parties have signed \"{$d->ti}\". The signed copy is attached." . $origNote,
                 emailHtml('Signed: ' . $d->ti, [
-                    "All parties have signed \"{$d->ti}\". The signed PDF, with a signature certificate for each signer, is attached for your records.",
+                    "All parties have signed \"{$d->ti}\". The signed PDF, with a signature certificate for each signer, is attached for your records." . $origNote,
                 ]),
                 $att,
             );
@@ -2520,7 +2723,7 @@ function sigComplete(stdClass $d, string $id): void
     foreach ((array) ($d->mail->cc ?? []) as $cc) {
         if (is_string($cc) && filter_var($cc, FILTER_VALIDATE_EMAIL) && !isset($sent[$cc])) {
             $sent[$cc] = 1;
-            sendMail($cc, '', 'Signed copy: ' . $d->ti, "\"{$d->ti}\" has been signed by everyone. The signed copy is attached.", emailHtml('Signed: ' . $d->ti, ["\"{$d->ti}\" has been signed by everyone. The signed PDF, with a signature certificate for each signer, is attached. {$d->byn} asked for you to get a copy."]), $att, (string) ($d->bye ?? ''));
+            sendMail($cc, '', 'Signed copy: ' . $d->ti, "\"{$d->ti}\" has been signed by everyone. The signed copy is attached." . $origNote, emailHtml('Signed: ' . $d->ti, ["\"{$d->ti}\" has been signed by everyone. The signed PDF, with a signature certificate for each signer, is attached. {$d->byn} asked for you to get a copy." . $origNote]), $att, (string) ($d->bye ?? ''));
         }
     }
     if (!empty($d->bye) && !isset($sent[$d->bye])) {
@@ -2528,9 +2731,9 @@ function sigComplete(stdClass $d, string $id): void
             (string) $d->bye,
             (string) $d->byn,
             'Signed copy: ' . $d->ti,
-            "All parties have signed \"{$d->ti}\". The signed copy is attached.",
+            "All parties have signed \"{$d->ti}\". The signed copy is attached." . $origNote,
             emailHtml('Signed: ' . $d->ti, [
-                "All parties have signed \"{$d->ti}\". The signed PDF is attached and the request is marked complete in the admin portal.",
+                "All parties have signed \"{$d->ti}\". The signed PDF is attached and the request is marked complete in the admin portal." . $origNote,
             ]),
             $att,
         );

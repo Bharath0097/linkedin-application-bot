@@ -77,7 +77,7 @@ function MyMail({ q }) {
     try {
       const r = await api('mymail_act', { ids, act: a, ...(extra || {}) });
       if (a === 'delete' && open && ids.includes(open.id)) setOpen(null);
-      if (a === 'delete') toast(`${ids.length} message${ids.length === 1 ? '' : 's'} removed from the portal${r && r.trashed ? `, ${r.trashed} moved to Gmail's trash` : ''}.`);
+      if (a === 'delete') toast(`${ids.length} message${ids.length === 1 ? '' : 's'} removed from the portal${r && r.trashed ? `, ${r.trashed} moved to ${st && st.acct && st.acct.provider === 'microsoft' ? 'Deleted Items in Outlook' : "Gmail's trash"}` : ''}.`);
       setSel({});
       await load();
       if (a === 'label' && open && ids.includes(open.id)) setOpen({ ...open, label: extra.label });
@@ -259,7 +259,7 @@ function MyMail({ q }) {
                               <option value="-">No label</option>
                             </select>
                             <button type="button" className="btn ghost sm" onClick=${() => download(selIds)}><${Icon} n="down" />Download</button>
-                            <button type="button" className="btn ghost sm danger" onClick=${() => confirm(`Remove ${selIds.length} message${selIds.length === 1 ? '' : 's'} from the portal?${a.provider === 'google' && alsoGmail ? ' They also go to Gmail\u2019s trash (recoverable there for 30 days).' : a.provider === 'google' ? ' They stay in Gmail.' : ''}`) && act(selIds, 'delete', { gmail: a.provider === 'google' && alsoGmail })}><${Icon} n="trash" />Delete</button>
+                            <button type="button" className="btn ghost sm danger" onClick=${() => confirm(`Remove ${selIds.length} message${selIds.length === 1 ? '' : 's'} from the portal?${a.provider === 'google' && alsoGmail ? ' They also go to Gmail\u2019s trash (recoverable there for 30 days).' : a.provider === 'google' ? ' They stay in Gmail.' : a.provider === 'microsoft' ? ' They also move to Deleted Items in Outlook.' : ''}`) && act(selIds, 'delete', { gmail: (a.provider === 'google' && alsoGmail) || a.provider === 'microsoft' })}><${Icon} n="trash" />Delete</button>
                             ${a.provider === 'google' && html`<label className="check small" title="Also move them to Gmail's trash"><input type="checkbox" checked=${alsoGmail} onChange=${e => setAlsoGmail(e.target.checked)} /><span>also in Gmail</span></label>`}
                             <button type="button" className="btn link sm" onClick=${() => setSel({})}>Clear</button>
                           </div>`
@@ -288,7 +288,7 @@ function MyMail({ q }) {
                             <button type="button" className="btn ghost sm" onClick=${() => download([open.id])} title="Download as an .eml file"><${Icon} n="down" />Download</button>
                             <button type="button" className="btn ghost sm" onClick=${() => act([open.id], open.starred ? 'unstar' : 'star').then(() => setOpen({ ...open, starred: !open.starred }))}>${open.starred ? 'Unstar' : 'Star'}</button>
                             ${box === 'in' && html`<button type="button" className="btn sm" onClick=${() => setCompose({ to: open.from_email, cc: '', bcc: '', subject: /^re:/i.test(open.subject) ? open.subject : 'Re: ' + open.subject, text: `\n\n---\nOn ${fmtTs(+open.at)}, ${open.from_name || open.from_email} wrote:\n${(open.text || '').split('\n').map(l => '> ' + l).join('\n')}`, loop: false, reply: open.id, label: open.label || '' })}>Reply</button>`}
-                            <button type="button" className="btn ghost sm danger" onClick=${() => confirm('Remove this message from the portal? It stays in Gmail.') && act([open.id], 'delete')}>Remove</button>
+                            <button type="button" className="btn ghost sm danger" onClick=${() => (a && a.provider === 'microsoft' ? confirm('Remove this message? It also moves to Deleted Items in Outlook.') && act([open.id], 'delete', { gmail: true }) : confirm('Remove this message from the portal? It stays in Gmail.') && act([open.id], 'delete'))}>Remove</button>
                           </div>
                         </div>
                         <h2 className="ph" style=${{ margin: '6px 0 2px' }}>${open.subject || '(no subject)'}</h2>

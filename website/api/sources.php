@@ -67,6 +67,8 @@ function srcFeed(): never
     $board = isset(SRC_BOARDS[$board]) ? $board : 'feed';
     $fmt = (string) ($_GET['fmt'] ?? '') === 'json' ? 'json' : 'xml';
     $base = siteUrl();
+    // v83: on a company workspace the feed lists that company's jobs, so it names the company, not StratEdge
+    $co = wsBrandText('StratEdge IT Consulting');
     $rows = [];
     foreach (srcFeedJobs() as $id => $j) {
         // a job can be limited to some boards (the requisition's Job boards, or the job boards desk); none ticked means
@@ -110,14 +112,14 @@ function srcFeed(): never
     header('Cache-Control: public, max-age=900');
     if ($fmt === 'json') {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['publisher' => 'StratEdge IT Consulting', 'url' => $base, 'updated' => gmdate('c'), 'jobs' => array_map(fn($r) => array_merge($r, ['date' => gmdate('c', $r['date'])]), $rows)], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        echo json_encode(['publisher' => $co, 'url' => $base, 'updated' => gmdate('c'), 'jobs' => array_map(fn($r) => array_merge($r, ['date' => gmdate('c', $r['date'])]), $rows)], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit();
     }
     header('Content-Type: application/xml; charset=utf-8');
     $c = fn(string $s) => '<![CDATA[' . str_replace(']]>', ']]]]><![CDATA[>', $s) . ']]>';
-    $x = '<?xml version="1.0" encoding="utf-8"?>' . "\n<source>\n<publisher>StratEdge IT Consulting</publisher>\n<publisherurl>" . htmlspecialchars($base, ENT_XML1) . "</publisherurl>\n<lastBuildDate>" . gmdate('D, d M Y H:i:s') . " GMT</lastBuildDate>\n";
+    $x = '<?xml version="1.0" encoding="utf-8"?>' . "\n<source>\n<publisher>" . htmlspecialchars($co, ENT_XML1) . "</publisher>\n<publisherurl>" . htmlspecialchars($base, ENT_XML1) . "</publisherurl>\n<lastBuildDate>" . gmdate('D, d M Y H:i:s') . " GMT</lastBuildDate>\n";
     foreach ($rows as $r) {
-        $x .= "<job>\n<title>" . $c($r['title']) . "</title>\n<date>" . $c(gmdate('D, d M Y H:i:s', $r['date']) . ' GMT') . "</date>\n<referencenumber>" . $c($r['id']) . "</referencenumber>\n<requisitionid>" . $c($r['id']) . "</requisitionid>\n<url>" . $c($r['url']) . "</url>\n<company>" . $c('StratEdge IT Consulting') . "</company>\n<sourcename>" . $c('StratEdge IT Consulting') . "</sourcename>\n<city>" . $c($r['city']) . "</city>\n<state>" . $c($r['state']) . "</state>\n<country>" . $c($r['country']) . "</country>\n<description>" . $c(nl2br(htmlspecialchars($r['description']))) . "</description>\n<jobtype>" . $c($r['jobtype']) . "</jobtype>\n" .
+        $x .= "<job>\n<title>" . $c($r['title']) . "</title>\n<date>" . $c(gmdate('D, d M Y H:i:s', $r['date']) . ' GMT') . "</date>\n<referencenumber>" . $c($r['id']) . "</referencenumber>\n<requisitionid>" . $c($r['id']) . "</requisitionid>\n<url>" . $c($r['url']) . "</url>\n<company>" . $c($co) . "</company>\n<sourcename>" . $c($co) . "</sourcename>\n<city>" . $c($r['city']) . "</city>\n<state>" . $c($r['state']) . "</state>\n<country>" . $c($r['country']) . "</country>\n<description>" . $c(nl2br(htmlspecialchars($r['description']))) . "</description>\n<jobtype>" . $c($r['jobtype']) . "</jobtype>\n" .
             ($r['remote'] !== '' ? '<remotetype>' . $c($r['remote']) . "</remotetype>\n" : '') .
             ($r['salary'] !== '' ? '<salary>' . $c($r['salary']) . "</salary>\n" : '') .
             ($r['category'] !== '' ? '<category>' . $c($r['category']) . "</category>\n" : '') .

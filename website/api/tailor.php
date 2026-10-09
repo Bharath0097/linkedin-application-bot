@@ -176,6 +176,8 @@ function tailorJd(string $jd, array $meta = []): array
     // named tools and nouns the dictionary does not know (SAP PP, Terraform Cloud, Snowflake): capitalised runs
     $extra = [];
     preg_match_all('/\b(?:[A-Z][A-Za-z0-9+#.]{1,}|[A-Z]{2,}[0-9]*)(?:[ \/\-](?:[A-Z][A-Za-z0-9+#.]{1,}|[A-Z]{2,}[0-9]*)){0,2}\b/u', $jd, $mm);
+    // v83: a run must not cross sentence punctuation ('TX. Must', 'AWS. Experience'): split it there
+    $mm[0] = array_values(array_filter(array_merge(...array_map(fn($w) => preg_split('/\.[ \/\-]+/', $w) ?: [$w], $mm[0])), fn($w) => $w !== ''));
     $skLow = array_map('strtolower', $skills);
     foreach ($mm[0] as $w) {
         $lw = strtolower($w);
@@ -846,18 +848,39 @@ function tailorGuard(array $orig, array $out, string $origText): array
     if ($envDropped) {
         $flags[] = 'Environment lines keep only tools the original resume mentions (left out: ' . implode(', ', array_slice(array_values(array_unique($envDropped)), 0, 8)) . ').';
     }
-    $origCerts = array_map('strtolower', $orig['certs']);
-    foreach ($out['certs'] as $c) {
-        if (!in_array(strtolower($c), $origCerts, true)) {
-            $flags[] = 'Certification "' . $c . '" is not on the original resume and was left out.';
-        }
-    }
+    // v83: education and certifications come from the original; when it has none (or the parser missed the section)
+    // only lines the original text contains are kept, so a credential the rewrite made up never reaches the files
+    $origFlat = preg_replace('/[^a-z0-9]+/', '', $origLowAll) ?? '';
+    $onOrig = function (string $s) use ($origFlat): bool {
+        $k = preg_replace('/[^a-z0-9]+/', '', strtolower($s)) ?? '';
+        return $k !== '' && str_contains($origFlat, $k);
+    };
     if ($orig['education']) {
         $out['education'] = $orig['education'];
+    } else {
+        $keepEdu = [];
+        foreach ($out['education'] as $e) {
+            if ($onOrig($e['t'])) {
+                $keepEdu[] = $e;
+            } else {
+                $flags[] = 'Education "' . $e['t'] . '" is not on the original resume and was left out.';
+            }
+        }
+        $out['education'] = $keepEdu;
     }
-    if ($orig['certs']) {
-        $out['certs'] = $orig['certs'];
+    $origCerts = array_map('strtolower', $orig['certs']);
+    $keepCerts = [];
+    foreach ($out['certs'] as $c) {
+        if (in_array(strtolower($c), $origCerts, true)) {
+            continue;
+        }
+        if (!$orig['certs'] && $onOrig($c)) {
+            $keepCerts[] = $c;
+            continue;
+        }
+        $flags[] = 'Certification "' . $c . '" is not on the original resume and was left out.';
     }
+    $out['certs'] = $orig['certs'] ?: $keepCerts;
     // keywords in the result that the original never mentioned (dictionary skills, plus the job's named terms)
     $origLow = strtolower($origText . ' ' . tailorText($orig));
     $origSk = array_map('strtolower', skillsIn($origText . "\n" . tailorText($orig), 160));
@@ -1967,9 +1990,11 @@ function tailorItemOut(string $base, string $id, stdClass $d, bool $full): array
     $a['id'] = $id;
     $a['base'] = $base . '/' . $id; // the item's own path: its files hang under base/f/{fid}
     unset($a['full'], $a['layout']); // the untrimmed version stays on the server (used when the pages change)
+    // v83: the score summary is on every form: the pages put a freshly tailored (full) item straight into their list
+    // (read from $a: tl_run's item is an object holding arrays, a stored item is objects all the way down)
+    $a['score'] = ['before' => (int) ($a['before']['score'] ?? 0), 'after' => (int) ($a['after']['score'] ?? 0)];
     if (!$full) {
         unset($a['orig'], $a['out'], $a['full'], $a['before'], $a['after']);
-        $a['score'] = ['before' => (int) ($d->before->score ?? 0), 'after' => (int) ($d->after->score ?? 0)];
         if (isset($a['jd'])) {
             unset($a['jd']['text'], $a['jd']['reqs'], $a['jd']['terms'], $a['jd']['skills']);
         }

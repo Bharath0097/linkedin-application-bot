@@ -788,7 +788,7 @@ function WkDaily({ d, onOpen }) {
   const save = async () => {
     setBusy(true);
     try {
-      await api('wk_daily_save', { id: P.id, ...f });
+      await api('wk_daily_save', { id: P.id, ...f, day: wkToday() }); // file it under the poster's local day, the one this page reads
       toast('Your stand-up is in.');
       load();
     } catch (e) {
@@ -840,8 +840,10 @@ function WkRetro({ d, onChanged }) {
       if (msg) toast(typeof msg === 'function' ? msg(x) : msg);
       load();
       if (body.act === 'item') onChanged();
+      return true;
     } catch (e) {
       toast(errText(e), true);
+      return false;
     }
   };
   return html`<div className="stack">
@@ -866,7 +868,7 @@ function WkRetro({ d, onChanged }) {
                   </div>`
                   )}
                 <textarea value=${txt[k]} onInput=${e => setTxt({ ...txt, [k]: e.target.value })} placeholder="Add a note" />
-                <div><button className="btn sm" disabled=${!txt[k].trim()} onClick=${() => act({ act: 'add', kind: k, txt: txt[k] }).then(() => setTxt({ ...txt, [k]: '' }))}>Add</button></div>
+                <div><button className="btn sm" disabled=${!txt[k].trim()} onClick=${() => act({ act: 'add', kind: k, txt: txt[k] }).then(ok => ok && setTxt(t => ({ ...t, [k]: '' })))}>Add</button></div>
               </section>`
             )}</div>`
       }

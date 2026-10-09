@@ -80,7 +80,7 @@ function TsReview({ m, w, onClose }) {
     }
     setBusy(true);
     try {
-      await dbMerge(`r/${m.id}`, { rev: { [w]: { s, c: c.trim(), at: Date.now(), by: P.uid, v: sum.u } } });
+      await dbMerge(`r/${m.id}`, { rev: { [w]: { s, c: c.trim(), at: Date.now(), by: P.uid, v: sum.u, t: sum.t } } });
       toast(
         s === 'approved'
           ? 'Timesheet approved.'
@@ -1296,7 +1296,8 @@ function LeaveDecide({ x, s, onClose }) {
   const go = async () => {
     setBusy(true);
     try {
-      await dbMerge(`r/${x.m.id}`, { lvd: { [x.id]: { s, c: c.trim(), at: Date.now(), by: P.uid } } });
+      // v83: the decision keeps what was decided (type and dates)
+      await dbMerge(`r/${x.m.id}`, { lvd: { [x.id]: { s, c: c.trim(), at: Date.now(), by: P.uid, k: x.l.k || '', f: x.l.f || '', t: x.l.t || '' } } });
       toast(s === 'approved' ? 'Time off approved.' : 'Time off declined.');
       onClose();
     } catch (e) {

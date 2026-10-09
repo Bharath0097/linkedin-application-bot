@@ -46,6 +46,11 @@ const GUARD_POW_FORMS = ['public_contact', 'register', 'chat', 'public_share', '
 // routes other sites may call from a visitor's browser (the autofill bookmarklet, feeds, security.txt)
 const GUARD_XSITE_OK = ['apply_used', 'apply_resume', 'security_txt', 'jobs_feed'];
 // services that post to the site directly (no browser): they prove themselves with a signature instead
+// v83: routes that change data answer only POST (a GET carries no body, and a link on another site can open it)
+const GUARD_POST_ONLY = [
+    'dd_save', 'dd_release', 'dd_dispute', 'dd_prenoted', 'ach_settings_save', 'pay_nacha', 'pay_dd_register', 'my_w4_save', 'taxdep_save', 'taxdep_delete',
+    'pr_settings_save', 'pr_remind', 'pr_start', 'pr_turn', 'pr_end', 'pr_drill_save', 'mail_safety_save',
+];
 const GUARD_HOOKS = ['unsub', 'mail_webhook', 'mail_inbound', 'mail_postal_hook', 'mail_postal_inbound', 'mail_ses_hook', 'plaid_webhook', 'stripe_webhook'];
 // the size of the puzzle: the browser tries up to this many numbers (half on average)
 const GUARD_POW_MAX = ['normal' => 60000, 'strong' => 300000];
@@ -53,7 +58,7 @@ const GUARD_POW_MAX = ['normal' => 60000, 'strong' => 300000];
 // roles, keys and connections to outside services, bank accounts and payroll files, bulk exports, data deletion
 const GUARD_REAUTH_ROUTES = [
     'admin_access', 'admin_feature_access', 'admin_role', 'admin_member_role', 'admin_manager', 'admin_status', 'admin_reset', 'admin_books_access',
-    'mail_settings_save', 'plaid_settings_save', 'qbo_settings_save', 'sso_settings_save', 'ai_settings_save', 'bill_settings_save', 'cx_save', 'src_save', 'src_dice_feed_mode', 'oorwin_login', 'oorwin_disconnect', 'oorwin_import', 'vms_settings_save', 'vms_agent_run', 'vms_agent_retry', 'sec_save',
+    'mail_settings_save', 'plaid_settings_save', 'qbo_settings_save', 'sso_settings_save', 'ai_settings_save', 'bill_settings_save', 'cx_save', 'src_save', 'src_dice_feed_mode', 'oorwin_login', 'oorwin_disconnect', 'atc_save', 'oorwin_import', 'vms_settings_save', 'vms_agent_run', 'vms_agent_retry', 'sec_save',
     'ach_settings_save', 'dd_save', 'dd_release', 'pay_nacha',
     'ats_export', 'books_export', 'priv_export', 'priv_send_copy', 'priv_erase', 'priv_run', 'gov_audit_csv',
 ];

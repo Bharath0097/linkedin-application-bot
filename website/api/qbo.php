@@ -57,6 +57,12 @@ function qboRedirect(): string
 /** Where the browser goes after the callback: this very host (a staging copy must not bounce to the live site). */
 function qboAppUrl(): string
 {
+    $ws = wsCurrent();
+    if ($ws && empty($ws['missing'])) {
+        // v83: a workspace (/w/<name>/, its subdomain or own domain) goes back to the address the callback came in on;
+        // SCRIPT_NAME loses the /w/<name>/ part after the rewrite and sent the admin to the provider's portal
+        return ssoBase();
+    }
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
     $dir = rtrim(dirname(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/index.php'))), '/');
     return ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $dir . '/';
@@ -471,6 +477,9 @@ function qboSync(bool $full = false): array
         try {
             if (qboPush($kind, $entity, $key, $body, $map, $stats)) {
                 $budget--;
+                // v83: remember the new QuickBooks Id at once, so a later error (or a timeout) in this run cannot
+                // leave a pushed record unmapped and pushed again, duplicated, on the next run
+                qboMapSave($kind, $map);
             } else {
                 $stats['skipped']++;
             }
@@ -516,31 +525,46 @@ function qboSync(bool $full = false): array
         } catch (RuntimeException $e) {
             $stats['errors']++;
             $errors[] = 'Customer ' . $client . ': ' . $e->getMessage();
+            foreach ((array) ($x->pays ?? []) as $k => $p) {
+                $seenPay[$id . ':' . (string) ($p->at ?? $k)] = true; // v83: not a removal; keep its payments in QuickBooks
+            }
             continue;
         }
         $lines = [];
-        foreach ((array) ($x->lines ?? []) as $l) {
-            if (!($l instanceof stdClass)) {
-                continue;
+        try {
+            foreach ((array) ($x->lines ?? []) as $l) {
+                if (!($l instanceof stdClass)) {
+                    continue;
+                }
+                $amt = round((float) ($l->q ?? 0) * (float) ($l->u ?? 0), 2);
+                $acct = !empty($l->acct) && isset(coaIndex()['byId'][(string) $l->acct]) ? (string) $l->acct : sysAcct('inc');
+                try {
+                    $item = qboItem($acct, $acctMap);
+                } catch (RuntimeException $e) {
+                    $item = qboItem(sysAcct('inc'), $acctMap);
+                }
+                $detail = ['ItemRef' => ['value' => $item], 'Qty' => (float) ($l->q ?? 1), 'UnitPrice' => (float) ($l->u ?? 0)];
+                if ($us) {
+                    $detail['TaxCodeRef'] = ['value' => 'NON'];
+                }
+                $lines[] = ['DetailType' => 'SalesItemLineDetail', 'Amount' => $amt, 'Description' => mb_substr((string) ($l->d ?? ''), 0, 4000), 'SalesItemLineDetail' => $detail];
             }
-            $amt = round((float) ($l->q ?? 0) * (float) ($l->u ?? 0), 2);
-            $acct = !empty($l->acct) && isset(coaIndex()['byId'][(string) $l->acct]) ? (string) $l->acct : sysAcct('inc');
-            try {
-                $item = qboItem($acct, $acctMap);
-            } catch (RuntimeException $e) {
-                $item = qboItem(sysAcct('inc'), $acctMap);
+            if ((float) ($x->tax ?? 0) > 0) {
+                // tax collected goes to the sales-tax liability through its own service line (automated sales tax in
+                // QuickBooks cannot be told an amount)
+                $taxItem = qboItem(sysAcct('salestax'), $acctMap);
+                $lines[] = ['DetailType' => 'SalesItemLineDetail', 'Amount' => round((float) $x->tax, 2), 'Description' => 'Sales tax (' . (string) ($x->taxp ?? '') . '%)', 'SalesItemLineDetail' => ['ItemRef' => ['value' => $taxItem], 'Qty' => 1, 'UnitPrice' => round((float) $x->tax, 2)] + ($us ? ['TaxCodeRef' => ['value' => 'NON']] : [])];
             }
-            $detail = ['ItemRef' => ['value' => $item], 'Qty' => (float) ($l->q ?? 1), 'UnitPrice' => (float) ($l->u ?? 0)];
-            if ($us) {
-                $detail['TaxCodeRef'] = ['value' => 'NON'];
+        } catch (RuntimeException $e) {
+            // v83: an item QuickBooks refuses fails this invoice only (the run goes on and its maps are kept)
+            $stats['errors']++;
+            if (count($errors) < 12) {
+                $errors[] = 'Invoice ' . $id . ': ' . mb_substr($e->getMessage(), 0, 240);
             }
-            $lines[] = ['DetailType' => 'SalesItemLineDetail', 'Amount' => $amt, 'Description' => mb_substr((string) ($l->d ?? ''), 0, 4000), 'SalesItemLineDetail' => $detail];
-        }
-        if ((float) ($x->tax ?? 0) > 0) {
-            // tax collected goes to the sales-tax liability through its own service line (automated sales tax in
-            // QuickBooks cannot be told an amount)
-            $taxItem = qboItem(sysAcct('salestax'), $acctMap);
-            $lines[] = ['DetailType' => 'SalesItemLineDetail', 'Amount' => round((float) $x->tax, 2), 'Description' => 'Sales tax (' . (string) ($x->taxp ?? '') . '%)', 'SalesItemLineDetail' => ['ItemRef' => ['value' => $taxItem], 'Qty' => 1, 'UnitPrice' => round((float) $x->tax, 2)] + ($us ? ['TaxCodeRef' => ['value' => 'NON']] : [])];
+            foreach ((array) ($x->pays ?? []) as $k => $p) {
+                $seenPay[$id . ':' . (string) ($p->at ?? $k)] = true;
+            }
+            continue;
         }
         if ((float) ($x->disc ?? 0) > 0) {
             $lines[] = ['DetailType' => 'DiscountLineDetail', 'Amount' => round((float) $x->disc, 2), 'DiscountLineDetail' => ['PercentBased' => false, 'DiscountAccountRef' => $q(sysAcct('discounts'))]];
@@ -706,17 +730,27 @@ function qboSync(bool $full = false): array
             continue;
         }
         $lines = [];
-        foreach ((array) $e['lines'] as $l) {
-            $dr = round((float) ($l['dr'] ?? 0), 2);
-            $cr = round((float) ($l['cr'] ?? 0), 2);
-            $acct = (string) $l['acct'];
-            $detail = ['PostingType' => $dr > 0 ? 'Debit' : 'Credit', 'AccountRef' => $q($acct)];
-            if ($acct === $arId) {
-                $detail['Entity'] = ['Type' => 'Customer', 'EntityRef' => ['value' => qboCustomer((string) ($l['name'] ?? '') !== '' ? (string) $l['name'] : 'Opening balances')]];
-            } elseif ($acct === $apId) {
-                $detail['Entity'] = ['Type' => 'Vendor', 'EntityRef' => ['value' => qboVendor((string) ($l['name'] ?? '') !== '' ? (string) $l['name'] : 'Opening balances')]];
+        try {
+            foreach ((array) $e['lines'] as $l) {
+                $dr = round((float) ($l['dr'] ?? 0), 2);
+                $cr = round((float) ($l['cr'] ?? 0), 2);
+                $acct = (string) $l['acct'];
+                $detail = ['PostingType' => $dr > 0 ? 'Debit' : 'Credit', 'AccountRef' => $q($acct)];
+                if ($acct === $arId) {
+                    $detail['Entity'] = ['Type' => 'Customer', 'EntityRef' => ['value' => qboCustomer((string) ($l['name'] ?? '') !== '' ? (string) $l['name'] : 'Opening balances')]];
+                } elseif ($acct === $apId) {
+                    $detail['Entity'] = ['Type' => 'Vendor', 'EntityRef' => ['value' => qboVendor((string) ($l['name'] ?? '') !== '' ? (string) $l['name'] : 'Opening balances')]];
+                }
+                $lines[] = ['DetailType' => 'JournalEntryLineDetail', 'Amount' => $dr > 0 ? $dr : $cr, 'Description' => mb_substr(trim(((string) ($l['name'] ?? '') !== '' ? $l['name'] . ' · ' : '') . (string) ($l['memo'] ?? $e['memo'])), 0, 4000), 'JournalEntryLineDetail' => $detail];
             }
-            $lines[] = ['DetailType' => 'JournalEntryLineDetail', 'Amount' => $dr > 0 ? $dr : $cr, 'Description' => mb_substr(trim(((string) ($l['name'] ?? '') !== '' ? $l['name'] . ' · ' : '') . (string) ($l['memo'] ?? $e['memo'])), 0, 4000), 'JournalEntryLineDetail' => $detail];
+        } catch (RuntimeException $ex) {
+            // v83: a name QuickBooks refuses (say a customer and a vendor of the same name, code 6240) fails this
+            // entry only; before, it ended the run before the journal map was saved
+            $stats['errors']++;
+            if (count($errors) < 12) {
+                $errors[] = 'JournalEntry ' . $key . ': ' . mb_substr($ex->getMessage(), 0, 240);
+            }
+            continue;
         }
         if (count($lines) < 2) {
             continue;

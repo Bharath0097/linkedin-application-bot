@@ -91,6 +91,8 @@
     function (e) {
       var app = document.getElementById('app');
       if (!app || !app.querySelector('[data-boot]')) return;
+      // v83: boot.js already drew its message with a working "Try again" button; leave it in place
+      if (app.querySelector('[data-retry]')) return;
       var t = e.target;
       var msg = '';
       var detail = '';
@@ -107,9 +109,12 @@
       app.innerHTML =
         '<div style="font:16px/1.6 Arial,sans-serif;max-width:620px;margin:60px auto;padding:24px;border:1px solid #ddd;border-radius:12px">' +
         '<h1 style="font-size:22px;margin:0 0 8px">The site could not start</h1><p>' + esc(msg) + '</p>' +
-        '<p><button type="button" onclick="location.reload()" style="font:inherit;padding:8px 16px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer">Reload</button></p>' +
+        '<p><button type="button" data-reload style="font:inherit;padding:8px 16px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer">Reload</button></p>' +
         (detail ? '<pre style="font:12px/1.5 monospace;white-space:pre-wrap;word-break:break-word;background:#f3f4f6;padding:10px;border-radius:8px">' + esc(detail) + '</pre>' : '') +
         '<p>Email <a href="mailto:info@stratedgeitconsulting.com">info@stratedgeitconsulting.com</a> if you need help.</p></div>';
+      // v83: the page CSP refuses inline event handlers, so the button is wired here
+      var rb = app.querySelector('[data-reload]');
+      if (rb) rb.addEventListener('click', function () { location.reload(); });
     },
     true
   );

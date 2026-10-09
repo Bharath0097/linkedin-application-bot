@@ -532,6 +532,7 @@ function wsjRoute(string $r, array $b): never
                     $m = wsMake($sys, [
                         'slug' => wsjFreeSlug((string) ($s->slug ?? ''), (string) $s->co), 'name' => (string) $s->co, 'adminName' => (string) $s->n, 'adminEmail' => (string) $s->e,
                         'features' => wsjAutoFeats($s, $cfg), 'pilotDays' => $cfg['pilotDays'], 'signup' => $id,
+                        'shareAi' => false, // v83: a portal made for a stranger does not run on StratEdge's AI key
                         'notes' => 'Made automatically from a sign-up request on ' . date('j M Y') . '.',
                     ], wsjIntro($s));
                     if (isset($m['err'])) {

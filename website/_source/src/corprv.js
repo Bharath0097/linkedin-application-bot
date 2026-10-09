@@ -113,8 +113,16 @@ function useRvHome(cid, days) {
     setD(null);
   }, [cid, days]);
   useEffect(() => {
+    // v83: drop answers for a company or period no longer selected (a slower earlier reply must not land last)
+    let live = true;
     const end = Date.now();
-    api('cr_rv_home', { ...(cid ? { cid } : {}), start: end - days * 86400000, end }).then(x => (setD(x), setErr(null)), setErr);
+    api('cr_rv_home', { ...(cid ? { cid } : {}), start: end - days * 86400000, end }).then(
+      x => live && (setD(x), setErr(null)),
+      e => live && setErr(e)
+    );
+    return () => {
+      live = false;
+    };
   }, [cid, days, tick]);
   return [d, err, () => setTick(t => t + 1)];
 }

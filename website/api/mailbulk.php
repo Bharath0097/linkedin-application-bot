@@ -1617,7 +1617,7 @@ function mailBulkRoute(string $r, string $method, array $b): never
         case 'mail_safety_save':
             mailOwner();
             $old = mailSafety();
-            $warm = !empty($b['warm']);
+            $warm = array_key_exists('warm', $b) ? !empty($b['warm']) : (bool) $old['warm'];
             $start = $old['warmStart'];
             $day = (int) ($b['warmDay'] ?? 0);
             if ($warm && ($day > 0 || !$old['warm'] || $start <= 0)) {

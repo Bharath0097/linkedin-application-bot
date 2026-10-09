@@ -454,7 +454,9 @@ function billCheckout(array $u, array $a, string $itemId, string $returnTo): str
         $p['customer_email'] = $u['email'];
     }
     // the first payment of an installment or monthly plan starts a subscription that charges the rest by itself
-    $auto = $plan && $item['k'] === 'plan' && $item['id'] === 'p1' && in_array($plan['kind'], ['install', 'monthly'], true) && (count(array_filter($a['items'], fn($x) => $x['k'] === 'plan')) > 1 || !empty($a['open'])) && empty($a['stripe']['sub']);
+    $auto = $plan && $item['k'] === 'plan' && $item['id'] === 'p1' && in_array($plan['kind'], ['install', 'monthly'], true) && (count(array_filter($a['items'], fn($x) => $x['k'] === 'plan')) > 1 || !empty($a['open'])) && empty($a['stripe']['sub'])
+        // v83: only when every payment is the same amount (an uneven older plan is paid one payment at a time instead)
+        && count(array_unique(array_map(fn($x) => (int) $x['amt'], array_filter($a['items'], fn($x) => $x['k'] === 'plan' && ($x['st'] ?? '') !== 'void')))) === 1;
     if ($auto) {
         $p['mode'] = 'subscription';
         $p['line_items'] = [['quantity' => 1, 'price_data' => ['currency' => $c['cur'], 'unit_amount' => (int) $item['amt'], 'product_data' => ['name' => $plan['t']], 'recurring' => ['interval' => $plan['every'] === 'week' && $plan['kind'] === 'install' ? 'week' : 'month', 'interval_count' => 1]]]];
@@ -637,6 +639,16 @@ function billSyncSub(string $uid): int
     }
     billSave($uid, $a);
     return $n;
+}
+/** v83: a plan is replaced: stop the old plan's Stripe subscription so it does not keep charging unrecorded (returns the old id). */
+function billStopSub(array &$a): string
+{
+    $old = (string) ($a['stripe']['sub'] ?? '');
+    if ($old !== '' && billStripeOn()) {
+        billStripe('DELETE', '/v1/subscriptions/' . rawurlencode($old));
+    }
+    $a['stripe'] = ['cus' => (string) ($a['stripe']['cus'] ?? '')];
+    return $old;
 }
 /** Stripe's webhook: the signature is checked against the signing secret (t=…,v1=…, HMAC-SHA256 of "t.body"). */
 function billWebhook(): never
@@ -927,7 +939,7 @@ function billRoute(string $r, array $b): never
             }
             $fees = array_values(array_filter($a['items'], fn($x) => ($x['k'] ?? '') === 'fee'));
             if (!empty($a['plan'])) {
-                $a['hist'] = array_slice(array_merge((array) ($a['hist'] ?? []), [['plan' => $a['plan'], 'pt' => $a['pt'] ?? '', 'st' => billState($a), 'at' => now()]]), -20);
+                $a['hist'] = array_slice(array_merge((array) ($a['hist'] ?? []), [['plan' => $a['plan'], 'pt' => $a['pt'] ?? '', 'st' => billState($a), 'sub' => (string) ($a['stripe']['sub'] ?? ''), 'at' => now()]]), -20);
             }
             $a['plan'] = $p['id'];
             $a['pt'] = $p['t'];
@@ -937,7 +949,7 @@ function billRoute(string $r, array $b): never
             $a['st'] = 'pending';
             $a['at'] = now();
             unset($a['act'], $a['until']);
-            $a['stripe'] = ['cus' => (string) ($a['stripe']['cus'] ?? '')];
+            billStopSub($a); // v83: the old plan's subscription is cancelled, not just forgotten
             $a['items'] = array_merge(billSchedule($p), $fees);
             billSave($u['id'], $a);
             ok(billMeOut($u['id']));
@@ -1024,6 +1036,11 @@ function billRoute(string $r, array $b): never
             }
             $price = (int) round(max(0, (float) ($x['price'] ?? 0)) * 100);
             $kind = in_array($x['kind'] ?? '', BILL_KINDS, true) ? $x['kind'] : 'once';
+            // v83: installments split evenly, so the Stripe subscription (which charges the first amount every time) adds up to the price
+            $nIns = max(2, min(36, (int) ($x['n'] ?? 0)));
+            if ($kind === 'install' && empty($x['quote']) && $price % $nIns !== 0) {
+                fail(400, 'invalid_argument', 'The price must split evenly into ' . $nIns . ' payments (for example ' . billMoney(intdiv($price, $nIns) * $nIns) . ').');
+            }
             $doc = [
                 't' => $t,
                 'aud' => in_array($x['aud'] ?? '', BILL_AUDS, true) ? $x['aud'] : 'student',
@@ -1072,7 +1089,7 @@ function billRoute(string $r, array $b): never
             }
             $fees = array_values(array_filter($a['items'], fn($x) => ($x['k'] ?? '') === 'fee'));
             if (!empty($a['plan'])) {
-                $a['hist'] = array_slice(array_merge((array) ($a['hist'] ?? []), [['plan' => $a['plan'], 'pt' => $a['pt'] ?? '', 'st' => billState($a), 'at' => now()]]), -20);
+                $a['hist'] = array_slice(array_merge((array) ($a['hist'] ?? []), [['plan' => $a['plan'], 'pt' => $a['pt'] ?? '', 'st' => billState($a), 'sub' => (string) ($a['stripe']['sub'] ?? ''), 'at' => now()]]), -20);
             }
             $a['plan'] = $p['id'];
             $a['pt'] = $p['t'];
@@ -1083,13 +1100,13 @@ function billRoute(string $r, array $b): never
             $a['at'] = now();
             $a['by'] = $u['id'];
             unset($a['act'], $a['until']);
-            $a['stripe'] = ['cus' => (string) ($a['stripe']['cus'] ?? '')];
+            $oldSub = billStopSub($a); // v83: the old plan's subscription is cancelled, not just forgotten
             $a['items'] = array_merge(billSchedule($p), $fees);
             billSave((string) $who['id'], $a);
             $link = siteUrl() . '#/portal/' . ($acc['ct'] === 'student' ? 'student/plan' : 'consultant/membership');
             sendMail((string) $who['email'], (string) $who['name'], 'Your StratEdge plan: ' . $p['t'], "Hi {$who['name']},\n\nStratEdge set up your plan: {$p['t']} ({$p['label']}).\n\nPay the first payment to start: $link", emailHtml('Your StratEdge plan: ' . htmlspecialchars($p['t']), ['Hi ' . htmlspecialchars((string) $who['name']) . ',', 'StratEdge set up your plan: <b>' . htmlspecialchars($p['t']) . '</b> (' . htmlspecialchars($p['label']) . ').', 'Pay the first payment in your portal to start.'], ['Open my plan', $link]));
             if (function_exists('audit')) {
-                audit('billing', 'Plan assigned', (string) $who['email'], ['plan' => $p['id'], 'price' => $p['price']], $u);
+                audit('billing', 'Plan assigned', (string) $who['email'], ['plan' => $p['id'], 'price' => $p['price'], 'stoppedSub' => $oldSub], $u);
             }
             ok(['people' => billPeople(), 'name' => $who['name']]);
 
@@ -1199,9 +1216,14 @@ function billRoute(string $r, array $b): never
                     fail(400, 'invalid_argument', 'Give the charge a description and an amount.');
                 }
                 $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($x['due'] ?? '')) ? (string) $x['due'] : date('Y-m-d');
-                $a['items'][] = ['id' => 'f' . rid(4), 'k' => 'fee', 't' => $t, 'amt' => $amt, 'due' => $due, 'st' => 'due', 'by' => $u['id'], 'at' => now()];
+                $fid = 'f' . rid(4);
+                $a['items'][] = ['id' => $fid, 'k' => 'fee', 't' => $t, 'amt' => $amt, 'due' => $due, 'st' => 'due', 'by' => $u['id'], 'at' => now()];
                 billSave($uid, $a);
                 $who = userRow($uid);
+                if (function_exists('audit')) {
+                    // v83: charges and payment marks are in the audit log
+                    audit('billing', 'Charge added', (string) ($who['email'] ?? $uid), ['item' => $fid, 't' => $t, 'amt' => $amt, 'due' => $due], $u);
+                }
                 if ($who) {
                     $link = siteUrl() . '#/portal/' . (ruleCtOf($uid) === 'student' ? 'student/plan' : 'consultant/membership');
                     sendMail($who['email'], $who['name'], 'New charge: ' . $t, "Hi {$who['name']},\n\n$t: " . billMoney($amt) . ' due ' . date('M j, Y', (int) strtotime($due)) . ".\n\nPay online or see the instructions: $link", emailHtml('New charge: ' . htmlspecialchars($t), ['Hi ' . htmlspecialchars($who['name']) . ',', htmlspecialchars($t) . ': <b>' . billMoney($amt) . '</b>, due ' . date('M j, Y', (int) strtotime($due)) . '.'], ['Pay or see the instructions', $link]));
@@ -1214,16 +1236,32 @@ function billRoute(string $r, array $b): never
                 fail(400, 'invalid_argument', 'Unknown status.');
             }
             $hit = false;
+            $changed = true;
+            $was = '';
+            $amtOf = 0;
+            // v83: the page always sends a reference, so an empty one falls back to who marked it
+            $ref = mb_substr(trim((string) ($b['ref'] ?? '')), 0, 120);
+            $ref = $ref !== '' ? $ref : mb_substr('marked by ' . $u['name'], 0, 120);
             foreach ($a['items'] as &$x) {
                 if ($x['id'] === $id) {
                     $hit = true;
+                    $was = (string) ($x['st'] ?? '');
+                    $amtOf = (int) ($x['amt'] ?? 0);
                     if ($st === 'paid') {
                         unset($x);
-                        billPaid($a, $id, 'manual', mb_substr(trim((string) ($b['ref'] ?? 'marked by ' . $u['name'])), 0, 120));
+                        $changed = billPaid($a, $id, 'manual', $ref);
+                        if ($changed) {
+                            foreach ($a['items'] as &$y) {
+                                if ($y['id'] === $id) {
+                                    $y['paidBy'] = $u['id']; // 'by' on a staff-added charge stays who added it
+                                }
+                            }
+                            unset($y);
+                        }
                         break;
                     }
                     $x['st'] = $st;
-                    unset($x['paidAt'], $x['how'], $x['ref'], $x['rep']);
+                    unset($x['paidAt'], $x['how'], $x['ref'], $x['rep'], $x['paidBy']);
                     $x['by'] = $u['id'];
                 }
             }
@@ -1232,22 +1270,31 @@ function billRoute(string $r, array $b): never
                 fail(404, 'not_found', 'No such payment.');
             }
             billSave($uid, $a);
+            if ($changed && function_exists('audit')) {
+                audit('billing', 'Payment marked ' . $st, (string) (userRow($uid)['email'] ?? $uid), ['item' => $id, 'from' => $was, 'amt' => $amtOf, 'ref' => $st === 'paid' ? $ref : ''], $u);
+            }
             ok(['people' => billPeople()]);
 
         case 'bill_reset':
             // staff: take a person's plan off (e.g. moved to a StratEdge contract)
-            billStaff();
+            $u = billStaff();
             $uid = (string) ($b['uid'] ?? '');
             if (!preg_match('/^u_[a-f0-9]{8,32}$/', $uid)) {
                 fail(400, 'invalid_argument', 'Bad person.');
             }
             $a = billDoc($uid);
+            $stopped = (string) ($a['stripe']['sub'] ?? '');
             if (!empty($a['stripe']['sub']) && billStripeOn()) {
                 billStripe('DELETE', '/v1/subscriptions/' . rawurlencode((string) $a['stripe']['sub']));
                 $a['stripe']['sub'] = '';
             }
             $a['st'] = 'cancelled';
+            $a['by'] = $u['id'];
             billSave($uid, $a);
+            if (function_exists('audit')) {
+                // v83: taking a plan off is in the audit log
+                audit('billing', 'Plan taken off', (string) (userRow($uid)['email'] ?? $uid), ['plan' => (string) ($a['plan'] ?? ''), 'stoppedSub' => $stopped], $u);
+            }
             ok(['people' => billPeople()]);
     }
     fail(404, 'not_found', 'Unknown action.');

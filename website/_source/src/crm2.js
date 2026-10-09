@@ -29,6 +29,22 @@ const crmExtra = raw => {
     custom: { acc: [], con: [], deal: [], lead: [], ...(s.custom && typeof s.custom === 'object' ? s.custom : {}) },
   };
 };
+/* v83: title/need rules are words separated by | (not regular expressions): each word is matched literally, so "C++" or a
+   stray "(" no longer throws and takes the Leads and Reports tabs down. Title words match whole words only. Cached per rule text. */
+const crmWordsReCache = new Map();
+const crmWordsRe = (eq, bounded) => {
+  const key = (bounded ? 'b:' : 'n:') + eq;
+  if (crmWordsReCache.has(key)) return crmWordsReCache.get(key);
+  const words = String(eq || '').split('|').map(w => w.trim()).filter(Boolean).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  let re = null;
+  try {
+    re = words.length ? new RegExp(bounded ? '(?:^|[^\\w])(' + words.join('|') + ')(?![\\w])' : '(' + words.join('|') + ')', 'i') : null;
+  } catch (e) {
+    re = null;
+  }
+  crmWordsReCache.set(key, re);
+  return re;
+};
 /* Points for a lead from the rules: source, having an email/phone, title words, urgency words, value. */
 function leadScore(l, rules) {
   let pts = 0;
@@ -38,8 +54,8 @@ function leadScore(l, rules) {
     let hit = false;
     if (r.when === 'src') hit = (l.src || '') === eq;
     else if (r.when === 'has') hit = !!(l[eq] && String(l[eq]).trim());
-    else if (r.when === 'title') hit = new RegExp('\\b(' + eq + ')\\b', 'i').test(l.ti || '');
-    else if (r.when === 'need') hit = new RegExp('(' + eq + ')', 'i').test((l.need || '') + ' ' + (l.notes || ''));
+    else if (r.when === 'title') { const re = crmWordsRe(eq, true); hit = !!re && re.test(l.ti || ''); }
+    else if (r.when === 'need') { const re = crmWordsRe(eq, false); hit = !!re && re.test((l.need || '') + ' ' + (l.notes || '')); }
     else if (r.when === 'value') hit = (+l.v || 0) >= +eq;
     else if (r.when === 'ind') hit = (l.ind || '') === eq;
     if (hit) {

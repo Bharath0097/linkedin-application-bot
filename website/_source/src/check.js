@@ -436,7 +436,7 @@ function HealthPage() {
   useEffect(() => {
     load();
   }, []);
-  if (err && !d) return html`<${LoadError} error=${err} onRetry=${load} />`;
+  // v83: declared before the early returns so a failed first load keeps the hook order (React #300)
   // what the server actually hands this browser for js/app.js (a cache or proxy between the two can differ from the file on disk)
   const [served, setServed] = useState(null);
   useEffect(() => {
@@ -455,6 +455,7 @@ function HealthPage() {
       live = false;
     };
   }, [d && d.version && d.version.js]);
+  if (err && !d) return html`<${LoadError} error=${err} onRetry=${load} />`;
   if (!d) return html`<${Spinner} label="Measuring the server…" onRetry=${load} />`;
   const bad = d.checks.filter(c => !c[1]);
   const V = d.version || { missing: [], changed: [] };
@@ -564,7 +565,8 @@ function MailValidationPage() {
       return Array.isArray(rows) ? rows.filter(x => x && x.email) : [];
     } catch (_) { return []; }
   });
-  const initial = picked.map(x => x.name ? `${x.name} <${x.email}>` : x.email).join('\n');
+  // v83: only the addresses go to mail_check; it splits on whitespace, so a 'Name <addr>' line made each name word a bad row and a known address
+  const initial = picked.map(x => String(x.email).trim()).join('\n');
   return html`<div className="stack">
     <section className="panel"><div className="eyebrow">List quality</div><h2 className="ph">Email Validation</h2><p className="muted small">Validate addresses before sending. Validation history and known-address checks live here; bounce cleanup is intentionally separate.</p>${picked.length ? html`<div className="note info" style=${{ marginTop: 12 }}><span><b>${picked.length} selected contact${picked.length === 1 ? '' : 's'} loaded from Contacts.</b> Validation starts automatically.</span></div>` : ''}</section>
     <${CheckCenter} showCleanup=${false} initial=${initial} initialLabel=${picked.length ? 'Selected contacts' : ''} autoRun=${picked.length > 0} />

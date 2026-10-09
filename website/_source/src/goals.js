@@ -164,21 +164,24 @@ function PfGoal({ id, home, onClose, onEdit, onChanged, onOpen }) {
   if (!g || !ci) return html`<${Modal} title="Goal" onClose=${onClose}><${Spinner} /><//>`;
   const call = async (route, body, msg, close) => {
     setBusy(route);
+    let ok = false;
     try {
       const r = await api(route, { id: g.id, ...body });
       if (r.goal) take(r);
       toast(msg);
       onChanged();
       if (close) onClose();
+      ok = true;
     } catch (e) {
       toast(errText(e), true);
     }
     setBusy('');
+    return ok;
   };
   const setSt = st => call('pf_goal_save', { ...g, krs: g.krs, st }, st === 'done' ? 'Marked achieved.' : st === 'dropped' ? 'Marked dropped.' : 'Reopened.');
   const del = () => confirm('Delete this goal?') && call('pf_goal_delete', {}, 'Goal deleted.', true);
   return html`<${Modal} wide title=${g.title} onClose=${onClose} foot=${html`<button className="btn ghost" onClick=${onClose}>Close</button>
-      ${g.canEdit && !g.ci.length && html`<button className="btn ghost" disabled=${!!busy} onClick=${del}>Delete</button>`}
+      ${g.mayDel && html`<button className="btn ghost" disabled=${!!busy} onClick=${del}>Delete</button>`}
       ${g.canEdit && g.st === 'active' && html`<button className="btn ghost" disabled=${!!busy} onClick=${() => setSt('dropped')}>Drop</button><button className="btn ghost" disabled=${!!busy} onClick=${() => setSt('done')}>Mark achieved</button>`}
       ${g.canEdit && g.st !== 'active' && html`<button className="btn ghost" disabled=${!!busy} onClick=${() => setSt('active')}>Reopen</button>`}
       ${g.canEdit && html`<button className="btn" onClick=${() => onEdit(g)}>Edit</button>`}`}>
@@ -206,7 +209,7 @@ function PfGoal({ id, home, onClose, onEdit, onChanged, onOpen }) {
         ${g.ci.length > 0 && html`<section className="stack"><b>Check-ins</b><ul className="list small">${g.ci.slice(0, 20).map((c, i) => html`<li key=${i}><div><div className="t"><${Chip} s=${PF_TONE[c.health]}>${home.health[c.health]}<//> ${c.was !== c.prog ? c.was + '% → ' + c.prog + '%' : c.prog + '%'}${c.note ? ' · ' + c.note : ''}</div><div className="m">${c.who} · ${fmtTs(c.t)}</div></div></li>`)}</ul></section>`}
         <section className="stack"><b>Comments</b>
           ${g.cm.map((c, i) => html`<div key=${i} className="pfcm"><div className="small"><b>${c.who}</b> <span className="muted">${fmtTs(c.t)}</span></div><div style=${{ whiteSpace: 'pre-wrap' }}>${c.txt}</div></div>`)}
-          <div className="actions"><input value=${cm} onInput=${e => setCm(e.target.value)} placeholder="Write a comment" aria-label="Comment" style=${{ flex: 1, minWidth: 0 }} /><button className="btn ghost" disabled=${!cm.trim() || !!busy} onClick=${() => call('pf_comment', { txt: cm }, 'Comment added.').then(() => setCm(''))}>Comment</button></div>
+          <div className="actions"><input value=${cm} onInput=${e => setCm(e.target.value)} placeholder="Write a comment" aria-label="Comment" style=${{ flex: 1, minWidth: 0 }} /><button className="btn ghost" disabled=${!cm.trim() || !!busy} onClick=${() => call('pf_comment', { txt: cm }, 'Comment added.').then(ok => ok && setCm(''))}>Comment</button></div>
         </section>
         ${g.log.length > 0 && html`<details><summary className="small">History</summary><ul className="list small">${g.log.map((x, i) => html`<li key=${i}><div><div className="t">${x.ev}</div><div className="m">${x.who} · ${fmtTs(x.t)}</div></div></li>`)}</ul></details>`}
       </div>

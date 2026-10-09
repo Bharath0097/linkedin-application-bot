@@ -146,11 +146,14 @@ function CRMBoard({ deals, refs, S, accs, onOpen }) {
       toast(errText(e), true);
     }
   };
-  const idx = st => S.stages.findIndex(s => s.k === st);
+  const known = new Set(S.stages.map(s => s.k));
+  // opportunities whose stage was removed in Settings show in the first open column until moved
+  const home = (S.stages.find(s => s.k !== 'won' && s.k !== 'lost') || S.stages[0]).k;
+  const colOf = d => (known.has(d.stage || 'lead') ? d.stage || 'lead' : home);
   return html`<div className="kanban">
       ${S.stages.map((stg, i) => {
         const st = stg.k;
-        const list = deals.filter(d => (d.stage || 'lead') === st);
+        const list = deals.filter(d => colOf(d) === st);
         const sum = {};
         list.forEach(d => {
           sum[d.cur || 'USD'] = (sum[d.cur || 'USD'] || 0) + (+d.v || 0);
@@ -191,8 +194,8 @@ function CRMBoard({ deals, refs, S, accs, onOpen }) {
                   </div>
                   ${st === 'lost' && d.why ? html`<span className="knext">Lost: ${d.why}</span>` : d.next ? html`<span className="knext">Next: ${d.next}</span>` : null}
                   <div className="kmove" onClick=${e => e.stopPropagation()}>
-                    <button type="button" className="btn ghost sm icon" aria-label="Move back" disabled=${i === 0} onClick=${() => move(d, S.stages[idx(d.stage || 'lead') - 1].k)}><${Icon} n="left" /></button>
-                    <button type="button" className="btn ghost sm icon" aria-label="Move forward" disabled=${i === S.stages.length - 1} onClick=${() => move(d, S.stages[idx(d.stage || 'lead') + 1].k)}><${Icon} n="right" /></button>
+                    <button type="button" className="btn ghost sm icon" aria-label="Move back" disabled=${i === 0} onClick=${() => move(d, S.stages[i - 1].k)}><${Icon} n="left" /></button>
+                    <button type="button" className="btn ghost sm icon" aria-label="Move forward" disabled=${i === S.stages.length - 1} onClick=${() => move(d, S.stages[i + 1].k)}><${Icon} n="right" /></button>
                   </div>
                 </div>`
             )}

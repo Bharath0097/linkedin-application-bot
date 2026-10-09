@@ -55,6 +55,8 @@ const APPLY_GROUPS = [
   ]],
 ];
 const APPLY_FIELDS = APPLY_GROUPS.flatMap(([, f]) => f);
+/* v83: staff views leave out the voluntary self-identification answers (the server does not send them either) */
+const APPLY_STAFF_GROUPS = APPLY_GROUPS.filter(([g]) => g !== 'Voluntary self-identification');
 const APPLY_CORE = ['first', 'last', 'email', 'phone', 'city', 'state', 'auth', 'sponsor', 'rate', 'years', 'title', 'degree', 'skills'];
 const applyPct = a => Math.round((APPLY_CORE.filter(k => a && a[k] != null && String(a[k]).trim() !== '').length / APPLY_CORE.length) * 100);
 /* What the autofill looks for on a page, per answer: words that appear in the field's label, name, id or placeholder. */
@@ -156,7 +158,7 @@ function ApplyProfilePage() {
       if (!a.country) a.country = 'United States';
       setF(a);
     }
-  }, [doc.loading, me.data]);
+  }, [doc.loading, me.data, me.error]);
   useEffect(() => {
     if (P.prof) api('apply_token', {}).then(setTok).catch(() => {});
   }, []);
@@ -167,7 +169,14 @@ function ApplyProfilePage() {
     if (linkRef.current && code) linkRef.current.setAttribute('href', code);
   }, [code]);
   if (!P.prof) return html`<${NeedProfile} />`;
-  if (!f) return html`<${Spinner} onRetry=${() => Sync.kick(0)} label="Loading your apply profile…" />`;
+  if (!f)
+    return html`<${Spinner}
+      onRetry=${() => {
+        me.reload();
+        Sync.kick(0);
+      }}
+      label="Loading your apply profile…"
+    />`;
   const up = k => e => setF({ ...f, [k]: e.target.value });
   const pct = applyPct(f);
   const save = async () => {
@@ -490,7 +499,7 @@ function ApplyView({ row, onClose }) {
       prompt('Copy this', text);
     }
   };
-  const allText = APPLY_GROUPS.map(([g, fields]) => `${g}\n` + fields.filter(([k]) => a[k]).map(([k, n]) => `${n}: ${a[k]}`).join('\n')).filter(x => x.includes(':')).join('\n\n');
+  const allText = APPLY_STAFF_GROUPS.map(([g, fields]) => `${g}\n` + fields.filter(([k]) => a[k]).map(([k, n]) => `${n}: ${a[k]}`).join('\n')).filter(x => x.includes(':')).join('\n\n');
   return html`<${Modal} wide title=${(row.name || row.email) + ': apply profile'} onClose=${onClose} foot=${html`<button type="button" className="btn ghost" disabled=${!d} onClick=${() => copy(allText, 'Everything')}><${Icon} n="file" />Copy all as text</button><button type="button" className="btn" onClick=${onClose}>Close</button>`}>
       ${err && html`<${LoadError} error=${err} />`}
       ${!d && !err && html`<${Spinner} />`}
@@ -498,7 +507,8 @@ function ApplyView({ row, onClose }) {
         d &&
         html`<div className="stack">
             <div className="muted small">${a.pct != null ? `${a.pct}% complete` : ''}${a.u ? ` · updated ${fmtTs(a.u)}` : ''}${a.uses ? ` · autofill used ${a.uses} time${a.uses === 1 ? '' : 's'}` : ''}${d.resumes && d.resumes.length ? ` · resume: ${(d.resumes.find(r => r.active) || d.resumes[0]).name}` : ' · no resume uploaded'}</div>
-            ${APPLY_GROUPS.map(([g, fields]) => {
+            <div className="muted small">Voluntary self-identification answers stay with the person and are not shown here.</div>
+            ${APPLY_STAFF_GROUPS.map(([g, fields]) => {
               const have = fields.filter(([k]) => a[k]);
               if (!have.length) return null;
               return html`<section key=${g} className="panel stack" style=${{ gap: 6, background: 'var(--surface-2)' }}>

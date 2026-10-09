@@ -87,6 +87,13 @@ function crmRoute(string $r, string $method, array $b): never
             if (!in_array($src, ['mail', 'vendors', 'clients'], true)) {
                 fail(400, 'invalid_argument', 'Choose where to import from.');
             }
+            // v83: each source needs the caller's own right to read it, as on its own page
+            if ($src === 'mail' && !mailCanUse($u)) {
+                fail(403, 'forbidden', 'Email contacts are not switched on for your account.');
+            }
+            if ($src === 'vendors' && !can('vms/vendor/items', 'r')) {
+                fail(403, 'forbidden', 'The vendors list is not open to your account.');
+            }
             $now = now();
             $cons = crmCol('crm/main/con');
             $accs = crmCol('crm/main/acc');
@@ -134,12 +141,14 @@ function crmRoute(string $r, string $method, array $b): never
                         $contactsOf[$cid][] = $usr;
                     }
                 }
+                // v83: client names and contact logins are shared with the CRM; the private notes only for those who may read client records
+                $seeNotes = can('org/admin/clients', 'r');
                 foreach ($clients as $cid => $c) {
                     $co = trim((string) ($c->n ?? ''));
                     if ($co === '') {
                         continue;
                     }
-                    $base = ['co' => $co, 'ty' => 'End client', 'loc' => (string) ($c->loc ?? ''), 'cid' => (string) $cid, 'notes' => (string) ($c->notes ?? ''), 'st' => 'Active', 'src' => 'Clients'];
+                    $base = ['co' => $co, 'ty' => 'End client', 'loc' => (string) ($c->loc ?? ''), 'cid' => (string) $cid, 'notes' => $seeNotes ? (string) ($c->notes ?? '') : '', 'st' => 'Active', 'src' => 'Clients'];
                     $list = $contactsOf[$cid] ?? [];
                     $ec = strtolower(trim((string) ($c->ec ?? '')));
                     if (!$list && $ec !== '') {
@@ -283,15 +292,20 @@ function crmRoute(string $r, string $method, array $b): never
                 $in = implode(',', array_fill(0, count($emails), '?'));
                 require_once __DIR__ . '/mail.php';
                 try {
-                    $s = mdb()->prepare("SELECT id, at, to_email, to_name, subject, kind, status FROM mail_log WHERE to_email IN ($in) ORDER BY at DESC LIMIT 100");
-                    $s->execute($emails);
+                    // v83: the site mail log is staff-only (as on its own page); anyone else sees only what they sent themselves
+                    $staffLog = userLevel($u) >= 2;
+                    $s = mdb()->prepare("SELECT id, at, to_email, to_name, subject, kind, status FROM mail_log WHERE to_email IN ($in)" . ($staffLog ? '' : ' AND by_uid = ?') . ' ORDER BY at DESC LIMIT 100');
+                    $s->execute($staffLog ? $emails : array_merge($emails, [$u['id']]));
                     foreach ($s->fetchAll() as $m) {
                         $items[] = ['k' => 'mail', 'id' => (string) $m['id'], 'at' => (int) $m['at'], 'dir' => 'out', 't' => (string) $m['subject'], 'who' => (string) ($m['to_name'] !== '' ? $m['to_name'] : $m['to_email']), 'e' => (string) $m['to_email'], 'st' => (string) $m['status'], 'via' => $m['kind'] === 'campaign' ? 'Campaign' : 'Site email'];
                     }
-                    $s = mdb()->prepare("SELECT id, at, from_email, from_name, subject, folder FROM mail_inbox WHERE from_email IN ($in) ORDER BY at DESC LIMIT 100");
-                    $s->execute($emails);
-                    foreach ($s->fetchAll() as $m) {
-                        $items[] = ['k' => 'mail', 'id' => (string) $m['id'], 'at' => (int) $m['at'], 'dir' => 'in', 't' => (string) $m['subject'], 'who' => (string) ($m['from_name'] !== '' ? $m['from_name'] : $m['from_email']), 'e' => (string) $m['from_email'], 'st' => '', 'via' => 'Shared inbox'];
+                    // v83: the shared inbox only for those who may use Email, inbox & campaigns
+                    if (mailCanUse($u)) {
+                        $s = mdb()->prepare("SELECT id, at, from_email, from_name, subject, folder FROM mail_inbox WHERE from_email IN ($in) ORDER BY at DESC LIMIT 100");
+                        $s->execute($emails);
+                        foreach ($s->fetchAll() as $m) {
+                            $items[] = ['k' => 'mail', 'id' => (string) $m['id'], 'at' => (int) $m['at'], 'dir' => 'in', 't' => (string) $m['subject'], 'who' => (string) ($m['from_name'] !== '' ? $m['from_name'] : $m['from_email']), 'e' => (string) $m['from_email'], 'st' => '', 'via' => 'Shared inbox'];
+                        }
                     }
                 } catch (Throwable $e) {
                     /* the mail tables may not exist yet */

@@ -94,7 +94,7 @@ const PH = {
   uid: null,
   reg: false,
   dev: null,
-  call: null, // { c: Twilio Call, dir, n, name, ref, st: 'calling'|'ringing'|'live'|'ended', at, muted, callId, sid }
+  call: null, // { c: Twilio Call (null for a provider call, which has a key k instead), dir, n, name, ref, st: 'calling'|'ringing'|'live'|'ended', at, muted, callId, sid }
   inc: null, // { c, n, name, sub, line, callId }
   unseen: { calls: 0, texts: 0 },
   subs: new Set(),
@@ -250,8 +250,9 @@ const PH = {
     if (PH.st !== 'ready') await PH.start();
     if (Cap.phone && Cap.phone.provider && Cap.phone.provider !== 'twilio') {
       try {
-        await api('ph_provider_call', { to, ref: (meta && meta.ref) || '' }, { timeout: 45000 });
-        PH.call = { c: null, at: Date.now(), t0: Date.now(), muted: false, st: 'ended', dir: 'out', n: to, name: (meta && meta.name) || '', ref: (meta && meta.ref) || '', provider: Cap.phone.provider };
+        // v83: keep the ph_calls row id the server returns, so the call bar can save a note on it
+        const r = await api('ph_provider_call', { to, ref: (meta && meta.ref) || '' }, { timeout: 45000 });
+        PH.call = { c: null, k: 'p' + Date.now(), callId: (r && r.id) || '', at: Date.now(), t0: Date.now(), muted: false, st: 'ended', dir: 'out', n: to, name: (meta && meta.name) || '', ref: (meta && meta.ref) || '', provider: Cap.phone.provider };
         PH.emit();
         return '';
       } catch (e) { return errText(e); }
@@ -442,14 +443,14 @@ function PhoneLive({ href }) {
     setNoteErr('');
     setPad(false);
     setMini(false);
-  }, [S.call && S.call.c]);
+  }, [S.call && (S.call.c || S.call.k)]);
   const c = S.call;
   const i = S.inc;
   const saveNote = async () => {
     setNoteErr('');
     try {
       const r = await api('ph_note', { id: c.callId || '', sid: c.sid || '', note, ref: c.ref || '' });
-      if (PH.call && PH.call.c === c.c && r.id) PH.call = { ...PH.call, callId: r.id };
+      if (PH.call && (PH.call.c || PH.call.k) === (c.c || c.k) && r.id) PH.call = { ...PH.call, callId: r.id };
       setSaved(true);
     } catch (e) {
       setNoteErr(e && e.code === 'not_found' ? 'The call is not in the log yet: try again in a moment, or add the note under Calls & texts.' : errText(e));

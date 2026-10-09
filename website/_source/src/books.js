@@ -170,7 +170,8 @@ function BooksTransactions() {
                         ${!done && r.rule && byId[r.rule.cat] && html`<button className="btn sm" disabled=${!!busy} onClick=${() => act(r, { act: 'cat', cat: r.rule.cat, payee: r.rule.payee }, 'Categorized.')}>Accept</button>`}
                         ${!done && !r.rule && sug && html`<button className="btn sm" disabled=${!!busy} onClick=${() => act(r, { act: 'match', k: sug.k, mid: sug.id }, 'Matched.')}>Match</button>`}
                         ${!done && html`<button className="btn ghost sm" disabled=${!!busy} onClick=${() => setPick({ row: r, cat: r.rule ? r.rule.cat : '', payee: r.payee || r.rule && r.rule.payee || '', remember: false, match: (r.desc || '').split(/\\s+/).slice(0, 2).join(' '), k: 'cat' })}>Review</button>`}
-                        ${done && html`<button className="btn ghost sm" disabled=${!!busy} onClick=${() => act(r, { act: 'undo' }, 'Back to review.')}>Undo</button>`}
+                        ${done && !r.recon && html`<button className="btn ghost sm" disabled=${!!busy} onClick=${() => act(r, { act: 'undo' }, 'Back to review.')}>Undo</button>`}
+                        ${done && r.recon && html`<span className="muted small" title="Part of a finished reconciliation">Reconciled</span>`}
                       </div>
                     </td>
                   </tr>`;

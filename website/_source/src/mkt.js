@@ -125,6 +125,7 @@ function TalentPage({ q }) {
   const toast = useToast();
   const [f, setF] = useState({ q: '', loc: '', auth: '', years: '' });
   const [res, setRes] = useState(null);
+  const [intro, setIntro] = useState(''); // the 'Line shown above the search' setting (mkt_search returns it beside rows)
   const [err, setErr] = useState(null);
   const [open, setOpen] = useState(null);
   const [reqs, setReqs] = useState([]);
@@ -138,6 +139,7 @@ function TalentPage({ q }) {
     return (rq ? api('mkt_match', { rq }) : api('mkt_search', { q: p.q, loc: p.loc, auth: p.auth, years: p.years ? +p.years : 0 }))
       .then(r => {
         setRes(r.rows);
+        if (r.intro !== undefined) setIntro(r.intro || '');
         if (r.req) setMatchReq(r.req);
       })
       .catch(e => setErr(e));
@@ -189,7 +191,7 @@ function TalentPage({ q }) {
                 <select value=${f.years} onChange=${e => setF({ ...f, years: e.target.value })} aria-label="Experience" style=${{ flex: '0 1 130px' }}><option value="">Any experience</option>${[2, 4, 6, 8, 10, 15].map(y => html`<option key=${y} value=${y}>${y}+ years</option>`)}</select>
                 <button className="btn" type="submit">Search</button>
               </form>
-              <p className="muted small" style=${{ margin: '8px 0 0' }}>${(res && res.intro) || 'Profiles StratEdge can place with you, shown without names. Request a profile and StratEdge releases the name, contact details and resume.'}</p>
+              <p className="muted small" style=${{ margin: '8px 0 0' }}>${intro || 'Profiles StratEdge can place with you, shown without names. Request a profile and StratEdge releases the name, contact details and resume.'}</p>
             </section>`
       }
       <div className="toolbar">

@@ -21,6 +21,7 @@ require_once __DIR__ . '/textract.php';
 const VG_MAX_FILES = 30;
 const VG_MAX_FILE = 20 * 1048576;
 const VG_MAX_TOTAL = 60 * 1048576;
+const VG_MAX_MAILS = 300; // v83: emails (attached and embedded ones included) one grab may open
 
 /* ======================================================================================================== */
 /* Reading files                                                                                              */
@@ -158,6 +159,13 @@ function vgMultipart(string $body, string $b): array
     }
     return array_map(fn($p) => str_ends_with($p, "\n") ? substr($p, 0, -1) : $p, $parts);
 }
+/** v83: one more email (attached and embedded ones included) this request may open; false once VG_MAX_MAILS are read.
+ *  A crafted .msg can point many attachments at the same embedded message, so depth and per-level limits alone do not bound the work. */
+function vgBudget(): bool
+{
+    $GLOBALS['vgLeft'] = ($GLOBALS['vgLeft'] ?? VG_MAX_MAILS) - 1;
+    return $GLOBALS['vgLeft'] >= 0;
+}
 /** An empty email record (what the readers return). */
 function vgMail(): array
 {
@@ -166,6 +174,9 @@ function vgMail(): array
 /** A raw email (.eml): headers, the text and HTML bodies, attachments, and emails attached or forwarded inside it. */
 function vgEml(string $raw, int $depth = 0): array
 {
+    if (!vgBudget()) {
+        return vgMail();
+    }
     $raw = str_replace("\r\n", "\n", ltrim($raw, "\xEF\xBB\xBF"));
     [$head, $body] = vgSplitHead($raw);
     $h = vgHeaders($head);
@@ -364,6 +375,9 @@ function vgCfb(string $d): array
 /** An Outlook .msg file in the shape vgEml() returns (attached and embedded messages included). */
 function vgMsg(string $data, int $depth = 0): array
 {
+    if (!vgBudget()) {
+        return vgMail();
+    }
     $cf = vgCfb($data);
     return vgMsgFrom($cf, 0, $depth, true);
 }
@@ -439,7 +453,9 @@ function vgMsgFrom(array $cf, int $idx, int $depth, bool $top): array
         }
         $ak = ($cf['children'])($kidx);
         if (isset($ak['__substg1.0_3701000D']) && $depth < 5) {
-            $out['inner'][] = vgMsgFrom($cf, $ak['__substg1.0_3701000D'], $depth + 1, false);
+            if (vgBudget()) {
+                $out['inner'][] = vgMsgFrom($cf, $ak['__substg1.0_3701000D'], $depth + 1, false);
+            }
             continue;
         }
         if (!isset($ak['__substg1.0_37010102'])) {
@@ -630,7 +646,7 @@ function vgDocText(string $name, string $data): string
 function vgHtmlText(string $h): string
 {
     $h = utf8ify($h);
-    $h = preg_replace('#<(script|style|head|title|xml)\b[^>]*>.*?</\1>#is', ' ', $h) ?? $h;
+    $h = stripHtmlBlocks($h, ['script', 'style', 'head', 'title', 'xml']); // v83: linear, no back-reference regex
     $h = preg_replace('#<!--.*?-->#s', '', $h) ?? $h;
     $h = preg_replace_callback(
         '#<tr\b[^>]*>(.*?)</tr>#is',
@@ -1376,6 +1392,7 @@ function vgCollect(array $files, string $text, string $html): array
     $mails = [];
     $skipped = [];
     $total = 0;
+    $GLOBALS['vgLeft'] = VG_MAX_MAILS; // v83: a fresh email budget for each grab
     $add = function (array $m, string $src) use (&$mails, &$add) {
         $body = $m['html'] !== '' && (preg_match('/<table\b/i', $m['html']) || trim($m['text']) === '') ? vgHtmlText($m['html']) : $m['text'];
         $att = '';
@@ -1431,6 +1448,9 @@ function vgCollect(array $files, string $text, string $html): array
         } catch (Throwable $e) {
             $skipped[] = $name . ': could not be read (' . $e->getMessage() . ')';
         }
+    }
+    if ($GLOBALS['vgLeft'] < 0) {
+        $skipped[] = 'Only the first ' . VG_MAX_MAILS . ' emails (attached ones included) were read.';
     }
     if (trim($html) !== '' && (trim($text) === '' || preg_match('/<table\b/i', $html))) {
         $text = vgHtmlText($html);
@@ -1595,11 +1615,13 @@ function vgContactOwners(): array
 {
     $out = [];
     try {
-        $st = db()->query("SELECT id, name, email, role FROM users WHERE status = 'active' ORDER BY name LIMIT 1000");
+        $st = db()->query("SELECT id, name, email, role, access FROM users WHERE status = 'active' ORDER BY name LIMIT 1000");
         foreach ($st->fetchAll() as $r) {
-            $role = strtolower((string) ($r['role'] ?? ''));
-            if (in_array($role, ['client','student'], true)) continue;
-            $out[] = ['id' => (string) $r['id'], 'name' => (string) $r['name'], 'email' => (string) $r['email'], 'role' => $role];
+            $id = (string) $r['id'];
+            // v83: staff and recruiters only (client contacts, students and consultants are 'user' accounts too, so
+            // users.role cannot tell them apart), and no email addresses: the picker shows a name
+            if (!(userLevel($r) >= 2 || isRecruiter($id) || isBench($id))) continue;
+            $out[] = ['id' => $id, 'name' => (string) $r['name'] ?: (string) $r['email']];
         }
     } catch (Throwable $e) {}
     return $out;
@@ -1629,6 +1651,11 @@ function vgSaveReqItems(array $items, array $u, string $status = 'open'): array
 function vgRoute(string $r, array $b): void
 {
     $u = vmsStaff();
+    if ($r === 'vms_contact_grab' || $r === 'vms_contact_grab_save') {
+        // v83: the Contact Grabber reads and fills the shared address book, so the Email & contacts feature applies too
+        require_once __DIR__ . '/mail.php';
+        mailUser();
+    }
     switch ($r) {
         case 'vms_contact_grab':
             $text = mb_substr((string) ($b['text'] ?? ''), 0, 600000);
@@ -1637,27 +1664,33 @@ function vgRoute(string $r, array $b): void
             $rows = vgContactState(array_slice(vgContactRows($text), 0, 300));
             // Reuse Email Validation's local/DNS/bounce checks so recruiters see bad/risky addresses before saving or campaigning.
             require_once __DIR__ . '/tools.php';
-            $ctx = mailCheckContext();
-            foreach ($rows as $i => $row) {
-                $check = mailCheckOne((string) ($row['email'] ?? ''), $ctx);
-                $rows[$i]['validation'] = $check ?: ['e'=>(string)($row['email']??''),'st'=>'bad','why'=>['Not a valid address'],'fix'=>''];
+            // v83: only for people who have Email validation (the page shows a missing check as 'unknown')
+            if (featureAllowed($u, 'mail_validation', true)) {
+                $ctx = mailCheckContext();
+                foreach ($rows as $i => $row) {
+                    $check = mailCheckOne((string) ($row['email'] ?? ''), $ctx);
+                    $rows[$i]['validation'] = $check ?: ['e'=>(string)($row['email']??''),'st'=>'bad','why'=>['Not a valid address'],'fix'=>''];
+                }
             }
             $grab = vgGrab([], $text, '');
             ok(['rows'=>$rows,'n'=>count($rows),'requirements'=>$grab['items']??[],'requirementCount'=>count($grab['items']??[]),'owners'=>vgContactOwners()]);
         case 'vms_contact_grab_save':
             require_once __DIR__ . '/mail.php';
+            require_once __DIR__ . '/tools.php';
             $rows = array_values(array_filter(array_slice((array) ($b['rows'] ?? []), 0, 500), fn($r)=>is_array($r) && (!array_key_exists('on',$r) || !empty($r['on']))));
             $mode = in_array((string)($b['mode']??'both'), ['new','existing','both'], true) ? (string)$b['mode'] : 'both';
-            $pdo = mdb(); $exists = $pdo->prepare('SELECT 1 FROM mail_contacts WHERE email = ?'); $safe=[]; $held=0;
+            $pdo = mdb(); $exists = $pdo->prepare('SELECT 1 FROM mail_contacts WHERE email = ?'); $safe=[]; $held=0; $ctx = mailCheckContext();
             foreach ($rows as $r) {
                 $email=strtolower(trim((string)($r['email']??''))); $exists->execute([$email]); $isExisting=(bool)$exists->fetchColumn();
                 if (($mode==='new'&&$isExisting)||($mode==='existing'&&!$isExisting)) continue;
-                $v=(array)($r['validation']??[]); if (($v['st']??'')==='bad' || !empty($r['suppressed'])) { $held++; continue; }
+                // v83: checked here, not taken from the browser: suppressed, throwaway and undeliverable addresses are held
+                $v=mailCheckOne($email, $ctx); if ($v && ($v['st']??'')==='bad') { $held++; continue; }
                 $safe[]=$r;
             }
             $extra=['Vendor','Recruiter','Grabbed']; $tag=mb_substr(trim((string)($b['tag']??'')),0,40); if($tag!=='')$extra[]=$tag;
             $ownerId=mb_substr(trim((string)($b['owner']??'')),0,40); $ownerName='';
-            if($ownerId!==''){ $st=db()->prepare("SELECT name FROM users WHERE id = ? AND status = 'active' LIMIT 1");$st->execute([$ownerId]);$ownerName=(string)($st->fetchColumn()?:''); if($ownerName!=='')$extra[]='Owner: '.mb_substr($ownerName,0,60); }
+            // v83: the owner must be one of the staff/recruiters the picker offers
+            if($ownerId!==''){ foreach (vgContactOwners() as $o) { if ($o['id']===$ownerId) $ownerName=$o['name']; } if($ownerName!=='')$extra[]='Owner: '.mb_substr($ownerName,0,60); }
             $res = mailUpsertContacts($safe, $extra, 'Contact grabber', (string) $u['id']);
             $reqRes = vgSaveReqItems((array)($b['requirements']??[]), $u, (string)($b['st']??'open'));
             $res['held']=$held; $res['requirements']=count($reqRes['ids']); $res['requirementIds']=$reqRes['ids']; $res['requirementSkipped']=$reqRes['skipped'];

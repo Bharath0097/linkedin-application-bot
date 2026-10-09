@@ -391,7 +391,7 @@ function WsManageModal({ d, row, onClose, onRow, onGone }) {
           <${Field} label="Contact email" hint="Receives its staff emails (new applications, daily reports) and the replies to emails sent for it."><input type="email" value=${f.contact} onInput=${e => set('contact', e.target.value)} /><//>
           <${Field} label="Free pilot until"><input type="date" value=${f.until} onInput=${e => set('until', e.target.value)} /><//>
         </div>
-        <label className="check"><input type="checkbox" checked=${f.shareAi} onChange=${e => set('shareAi', e.target.checked)} /><span>Let it use StratEdge's AI connection (the assistant, resume tailoring, screening). Off: its AI features stay off until it connects its own.</span></label>
+        <label className="check"><input type="checkbox" checked=${f.shareAi} onChange=${e => set('shareAi', e.target.checked)} /><span>Let it use StratEdge's AI connection (the assistant, resume tailoring, screening). Off: its AI features stay off.</span></label>
         <${Field} label="Notes (only StratEdge's administrators see these)"><textarea rows="2" value=${f.notes} onInput=${e => set('notes', e.target.value)} /><//>
         <div className="actions">
           <button className="btn" disabled=${busy === 'save'} onClick=${() => save({ contact: f.contact, until: f.until, notes: f.notes, shareAi: f.shareAi ? 1 : 0 })}>Save</button>

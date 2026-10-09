@@ -94,7 +94,9 @@ function s3Put(array $c, string $key, string $file, string $type = 'application/
     $hdr = awsSign('PUT', $url, (string) ($c['region'] ?: 'us-east-1'), 's3', (string) $c['akid'], (string) $c['secret'], ['content-type' => $type, 'content-length' => (string) $size], $hash);
     $fh = fopen($file, 'rb');
     $ch = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_UPLOAD => true, CURLOPT_INFILE => $fh, CURLOPT_INFILESIZE => $size, CURLOPT_HTTPHEADER => array_merge($hdr, ['Content-Type: ' . $type, 'Expect:']), CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 1800, CURLOPT_CONNECTTIMEOUT => 15]);
+    // v83: awsSign already returns the signed content-type and content-length lines. A second Content-Type line made
+    // curl send the header twice, so S3 compared 'type,type' with the signed value and refused every upload.
+    curl_setopt_array($ch, [CURLOPT_UPLOAD => true, CURLOPT_INFILE => $fh, CURLOPT_INFILESIZE => $size, CURLOPT_HTTPHEADER => array_merge($hdr, ['Expect:']), CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 1800, CURLOPT_CONNECTTIMEOUT => 15]);
     $body = (string) curl_exec($ch);
     $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);

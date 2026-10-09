@@ -816,9 +816,14 @@ function esRoute(string $r, array $b): never
                 fail(404, 'not_found', 'The signed copy is missing.');
             }
             $att = [['name' => (string) ($d->sfn ?? 'signed.pdf'), 'type' => 'application/pdf', 'data' => $pdf]];
+            // v83: the original as sent goes with it, so the recipient can compare the two
+            $orig = fileRead((string) $d->fid);
+            if ($orig !== null) {
+                $att[] = ['name' => 'original-' . (string) ($d->fn ?? 'document'), 'type' => (string) ($d->fty ?? 'application/pdf'), 'data' => $orig];
+            }
             $note = $str('note', 2000);
             $subject = 'Signed copy: ' . $d->ti;
-            $text = ($note !== '' ? $note . "\n\n" : '') . "\"{$d->ti}\" was signed by " . implode(', ', array_map(fn($s) => (string) $s->n, (array) $d->signers)) . '. The signed PDF, with a signature certificate for each signer, is attached.';
+            $text = ($note !== '' ? $note . "\n\n" : '') . "\"{$d->ti}\" was signed by " . implode(', ', array_map(fn($s) => (string) $s->n, (array) $d->signers)) . '. The signed PDF, with a signature certificate for each signer, is attached.' . ($orig !== null ? ' The original document as sent (SHA-256 ' . (string) ($d->fh ?? '') . ') is attached too.' : '');
             $sent = 0;
             $errs = [];
             $fromMe = ($b['from'] ?? '') === 'me' && esMailbox((string) $u['id']);
@@ -826,7 +831,7 @@ function esRoute(string $r, array $b): never
                 if ($fromMe) {
                     [$okm, $err] = esSendFromMe((string) $u['id'], $e, $subject, $text, $att);
                 } else {
-                    $okm = sendMail($e, '', $subject, $text, emailHtml($subject, array_values(array_filter([$note, "\"{$d->ti}\" was signed by " . implode(', ', array_map(fn($s) => (string) $s->n, (array) $d->signers)) . '. The signed PDF, with a signature certificate for each signer, is attached.'])), null), $att, (string) $u['email']);
+                    $okm = sendMail($e, '', $subject, $text, emailHtml($subject, array_values(array_filter([$note, "\"{$d->ti}\" was signed by " . implode(', ', array_map(fn($s) => (string) $s->n, (array) $d->signers)) . '. The signed PDF, with a signature certificate for each signer, is attached.' . ($orig !== null ? ' The original document as sent (SHA-256 ' . (string) ($d->fh ?? '') . ') is attached too.' : '')])), null), $att, (string) $u['email']);
                     $err = $okm ? '' : (string) ($GLOBALS['mailErr'] ?? 'not delivered');
                 }
                 $okm ? $sent++ : ($errs[] = $e . ': ' . $err);

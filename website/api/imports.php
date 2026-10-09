@@ -21,6 +21,7 @@ const IMP_MAX_ROWS = 10000;
 const IMP_MAX_COLS = 100;
 const IMP_MAX_SHEETS = 12;
 const IMP_CELL = 20000;      // the longest cell kept (a job description)
+const IMP_XLSX_PART = 40 * 1048576; // v83: the largest workbook part read (inflated): a bigger one is refused, not loaded
 const IMP_CHUNK = 500;       // file rows per stored chunk
 const IMP_STEP = 200;        // rows written per import step
 const IMP_KEEP_DRAFT = 7;    // days a file that was never imported is kept
@@ -479,6 +480,11 @@ function impZipGet(string $path): callable
         $z = new ZipArchive();
         if ($z->open($path) === true) {
             return function (string $n) use ($z): ?string {
+                // v83: a part is inflated whole, so a highly compressed one is refused before it is read
+                $s = $z->statName($n);
+                if ($s !== false && (int) $s['size'] > IMP_XLSX_PART) {
+                    fail(400, 'invalid_argument', 'This workbook is too large to read here. Save it as CSV, or split it into smaller files.');
+                }
                 $c = $z->getFromName($n);
                 return $c === false ? null : $c;
             };
@@ -679,9 +685,12 @@ function impXlsxRows(string $xml, array $shared, array $dateStyle, bool $d1904):
                 break;
             }
         } elseif ($cur !== null && $in !== '' && $skip === 0 && ($nt === XMLReader::TEXT || $nt === XMLReader::CDATA || $nt === XMLReader::WHITESPACE || $nt === XMLReader::SIGNIFICANT_WHITESPACE)) {
+            // v83: a cell keeps at most what IMP_CELL can use (4 bytes a character), however long the text in the file
             if ($in === 'v') {
-                $cur['v'] .= $r->value;
-            } else {
+                if (strlen($cur['v']) < IMP_CELL * 4) {
+                    $cur['v'] .= $r->value;
+                }
+            } elseif (strlen($cur['is']) < IMP_CELL * 4) {
                 $cur['is'] .= $r->value;
             }
         }
@@ -2075,6 +2084,9 @@ function impCreate(string $tk, array $T, array $p, array $ctx, string $run, arra
         case 'ats':
             $job = (string) ($v['job'] ?? '');
             $pub = $job !== '' ? docGet('org/site/jobs/' . $job) : null;
+            if ($pub === null) {
+                $job = ''; // the job was deleted (or never existed): the candidate goes to the talent pool
+            }
             $doc = array_merge(['n' => '', 'e' => '', 'ph' => '', 'ti' => '', 'sk' => '', 'loc' => '', 'auth' => '', 'exp' => null, 'li' => '', 'tags' => [], 'msg' => ''], $doc, [
                 'src' => impStr($v, 'src') !== '' ? impStr($v, 'src') : ((string) ($opts['src'] ?? '') ?: 'Import'),
                 'job' => $job, 'jt' => $pub ? (string) ($pub->ti ?? '') : '', 'st' => 'new', 'pool' => $job === '', 'rating' => 0, 'notes' => [],
@@ -2657,6 +2669,10 @@ function impRoute(string $r, array $b): never
             $D['fixes'] = (object) $fixes;
             $D['acts'] = (object) $acts;
             $ctx = impCtx($tk, $opts, $u);
+            if ($tk === 'ats' && ($opts['job'] ?? '') !== '' && !isset($ctx['jobName'])) {
+                $opts['job'] = ''; // the job no longer exists: the rows go to the talent pool
+                $D['opts'] = (object) $opts;
+            }
             if ($tk === 'req') {
                 $ctx['vendors'] = [];
                 foreach (colAll('vms/vendor/items') as [$vid, $v]) {

@@ -207,21 +207,31 @@ function cxProviderUrlProblem(string $prov, string $url): string
     }
     return '';
 }
-/** v83: the provider's sign-in goes only to the provider's own API host. A resume link (from an answer, or stored on
- *  a record) may point anywhere, and is then fetched without credentials. */
+/** v83: the provider's sign-in goes only to the provider's own API address (same scheme, host and port as the base
+ *  address or an absolute operation path). A resume link (from an answer, or stored on a record) may point anywhere,
+ *  and is then fetched without credentials. */
 function cxApiHostOf(array $api, string $url): bool
 {
-    $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
-    if ($host === '') {
+    $origin = function (string $u): string {
+        $p = parse_url($u);
+        $scheme = strtolower((string) ($p['scheme'] ?? ''));
+        $host = strtolower((string) ($p['host'] ?? ''));
+        if ($host === '' || !in_array($scheme, ['http', 'https'], true)) {
+            return '';
+        }
+        return $scheme . '://' . $host . ':' . (int) ($p['port'] ?? ($scheme === 'https' ? 443 : 80));
+    };
+    $want = $origin($url);
+    if ($want === '') {
         return false;
     }
-    $hosts = [strtolower((string) (parse_url((string) $api['base'], PHP_URL_HOST) ?? ''))];
+    $have = [$origin((string) $api['base'])];
     foreach ($api['ops'] as $o) {
         if (preg_match('#^https?://#i', (string) $o['path'])) {
-            $hosts[] = strtolower((string) (parse_url((string) $o['path'], PHP_URL_HOST) ?? ''));
+            $have[] = $origin((string) $o['path']);
         }
     }
-    return in_array($host, array_filter($hosts), true);
+    return in_array($want, array_filter($have), true);
 }
 /** One HTTP request: [code, body, headers, ms, error]. Answers over 8 MB are cut. */
 function cxHttp(string $method, string $url, array $headers, ?string $body, int $timeout = 25): array

@@ -347,12 +347,13 @@ function SqDetail({ id, home, onClose, onEdit, onChanged }) {
   const [f, setF] = useState('live');
   const [cls, setCls] = useState('');
   const [qq, setQq] = useState('');
+  const [sq, setSq] = useState(''); // a search across the whole sequence (the list holds the newest 2000)
   const [sel, setSel] = useState({});
   const [lim, setLim] = useState(200);
   const [bulkTz, setBulkTz] = useState('-');
   const [moveTo, setMoveTo] = useState('');
   const load = () =>
-    api('sq_get', { id })
+    api('sq_get', { id, q: sq })
       .then(setD)
       .catch(e => {
         toast(errText(e), true);
@@ -360,7 +361,7 @@ function SqDetail({ id, home, onClose, onEdit, onChanged }) {
       });
   useEffect(() => {
     load();
-  }, [id]);
+  }, [id, sq]);
   if (!d) return html`<${Modal} wide title="Sequence" onClose=${onClose}><${Spinner} /><//>`;
   const S = d.seq;
   const act = async (enr, a, msg, extra) => {
@@ -419,6 +420,7 @@ function SqDetail({ id, home, onClose, onEdit, onChanged }) {
     const head = ['Name', 'Email', 'Company', 'Status', 'Sorted as', 'Reply', 'Step', 'Version', 'Time zone', 'Last email', 'Added', 'Sender'];
     const lines = list.map(p => [p.n, p.email, p.co, home.st[p.st] || p.st, p.cls ? home.cls[p.cls] || p.cls : '', p.rep, (live(p) ? Math.min(p.step + 1, p.nSteps) : Math.min(p.step, p.nSteps)) + ' of ' + p.nSteps, (p.ab || '').toUpperCase(), p.tz || 'Company time', p.last ? new Date(p.last).toISOString().slice(0, 10) : '', new Date(p.at).toISOString().slice(0, 10), p.senderN]);
     saveDownload((S.n || 'sequence').replace(/[^\w.-]+/g, '-') + '.csv', new Blob([[head, ...lines].map(r => r.map(sqCsvCell).join(',')).join('\r\n')], { type: 'text/csv' }));
+    if (d.more && !picked.length) toast('The file holds the newest ' + d.people.length + ' people only. Search to export the others.', true);
   };
   const by = S.stats.by;
   const cc = S.stats.cls || {};
@@ -433,7 +435,8 @@ function SqDetail({ id, home, onClose, onEdit, onChanged }) {
             .filter(([k]) => cc[k])
             .map(([k, n]) => html`<button key=${k} type="button" className=${'chip ' + (SQ_CLS_TONE[k] || '') + (cls === k ? ' on' : '')} aria-pressed=${cls === k} onClick=${() => (setCls(cls === k ? '' : k), setF('all'))}>${n} · ${cc[k]}</button>`)}</div>`
         }
-        <div className="toolbar"><div className="seg">${[['live', 'In progress'], ['replied', 'Replied'], ['done', 'Left the sequence'], ['all', 'Everyone']].map(([k, n]) => html`<button key=${k} type="button" className=${f === k ? 'on' : ''} onClick=${() => (setF(k), setCls(''))}>${n}</button>`)}</div><input type="search" className="sqfind" value=${qq} onInput=${e => setQq(e.target.value)} placeholder="Find a person" aria-label="Find a person in this sequence" /><button type="button" className="btn ghost sm push" onClick=${csv}><${Icon} n="down" />${picked.length ? 'Export ' + picked.length : 'Export CSV'}</button></div>
+        <div className="toolbar"><div className="seg">${[['live', 'In progress'], ['replied', 'Replied'], ['done', 'Left the sequence'], ['all', 'Everyone']].map(([k, n]) => html`<button key=${k} type="button" className=${f === k ? 'on' : ''} onClick=${() => (setF(k), setCls(''))}>${n}</button>`)}</div><input type="search" className="sqfind" value=${qq} onInput=${e => (setQq(e.target.value), !e.target.value && sq && setSq(''))} onKeyDown=${e => e.key === 'Enter' && (d.more || sq) && setSq(qq.trim())} placeholder="Find a person" aria-label="Find a person in this sequence" /><button type="button" className="btn ghost sm push" onClick=${csv}><${Icon} n="down" />${picked.length ? 'Export ' + picked.length : 'Export CSV'}</button></div>
+        ${(d.more || sq) && html`<p className="muted small">${sq ? 'Results for \u201c' + sq + '\u201d across the whole sequence' + (d.more ? ' (the newest ' + d.people.length + ')' : '') + '. Clear the box to see the list again.' : 'Showing the newest ' + d.people.length + ' of ' + S.stats.total + '. Type a name, company or address and press Enter to search everyone.'}</p>`}
         ${
           picked.length > 0 &&
           html`<div className="sqbulk" role="group" aria-label="With the people picked">
@@ -526,9 +529,9 @@ function SqEnroll({ S, home, onClose, onDone }) {
     let added = 0;
     const skipped = [];
     try {
-      if (first.length) {
-        setBusy('Adding…');
-        const r = await api('sq_enroll', { id: S.id, start, tz, src: 'paste', people: first });
+      for (let i = 0; i < first.length; i += 500) {
+        setBusy(first.length > 500 ? 'Adding ' + Math.min(i + 500, first.length) + ' of ' + first.length + '…' : 'Adding…');
+        const r = await api('sq_enroll', { id: S.id, start, tz, src: 'paste', people: first.slice(i, i + 500) });
         added += r.added;
         skipped.push(...r.skipped);
       }
@@ -694,13 +697,20 @@ function SqAnalytics({ home, onOpen }) {
   const [days, setDays] = useState(30);
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
+    // only the latest request shows (a slow answer for the days or sequence picked before is dropped)
+    let on = true;
     setD(null);
+    setErr(null);
     api('sq_stats', { id: seq, days })
-      .then(setD)
-      .catch(setErr);
-  }, [seq, days]);
-  if (err && !d) return html`<${LoadError} error=${err} onRetry=${() => (setErr(null), setDays(days))} />`;
+      .then(x => on && setD(x))
+      .catch(e => on && setErr(e));
+    return () => {
+      on = false;
+    };
+  }, [seq, days, tick]);
+  if (err && !d) return html`<${LoadError} error=${err} onRetry=${() => setTick(t => t + 1)} />`;
   const t = d && d.tot;
   return html`<div className="stack sqstats">
       <div className="toolbar">

@@ -439,7 +439,7 @@ function cpPendingApprovals(array $u): string
                 continue;
             }
             $rev = $r && isset($r->rev->$w) ? $r->rev->$w : null;
-            if ($rev && (int) ($rev->v ?? -1) === (int) ($sum->u ?? -2) && ($rev->s ?? '') === 'approved') {
+            if ($rev && (int) ($rev->v ?? -1) === (int) ($sum->u ?? -2) && ($rev->s ?? '') === 'approved' && (!isset($rev->t) || (float) $rev->t === (float) ($sum->t ?? 0))) {
                 continue;
             }
             $ts++;
@@ -525,7 +525,7 @@ function cpPrepareWrite(array $u, string $tool, array $args): array
                 foreach ((array) ($ud->ts ?? []) as $w => $sum) {
                     if ($sum instanceof stdClass && ($sum->s ?? '') === 'submitted') {
                         $rev = $r && isset($r->rev->$w) ? $r->rev->$w : null;
-                        if (!($rev && (int) ($rev->v ?? -1) === (int) ($sum->u ?? -2) && ($rev->s ?? '') === 'approved')) {
+                        if (!($rev && (int) ($rev->v ?? -1) === (int) ($sum->u ?? -2) && ($rev->s ?? '') === 'approved' && (!isset($rev->t) || (float) $rev->t === (float) ($sum->t ?? 0)))) {
                             $pending[$w] = $sum;
                         }
                     }
@@ -704,7 +704,7 @@ function cpExecute(array $u, string $tool, array $a): array
                 $r->rev = new stdClass();
             }
             $decision = ($a['decision'] ?? '') === 'return' ? 'rejected' : 'approved';
-            $r->rev->$week = (object) ['s' => $decision, 'c' => (string) ($a['note'] ?? ''), 'at' => now(), 'by' => $u['id'], 'v' => (int) ($sum->u ?? 0)];
+            $r->rev->$week = (object) (['s' => $decision, 'c' => (string) ($a['note'] ?? ''), 'at' => now(), 'by' => $u['id'], 'v' => (int) ($sum->u ?? 0)] + (isset($sum->t) ? ['t' => $sum->t] : []));
             docSet("r/$uid", $r);
             audit('ai', 'StratEdge AI ' . ($decision === 'approved' ? 'approved' : 'returned') . ' a timesheet', (string) (userRow($uid)['email'] ?? $uid), ['week' => $week], $u);
             return ['done' => $decision === 'approved' ? 'Timesheet approved.' : 'Timesheet returned with your note.'];
@@ -725,7 +725,8 @@ function cpExecute(array $u, string $tool, array $a): array
                 $r->lvd = new stdClass();
             }
             $decision = ($a['decision'] ?? '') === 'declined' ? 'declined' : 'approved';
-            $r->lvd->$id = (object) ['s' => $decision, 'c' => (string) ($a['note'] ?? ''), 'at' => now(), 'by' => $u['id']];
+            // v83: the decision carries what was decided (type and dates), so a later edit of the request does not ride on it
+            $r->lvd->$id = (object) ['s' => $decision, 'c' => (string) ($a['note'] ?? ''), 'at' => now(), 'by' => $u['id'], 'k' => (string) ($l->k ?? ''), 'f' => (string) ($l->f ?? ''), 't' => (string) ($l->t ?? '')];
             docSet("r/$uid", $r);
             audit('ai', 'StratEdge AI ' . $decision . ' time off', (string) (userRow($uid)['email'] ?? $uid), [], $u);
             return ['done' => $decision === 'approved' ? 'Time off approved.' : 'Time off declined.'];

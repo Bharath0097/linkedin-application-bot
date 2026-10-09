@@ -497,7 +497,8 @@ function imxView(stdClass $c, stdClass $g): array
 {
     $T = imTypes()[(string) $c->type] ?? imTypes()['other'];
     $files = array_values(array_filter(imFiles((string) $c->id), fn($f) => in_array($f['w'], ['a', 'p'], true)));
-    $msgs = array_values(array_filter(json_decode((string) json_encode($c->msgs ?? []), true) ?: [], fn($m) => in_array($m['vis'] ?? 'all', ['all', 'atty'], true)));
+    // v83: the attorney sees only the attorney thread (vis 'atty'), not the HR-to-person thread (vis 'all')
+    $msgs = array_values(array_filter(json_decode((string) json_encode($c->msgs ?? []), true) ?: [], fn($m) => ($m['vis'] ?? 'all') === 'atty'));
     $steps = array_values(json_decode((string) json_encode($c->steps ?? []), true) ?: []);
     foreach ($steps as &$st) {
         unset($st['note']);

@@ -122,6 +122,9 @@ if ($wsNow) {
 // v35: public forms, and sign-in from an address with wrong passwords or during an attack, carry a solved bot check
 guardPowGate($r, $method);
 $b = $method === 'POST' ? body() : [];
+if ($method !== 'POST' && in_array($r, GUARD_POST_ONLY, true)) {
+    fail(405, 'bad_request', 'Use POST.');
+}
 // Requests that take longer than 1.5 seconds are noted in storage/slow.log (shown under Admin > System health).
 $GLOBALS['reqStart'] = microtime(true);
 register_shutdown_function(function () use ($r) {
@@ -629,7 +632,15 @@ switch ($r) {
             fail(403, 'invalid_argument', 'You can\'t change this record.');
         }
         if (financialPath($path)) {
-            booksGuard($path, $data); // closed periods stay closed; the change is written to the audit log below
+            // v83: the record as it will be saved (an update merges into the stored one), so a payment dated after the
+            // close on a closed-period invoice or bill can be told apart from a change to the closed period
+            $after = $data;
+            if ($r === 'update' && ($cur0 = docGet($path))) {
+                $after = json_decode(json_encode($cur0));
+                mergeInto($after, $data);
+            }
+            booksGuard($path, $data, $after); // closed periods stay closed; the change is written to the audit log below
+            bankReconGuard($path, $data, $r === 'set'); // v83: finished reconciliations lock their lines
         }
         // Feature switches on a Team card (r/{id}.ft) are given and taken away by administrators only.
         $cu = currentUser();
@@ -642,7 +653,10 @@ switch ($r) {
             } else {
                 unset($data->cd);
             }
-            $data->u = now();
+            // v83: the portal's own version stamp is kept when it is newer than the stored one, so the copy still
+            // matches the submission (Approvals: "The copy shared with the client differs"); otherwise the server's
+            $wasU = max((int) ($prevTs->u ?? 0), (int) ($prevTs->cd->v ?? 0));
+            $data->u = is_int($data->u ?? null) && $data->u > $wasU && $data->u <= now() + 86400000 ? $data->u : max(now(), $wasU + 1);
         }
         if (preg_match('#^r/[^/]+$#', $path) && !hasRole($cu, 'admin') && property_exists($data, 'ft')) {
             $prev = docGet($path);
@@ -694,6 +708,13 @@ switch ($r) {
         } else {
             $before = docGet($path);
         }
+        // v83: a time-off request that was approved or declined keeps the type and dates that were decided
+        if (userLevel($cu) < 2 && $path === 'u/' . (string) ($cu['id'] ?? '')) {
+            leaveLockDecided((string) $cu['id'], $before instanceof stdClass ? $before : null, $data);
+        }
+        if (tsApprovedTamper($path, $before, $data, $cu)) {
+            fail(409, 'conflict', 'This week is approved and locked. Ask your manager or HR to reopen it.');
+        }
         // v36.2: an ATS record saved by a search becomes part of the working ATS once someone edits it
         if (preg_match('#^ats/[^/]+$#', $path)) {
             unset($data->lite);
@@ -717,9 +738,14 @@ switch ($r) {
         if (preg_match('#^r/[^/]+$#', $path) && !hasRole(currentUser(), 'admin')) {
             fail(403, 'invalid_argument', 'You can\'t delete this record.');
         }
+        // v83: an approved timesheet week cannot be deleted by its owner (see tsApprovedTamper)
+        if (tsApprovedTamper($path, docGet($path), null, currentUser())) {
+            fail(409, 'conflict', 'This week is approved and locked. Ask your manager or HR to reopen it.');
+        }
         if (financialPath($path)) {
             $prev = docGet($path);
             booksGuard($path, $prev);
+            bankReconGuard($path, null, true); // v83: a reconciled bank line is not deleted
             docDelete($path);
             require_once __DIR__ . '/payroll.php';
             auditLog('delete', $path, 'Record deleted', ['was' => $prev ? array_intersect_key((array) $prev, array_flip(['total', 'a', 'gross', 'net', 'st', 'no', 'v', 'cn', 'd', 'dt', 'issue'])) : []]);
@@ -1398,6 +1424,15 @@ switch ($r) {
         ) {
             fail(400, 'invalid_argument', 'The signed copy did not come through. Try again.');
         }
+        // v83: the signed copy must carry the copy it was signed on (every page, image and font of it), not another document
+        $onFid = (string) ($d->sfid ?? '') !== '' ? (string) $d->sfid : (string) $d->fid;
+        $onTy = (string) ($d->sfid ?? '') !== '' ? 'application/pdf' : (string) ($d->fty ?? '');
+        $was = fileRead($onFid);
+        $got = (string) @file_get_contents((string) $_FILES['file']['tmp_name']);
+        if ($was === null || !sigKeepsCopy($was, $onTy, $got)) {
+            fail(400, 'invalid_argument', 'The signed copy does not match the document you were asked to sign. Reload the page and sign again.');
+        }
+        unset($was, $got);
         $base = "sig/$id";
         $f = storeUpload($_FILES['file'], $base, ['c' => 'signed']);
         $now = now();
@@ -1418,7 +1453,7 @@ switch ($r) {
         $log[] = (object) [
             't' => $now,
             'who' => $who['n'],
-            'ev' => 'Signed as "' . $name . '"',
+            'ev' => 'Signed as "' . $name . '" (signed copy SHA-256 ' . substr((string) $signers[$i]->sh, 0, 16) . '…)',
             'ip' => clientIp(),
         ];
         if ($d->cur >= count($signers)) {
@@ -1709,6 +1744,10 @@ switch ($r) {
     /* ---------- invoices ---------- */
     case 'inv_next':
         requireAdmin();
+        // v83: numbering an invoice is a books change: administrators and bookkeepers with full books access
+        if (!can('org/acct/x', 'w')) {
+            fail(403, 'forbidden', 'Invoices are for administrators and the accounts team.');
+        }
         ok(['num' => invNext()]);
     case 'inv_send':
         $me = requireAdmin();
@@ -1716,6 +1755,11 @@ switch ($r) {
         $d = docGet("inv/$id");
         if (!$d) {
             fail(404, 'not_found', 'No such invoice.');
+        }
+        // v83: sending replaces the invoice PDF and the client's copy: only who may change the invoice itself
+        // (administrators and bookkeepers with full books access; not HR, not view-only or reports-only books)
+        if (!can("inv/$id", 'w')) {
+            fail(403, 'forbidden', 'Invoices are for administrators and the accounts team.');
         }
         if (
             !isset($_FILES['file']) ||
@@ -2043,7 +2087,8 @@ switch ($r) {
         $toE = strtolower(str($b, 'to_e', 190));
         $toN = str($b, 'to_n', 120);
         $fromN = str($b, 'from_n', 120);
-        if (!currentUser() && fwScreen(['email' => $toE, 'name' => $fromN . ' ' . $toN, 'message' => str($b, 'note', 2000), 'website' => $b['website'] ?? '', 't0' => $b['t0'] ?? 0], 'job share') !== '') {
+        // v83: screen the visitor's note that is actually emailed (the form sends it as msg, never note)
+        if (!currentUser() && fwScreen(['email' => $toE, 'name' => $fromN . ' ' . $toN, 'message' => str($b, 'msg', 1000), 'website' => $b['website'] ?? '', 't0' => $b['t0'] ?? 0], 'job share') !== '') {
             fail(400, 'spam', 'That share could not be sent. Copy the link instead.');
         }
         $fromE = strtolower(str($b, 'from_e', 190));

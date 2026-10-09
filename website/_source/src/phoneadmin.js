@@ -12,6 +12,8 @@ function PhoneSetupPage({ q }) {
   const [edit, setEdit] = useState(null);
   // v82: inside a company workspace the phone provider is set up centrally by StratEdge. This page then shows only
   // "who can use the phone" (role management, which stays with the workspace), not the provider wiring.
+  // v83: the page text names "StratEdge Workspaces", the protected service name the workspace re-branding (core.js
+  // WS_BRAND_RE) keeps, so the note does not say the workspace's own company manages the phone provider.
   const wsMode = typeof wsOn === 'function' && wsOn();
   const load = () =>
     api('ph_cfg', {}).then(
@@ -47,7 +49,7 @@ function PhoneSetupPage({ q }) {
   const publicOk = /^https:\/\//.test(d.base) && !/\/\/(localhost|127\.|10\.|192\.168\.)/.test(d.base);
   return html`<div className="stack phadmin">
       <${KitStats} items=${[
-        { v: wsMode ? (d.ready ? 'Ready' : 'Set up by StratEdge') : d.ready ? 'Ready' : c.provider === 'twilio' && c.ok ? 'Connected' : 'Needs setup', l: (c.providerLabel || (c.provider === 'vitel' ? 'VitelGlobal' : c.provider === 'custom' ? 'Other phone provider' : 'Twilio')), tone: d.ready ? 'ok' : 'warn' },
+        { v: wsMode ? (d.ready ? 'Ready' : 'Set up by StratEdge Workspaces') : d.ready ? 'Ready' : c.provider === 'twilio' && c.ok ? 'Connected' : 'Needs setup', l: (c.providerLabel || (c.provider === 'vitel' ? 'VitelGlobal' : c.provider === 'custom' ? 'Other phone provider' : 'Twilio')), tone: d.ready ? 'ok' : 'warn' },
         { v: ppl.length, l: ppl.length === 1 ? 'Person with the phone' : 'People with the phone', tone: ppl.length ? 'ok' : 'warn' },
         ...(wsMode ? [] : [
           { v: c.provider === 'twilio' ? on.length : (c.providerFrom ? 1 : 0), l: c.provider === 'twilio' ? (on.length === 1 ? 'Company number on' : 'Company numbers on') : 'Configured company number', tone: (c.provider === 'twilio' ? on.length : c.providerFrom) ? 'ok' : 'warn' },
@@ -56,7 +58,7 @@ function PhoneSetupPage({ q }) {
       ]} />
       ${
         wsMode &&
-        html`<div className="note info" role="note"><span><b>Calling is set up centrally by StratEdge.</b> The phone provider, company numbers, recording and allowed destinations are managed on the StratEdge side${d.ready ? '' : ' (not finished yet)'}. Here you choose which of your people can use the phone.</span></div>`
+        html`<div className="note info" role="note"><span><b>Calling is set up centrally by the StratEdge Workspaces service.</b> The phone provider, company numbers, recording and allowed destinations are managed by StratEdge Workspaces${d.ready ? '' : ' (not finished yet)'}. Here you choose which of your people can use the phone.</span></div>`
       }
       ${
         !wsMode && c.provider === 'twilio' && !publicOk &&

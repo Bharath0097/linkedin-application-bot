@@ -229,8 +229,11 @@ function CandidateModal({ c, jobsMap, S, onClose, onChanged, onMail }) {
     setBusy('');
   };
   const openMail = k => {
-    const t = ATS_TEMPLATES[k] || ATS_TEMPLATES.screen;
-    const fill = s => s.replace(/\{name\}/g, (c.n || '').split(' ')[0]).replace(/\{job\}/g, c.jt || 'the open').replace(/\{date\}/g, c.intv ? c.intv.replace('T', ' at ') : '[date and time]').replace(/\{me\}/g, me);
+    // the template saved under Settings › Email templates wins (as in the Mail window); a blank subject keeps the built-in wording
+    const cu = ((S && S.templates) || {})[k];
+    const t = cu && String(cu.s || '').trim() ? { s: String(cu.s), b: String(cu.b || '') } : ATS_TEMPLATES[k] || ATS_TEMPLATES.screen;
+    const first = (c.n || '').split(' ')[0];
+    const fill = s => String(s || '').replace(/\{first\}/g, first).replace(/\{name\}/g, first).replace(/\{job\}/g, c.jt || 'the open').replace(/\{stage\}/g, stage.n).replace(/\{date\}/g, c.intv ? c.intv.replace('T', ' at ') : '[date and time]').replace(/\{me\}/g, me);
     setMail({ k, s: fill(t.s), b: fill(t.b) });
   };
   const sendMailNow = async () => {
@@ -385,15 +388,21 @@ const CAL_BACK = {
   profile: ['The calendar could not be connected: the account did not give its email address. Try again.', true],
 };
 const CAL_RSVP = { yes: ['accepted', 'ok'], no: ['declined', 'red'], maybe: ['maybe', 'amber'], none: ['no answer yet', ''] };
-function calConnectUrl(p) {
-  const next = (location.hash || '#/portal').slice(1).replace(/[?&]cal=[a-z]+/, '');
+function calConnectUrl(p, cid) {
+  let next = (location.hash || '#/portal').slice(1).replace(/[?&]cal=[a-z]+/, '');
+  // from a candidate's Interviews tab: come back to that candidate (the ATS keeps the open one only in memory)
+  if (cid) {
+    next = next.replace(/([?&])c=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    next += (next.includes('?') ? '&' : '?') + 'c=' + encodeURIComponent(cid);
+  }
   return API + 'sso_start&p=' + p + '&connect=cal&next=' + encodeURIComponent(next);
 }
 const calInOne = iv => !!(iv && iv.cal && typeof iv.cal === 'object' && iv.cal.eid && iv.cal.st !== 'cancelled');
 /* Back from connecting a calendar (?cal=<how it went> on the address): said once, then taken off the address. */
-function useCalReturn(onDone) {
+function useCalReturn(onDone, skip) {
   const toast = useToast();
   useEffect(() => {
+    if (skip) return;
     const m = /[?&]cal=([a-z]+)/.exec(location.hash || '');
     if (!m) return;
     const [msg, bad] = CAL_BACK[m[1]] || ['The calendar could not be connected. Try again.', true];
@@ -607,7 +616,7 @@ function InterviewsPanel({ c, job, S, onChanged }) {
                         ${acct.err ? html`<span className="calerr small">${acct.err}</span>` : null}
                       </div>`
                     : cal && (cal.google || cal.microsoft)
-                      ? html`<div className="note info"><span>Connect your calendar to send invitations from Google Calendar or Outlook (with a Meet or Teams link) and get the guests' answers back. ${cal.google ? html`<a className="btn ghost sm" href=${calConnectUrl('google')}>Connect Google Calendar</a> ` : null}${cal.microsoft ? html`<a className="btn ghost sm" href=${calConnectUrl('microsoft')}>Connect Outlook</a>` : null}</span></div>`
+                      ? html`<div className="note info"><span>Connect your calendar to send invitations from Google Calendar or Outlook (with a Meet or Teams link) and get the guests' answers back. ${cal.google ? html`<a className="btn ghost sm" href=${calConnectUrl('google', c.id)}>Connect Google Calendar</a> ` : null}${cal.microsoft ? html`<a className="btn ghost sm" href=${calConnectUrl('microsoft', c.id)}>Connect Outlook</a>` : null}</span></div>`
                       : null
               }
               <label className="check"><input type="checkbox" checked=${edit.invite} onChange=${e => setEdit({ ...edit, invite: e.target.checked })} /><span>${viaCal ? 'If the calendar cannot send it, email the invitations with a calendar file instead' : 'Email invitations with a calendar file to the candidate and the panel'}</span></label>
@@ -825,7 +834,14 @@ function HireModal({ c, job, pub, onClose, onDone }) {
   const go = async () => {
     setBusy(true);
     try {
-      const r = await api('ats_hire', { id: c.id, opt: f });
+      let r;
+      try {
+        r = await api('ats_hire', { id: c.id, opt: f });
+      } catch (e) {
+        // v83: the candidate's email already has a portal account: hire into it only once HR confirms it is the same person
+        if (!e || e.code !== 'link_existing' || !e.uid || !confirm(errText(e))) throw e;
+        r = await api('ats_hire', { id: c.id, opt: { ...f, link: e.uid } });
+      }
       setDone(r);
       toast('Hired.');
     } catch (e) {
@@ -1608,7 +1624,9 @@ function BulkBar({ ids, docs, jobsMap, S, onDone, onMail }) {
       if ((act === 'move' || act === 'tag') && !v) return toast('Pick a value.', true);
       if (act === 'email' && (!mail.s || !mail.b)) return toast('Add a subject and a message.', true);
       const r = await api('ats_bulk', { ids, ...body });
-      toast(`${r.n} candidate${r.n === 1 ? '' : 's'} updated.`);
+      // a stage missing from some candidates' job pipeline: those are skipped and counted here
+      const skipped = (r.skipped || []).length;
+      toast(`${r.n} candidate${r.n === 1 ? '' : 's'} updated.` + (skipped ? ` ${skipped} skipped: that stage is not in their job's pipeline.` : ''), !!skipped && !r.n);
       onDone();
     } catch (e) {
       toast(errText(e), true);
@@ -1946,6 +1964,8 @@ function ATSPage({ q }) {
     setTick(t => t + 1);
     reloadJobs();
   };
+  // back from connecting a calendar: the candidate's Interviews tab reports it when one is open (c=), the page otherwise
+  useCalReturn(null, !!(q && q.c));
   if (!S) return html`<${Spinner} label="Opening the ATS…" />`;
   const activeDocs = docs.filter(c => activeKind(kindOf(jobsMap[c.job] && jobsMap[c.job].job, c.st)) && !(c.pool && !c.job));
   const upcoming = docs.reduce((n, c) => n + (c.intvs || []).filter(i => !i.cancelled && new Date(i.at) >= new Date()).length, 0);

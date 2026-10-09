@@ -838,7 +838,7 @@ function MustChangePassword({ why }) {
   };
   return html`<${Gate} title="Choose a new password" actions=${html`<button type="button" className="btn ghost" onClick=${logout}>Log out</button>`}>
       <form className="form" onSubmit=${save} noValidate>
-        <p className="muted" style=${{ margin: 0 }}>${why === 'breached' ? 'Your password appears in lists of passwords leaked from other websites, so it is no longer safe. Choose a new one to continue.' : 'Your password was reset by StratEdge. Choose your own to continue.'}</p>
+        <p className="muted" style=${{ margin: 0 }}>${why === 'breached' ? 'Your password appears in lists of passwords leaked from other websites, so it is no longer safe. Choose a new one to continue.' : why === 'first' ? 'This is the first-time password from the setup file. Choose your own to continue.' : 'Your password was reset by StratEdge. Choose your own to continue.'}</p>
         <input type="email" autoComplete="username" value=${(Cap.me && Cap.me.email) || ''} readOnly hidden />
         <${Field} label=${why === 'breached' ? 'Current password' : 'Temporary or current password'}><input type="password" autoComplete="current-password" value=${f.c} onInput=${e => setF({ ...f, c: e.target.value })} autoFocus /><//>
         <${Field} label="New password"><input type="password" autoComplete="new-password" value=${f.n} onInput=${e => setF({ ...f, n: e.target.value })} /><//>

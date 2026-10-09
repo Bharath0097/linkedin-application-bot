@@ -584,6 +584,12 @@ function tsAlerts(): int
         if (!$owner || ($owner['status'] ?? '') !== 'active') {
             continue;
         }
+        // v83: the owner must still be allowed Talent search (the same checks as tailorStaff() and the feature block on ts_ routes);
+        // the record is kept as is, so the alert resumes on its own if access comes back
+        $full = userRow((string) $owner['id']);
+        if (!$full || !tailorIsStaff($full) || (!hasRole($full, 'admin') && featureMode((string) $full['id'], 'talent_search') === 'block')) {
+            continue;
+        }
         $f = json_decode(json_encode($s->q ?? new stdClass()), true) ?: [];
         $fl = $f;
         $fl['since'] = (int) ($s->last ?? 0) ?: now() - 86400000;
@@ -667,8 +673,36 @@ function tsRoute(string $r, array $b): never
             $skills = [];
             foreach (array_slice($jd['skills'], 0, 8) as $sk) {
                 $y = 0;
-                if (preg_match('/(\d{1,2})\s*\+?\s*(?:years?|yrs?)[^.\n]{0,40}?' . preg_quote($sk, '/') . '|' . preg_quote($sk, '/') . '[^.\n]{0,30}?(\d{1,2})\s*\+?\s*(?:years?|yrs?)/i', $text, $m)) {
-                    $y = (int) (($m[1] ?? '') !== '' ? $m[1] : ($m[2] ?? 0));
+                // v83: the 'N years' closest to the skill wins (up to 40 characters before it or 30 after, same sentence);
+                // the old single regex took the leftmost number, so '8+ years of Java, 5 years of Spring Boot' gave Spring Boot 8.
+                // A number that belongs to another skill is skipped: 'N years, Skill' / 'Other (N yrs) and Skill' (before) and
+                // 'Skill, N years of Other' / 'Skill and N years in Other' (after).
+                preg_match_all('/(\d{1,2})\s*\+?\s*(?:years?|yrs?)/i', $text, $ym, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+                preg_match_all('/' . preg_quote($sk, '/') . '/i', $text, $sms, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+                $best = PHP_INT_MAX;
+                foreach ($sms as $sm) { // every mention of the skill (the first may be the title, with the years in a later sentence)
+                    $s0 = $sm[0][1];
+                    $s1 = $s0 + strlen($sm[0][0]);
+                    foreach ($ym as $yy) {
+                        $a = $yy[0][1];
+                        $e = $a + strlen($yy[0][0]);
+                        $before = $e <= $s0;
+                        if (!$before && $a < $s1) {
+                            continue; // overlaps the skill
+                        }
+                        $gap = $before ? $s0 - $e : $a - $s1;
+                        $mid = substr($text, $before ? $e : $s1, $gap);
+                        if ($gap > ($before ? 40 : 30) || strpbrk($mid, ".\n") !== false) {
+                            continue;
+                        }
+                        if ($before ? preg_match('/^\s*[,;)]/', $mid) : (preg_match('/[,;&]|\band\b/i', $mid) && preg_match('/\G\s*(?:of|in|with)\b/i', $text, $nx, 0, $e))) {
+                            continue;
+                        }
+                        if ($gap < $best) {
+                            $best = $gap;
+                            $y = (int) $yy[1][0];
+                        }
+                    }
                 }
                 $skills[] = ['s' => $sk, 'y' => $y];
             }

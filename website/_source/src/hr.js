@@ -730,7 +730,8 @@ function Recruiting() {
         `recruiting_${a}_to_${b}.csv`,
         toCSV([
           ['Recruiter', 'Consultants added', 'RTRs', 'Submissions', 'Interviews', 'Placed'],
-          ...byRec.map(r => [r.m.u.p.n, r.s.cands, r.s.rtr, r.s.subs, r.s.intv, r.s.placed]),
+          // Former recruiters (no member record, u: null) export under the name saved on their records.
+          ...byRec.map(r => [(r.m.u && r.m.u.p && r.m.u.p.n) || r.m.name || '', r.s.cands, r.s.rtr, r.s.subs, r.s.intv, r.s.placed]),
           ['All', tot.cands, tot.rtr, tot.subs, tot.intv, tot.placed],
         ])
       );

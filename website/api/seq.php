@@ -28,6 +28,8 @@ const SQ_CFG = [
     'tzMode' => 'person', 'hol' => true, 'holOff' => [], 'ooo' => 3, 'oooKeep' => true, 'later' => 90, 'replyTask' => true,
     'auto' => ['on' => false, 'forms' => ['talent', 'contact'], 'who' => 'owner'],
 ];
+/** v83: why a person waits while the sender's account is paused or no longer has Sequences. */
+const SQ_SENDER_OFF = 'The sender\'s account is paused or no longer has Sequences.';
 /** How a reply was sorted. */
 const SQ_CLS = ['interested' => 'Interested', 'later' => 'Not now', 'no' => 'Not interested', 'wrong' => 'Wrong person', 'unsub' => 'Asked to stop', 'ooo' => 'Out of office', 'other' => 'Other reply'];
 /** Time zones offered on the pages (any IANA name is accepted from a file). */
@@ -365,6 +367,15 @@ function sqMerge(string $txt, array $v): string
 {
     return (string) preg_replace_callback('/\{([a-z_]+)\}/', fn($m) => array_key_exists($m[1], $v) ? $v[$m[1]] : $m[0], $txt);
 }
+/** v83: what a website visitor typed, made safe to merge into an email from a staff mailbox: no links, addresses, paths or domains, plain words only. */
+function sqPlainWeb(string $s, int $max, int $words): string
+{
+    $s = (string) preg_replace('~\S*(?:://|www\.|@|/|\\\\)\S*~iu', ' ', $s);
+    $s = (string) preg_replace('~[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.[a-z]{2,}\b~iu', ' ', $s);
+    $s = (string) preg_replace('~[^\p{L}\p{N} &.,\'-]~u', ' ', $s);
+    $w = array_filter(preg_split('/\s+/u', trim($s)) ?: [], fn($x) => $x !== '');
+    return mb_substr(implode(' ', array_slice($w, 0, $words)), 0, $max);
+}
 function sqUnsubUrl(string $tok): string
 {
     return rtrim(siteUrl(), '/') . '/#/unsubscribe?t=' . $tok;
@@ -411,6 +422,10 @@ function sqRender(array $S, int $stepIx, array $e, array $sender, array $acct = 
 function sqToken(array $a): array
 {
     require_once __DIR__ . '/sso.php';
+    // v83: a Gmail app-password (SMTP) mailbox has no token: mymailSendRaw() signs in to SMTP itself
+    if (!in_array($a['provider'], ['google', 'microsoft'], true)) {
+        return [$a, ''];
+    }
     if ((int) $a['exp'] > now() + 60000 && (string) $a['access'] !== '') {
         return [$a, ''];
     }
@@ -644,6 +659,13 @@ function sqSetEnr(string $id, array $f): void
     $vals[] = $id;
     sqDb()->prepare('UPDATE sq_enr SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($vals);
 }
+/** v83: takes one person's due step for this run (the scheduled job and "Send what is due now" may run at once); false when another run took it first. */
+function sqClaim(array $e): bool
+{
+    $c = sqDb()->prepare('UPDATE sq_enr SET next_at = ? WHERE id = ? AND st = ? AND step = ? AND next_at = ?');
+    $c->execute([now() + 600000, (string) $e['id'], (string) $e['st'], (int) $e['step'], (int) $e['next_at']]);
+    return $c->rowCount() === 1;
+}
 /** When a step that waits $days after now may go out (the sending hours, weekdays and holidays are checked when it is due). */
 function sqNextAt(array $S, int $ix): int
 {
@@ -680,7 +702,9 @@ function sqRun(string $onlySender = '', int $max = 60): array
     $p = sqDb();
     // paused people are read for replies too (nothing goes to them), and so are the people who got the last step in
     // the past 30 days: a reply to the last email is sorted and counted like any other
-    $q = "SELECT * FROM sq_enr WHERE (st IN ('active', 'task', 'error', 'paused') OR (st = 'finished' AND cls = '' AND last_at > ?))" . ($onlySender !== '' ? ' AND sender = ?' : '') . ' ORDER BY next_at LIMIT 3000';
+    // v83: the people who can get a step (active, and error which is retried) come first, earliest due first, so rows
+    // that are only read for replies (task, paused, finished; next_at 0) cannot fill the limit and starve the sending
+    $q = "SELECT * FROM sq_enr WHERE (st IN ('active', 'task', 'error', 'paused') OR (st = 'finished' AND cls = '' AND last_at > ?))" . ($onlySender !== '' ? ' AND sender = ?' : '') . " ORDER BY CASE WHEN st IN ('active', 'error') THEN 0 ELSE 1 END, next_at LIMIT 3000";
     $s = $p->prepare($q);
     $s->execute($onlySender !== '' ? [now() - 30 * 86400000, $onlySender] : [now() - 30 * 86400000]);
     $rows = $s->fetchAll();
@@ -689,6 +713,7 @@ function sqRun(string $onlySender = '', int $max = 60): array
     $synced = [];
     $sentToday = [];
     $abCount = [];
+    $live = [];
     foreach ($rows as $e) {
         $sid = (string) $e['seq'];
         if (!isset($seqs[$sid])) {
@@ -702,6 +727,18 @@ function sqRun(string $onlySender = '', int $max = 60): array
             continue;
         }
         $sender = (string) $e['sender'];
+        if (!array_key_exists($sender, $live)) {
+            $su = userRow($sender);
+            $live[$sender] = $su && (string) $su['status'] === 'active' && sqMay($su);
+        }
+        if (!$live[$sender]) {
+            // v83: a paused account, or one that no longer works the CRM: nothing goes out from its mailbox and its
+            // inbox is not read (st stays, so the people go on when the account is back)
+            if (in_array((string) $e['st'], ['active', 'error'], true) && (string) $e['why'] !== SQ_SENDER_OFF) {
+                sqSetEnr((string) $e['id'], ['why' => SQ_SENDER_OFF]);
+            }
+            continue;
+        }
         if (!array_key_exists($sender, $accts)) {
             $accts[$sender] = mymailAcct($sender);
         }
@@ -743,7 +780,7 @@ function sqRun(string $onlySender = '', int $max = 60): array
             continue;
         }
         if ($out['sent'] + $out['tasks'] >= $max) {
-            break;
+            continue; // v83: the rest are still read for replies and bounces above, nothing more goes out
         }
         $step = $S['steps'][(int) $e['step']] ?? null;
         if (!$step) {
@@ -752,6 +789,9 @@ function sqRun(string $onlySender = '', int $max = 60): array
             continue;
         }
         if ($step['kind'] === 'task') {
+            if (!sqClaim($e)) {
+                continue; // v83: another run took this step
+            }
             $u = userRow($sender);
             $t = sqMerge((string) $step['task'], sqVars($e, $u ? ['name' => (string) $u['name'], 'email' => (string) $u['email'], 'id' => (string) $u['id']] : ['name' => '', 'email' => '']));
             sqTaskAdd($sid, (string) $e['id'], $sender, (int) $e['step'], $t, now());
@@ -785,6 +825,9 @@ function sqRun(string $onlySender = '', int $max = 60): array
             continue;
         }
         $accts[$sender] = $a2;
+        if (!sqClaim($e)) {
+            continue; // v83: another run is sending this step (no second copy)
+        }
         // A/B: the person's version is picked the first time a step with two versions goes to them
         if (sqVariant($step, $e) !== '' && !in_array((string) ($e['ab'] ?? ''), ['a', 'b'], true)) {
             $e['ab'] = sqAbPick($sid, $abCount);
@@ -811,7 +854,12 @@ function sqRun(string $onlySender = '', int $max = 60): array
             $mid, $sender, 'out', now(), (string) $a2['email'], $fromName, (string) $e['email'], '', mb_substr($m['subj'], 0, 500), $m['body'], mb_substr((string) preg_replace('/\s+/', ' ', $m['body']), 0, 300), (string) ($mm[1] ?? ''), '', '', 1, 0, '', $okSend ? '' : (string) $err,
         ]);
         if (!$okSend) {
-            sqSetEnr((string) $e['id'], ['st' => 'error', 'why' => 'Sending failed: ' . mb_substr((string) $err, 0, 200)]);
+            // v83: tried again later, waiting longer after each failed try at this step (2h, 4h, 8h, 16h, then daily),
+            // not on every run; Resume sends right away
+            $c = $p->prepare("SELECT COUNT(*) FROM sq_ev WHERE enr = ? AND kind = 'error' AND step = ?");
+            $c->execute([(string) $e['id'], (int) $e['step']]);
+            $tries = min(5, (int) $c->fetchColumn() + 1);
+            sqSetEnr((string) $e['id'], ['st' => 'error', 'why' => 'Sending failed: ' . mb_substr((string) $err, 0, 200), 'next_at' => now() + min(24, 2 ** $tries) * 3600000]);
             sqEv($sid, (string) $e['id'], $sender, 'error', (int) $e['step'], (string) $err);
             $out['errors']++;
             continue;
@@ -921,8 +969,13 @@ function sqAutoLead(string $leadId, string $form): void
     if ($pick['cfg']['auto']['who'] === 'owner' && $own !== '' && $own !== $sender && ($ou = userRow($own)) && (string) $ou['status'] === 'active' && sqMay($ou) && mymailAcct($own)) {
         $sender = $own;
     }
+    $su = userRow($sender);
+    if (!$su || (string) $su['status'] !== 'active' || !sqMay($su)) {
+        return; // v83: the sequence owner is paused or no longer works the CRM
+    }
     $box = (bool) mymailAcct($sender);
-    $id = sqEnrAdd($pick, $sender, $email, (string) ($lead->n ?? ''), (string) ($lead->co ?? ''), 'lead:' . $leadId, sqTzOfRecord('lead', $lead), 'auto', now(), 'web', $box ? 'active' : 'error', $box ? '' : 'The sender has no mailbox connected (My email).');
+    // v83: the name and company the visitor typed go into the emails only as plain words (the CRM lead keeps the original)
+    $id = sqEnrAdd($pick, $sender, $email, sqPlainWeb((string) ($lead->n ?? ''), 60, 4), sqPlainWeb((string) ($lead->co ?? ''), 60, 6), 'lead:' . $leadId, sqTzOfRecord('lead', $lead), 'auto', now(), 'web', $box ? 'active' : 'error', $box ? '' : 'The sender has no mailbox connected (My email).');
     sqEv($pick['id'], $id, $sender, 'added', 0, 'Website lead (' . ($form === 'talent' ? 'Request talent' : 'Contact') . ' form)');
 }
 function sqEnrView(array $e, ?array $S = null): array
@@ -1006,7 +1059,13 @@ function sqEnrAct(array $e, array $S, string $act, array $u, string $val = ''): 
         if (!in_array((string) $e['st'], ['paused', 'error'], true)) {
             return 'only a paused person (or one that needs attention) can be resumed';
         }
-        sqSetEnr((string) $e['id'], ['st' => isset($S['steps'][(int) $e['step']]) ? 'active' : 'finished', 'why' => '', 'next_at' => max((int) $e['next_at'], now())]);
+        // a call or LinkedIn task still open for this step: they wait on it again (no second task)
+        $o = $p->prepare("SELECT COUNT(*) FROM sq_task WHERE enr = ? AND step = ? AND st = 'open'");
+        $o->execute([(string) $e['id'], (int) $e['step']]);
+        $st = (int) $o->fetchColumn() > 0 ? 'task' : (isset($S['steps'][(int) $e['step']]) ? 'active' : 'finished');
+        // v83: a failed send waits before it is tried again; Resume tries it now
+        $retry = str_starts_with((string) $e['why'], 'Sending failed:');
+        sqSetEnr((string) $e['id'], ['st' => $st, 'why' => '', 'next_at' => $st === 'task' ? 0 : ($retry ? now() : max((int) $e['next_at'], now()))]);
     } elseif ($act === 'stop' || $act === 'replied') {
         sqSetEnr((string) $e['id'], ['st' => $act === 'stop' ? 'stopped' : 'replied', 'why' => $val !== '' ? $val : ($act === 'stop' ? 'Stopped by ' . $u['name'] : 'Marked as replied by ' . $u['name']), 'next_at' => 0] + ($act === 'replied' ? ['cls' => 'other', 'rep_at' => now()] : []));
         $p->prepare("UPDATE sq_task SET st = 'gone' WHERE enr = ? AND st = 'open'")->execute([(string) $e['id']]);
@@ -1197,10 +1256,25 @@ function sqRoute(string $r, array $b): never
         case 'sq_get':
             $S = sqSeq($str('id', 20), $u);
             $all = $admin || $S['owner'] === $u['id'];
-            $s = $p->prepare('SELECT * FROM sq_enr WHERE seq = ?' . ($all ? '' : ' AND sender = ?') . ' ORDER BY at DESC LIMIT 2000');
-            $s->execute($all ? [$S['id']] : [$S['id'], $u['id']]);
-            $rows = array_map(fn($e) => sqEnrView($e, $S) + ['senderN' => (string) (userRow((string) $e['sender'])['name'] ?? '')], $s->fetchAll());
-            ok(['seq' => $S + ['stats' => sqStats($S['id']), 'mine' => $S['owner'] === $u['id'] || $admin], 'people' => $rows]);
+            // the newest 2000; 'more' says there are others, and q finds anyone in the whole sequence (name, company, address)
+            $q = $str('q', 120);
+            $w = 'seq = ?';
+            $args = [$S['id']];
+            if (!$all) {
+                $w .= ' AND sender = ?';
+                $args[] = $u['id'];
+            }
+            if ($q !== '') {
+                $w .= " AND (email LIKE ? ESCAPE '!' OR n LIKE ? ESCAPE '!' OR co LIKE ? ESCAPE '!')";
+                $l = '%' . strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+                array_push($args, $l, $l, $l);
+            }
+            $s = $p->prepare('SELECT * FROM sq_enr WHERE ' . $w . ' ORDER BY at DESC LIMIT 2001');
+            $s->execute($args);
+            $got = $s->fetchAll();
+            $more = count($got) > 2000;
+            $rows = array_map(fn($e) => sqEnrView($e, $S) + ['senderN' => (string) (userRow((string) $e['sender'])['name'] ?? '')], array_slice($got, 0, 2000));
+            ok(['seq' => $S + ['stats' => sqStats($S['id']), 'mine' => $S['owner'] === $u['id'] || $admin], 'people' => $rows, 'more' => $more]);
 
         case 'sq_save':
             if (throttleHit('sqsave:' . $u['id'], 120, 3600)) {
@@ -1305,7 +1379,8 @@ function sqRoute(string $r, array $b): never
             $added = [];
             $skipped = [];
             $seen = [];
-            foreach (array_slice((array) ($b['people'] ?? []), 0, 500) as $x) {
+            $all = (array) ($b['people'] ?? []);
+            foreach (array_slice($all, 0, 500) as $x) {
                 $x = (array) $x;
                 $email = strtolower(trim((string) ($x['email'] ?? '')));
                 $ref = preg_match('/^(lead|con):[A-Za-z0-9_\-]{1,40}$/', (string) ($x['ref'] ?? '')) ? (string) $x['ref'] : '';
@@ -1344,6 +1419,10 @@ function sqRoute(string $r, array $b): never
                 $id = sqEnrAdd($S, $u['id'], $email, $n, $co, $ref, $tz ?: $tzAll, $ref !== '' ? 'crm' : $src0, $t0, $u['id']);
                 sqEv($S['id'], $id, $u['id'], 'added', 0, $email);
                 $added[] = $email;
+            }
+            if (count($all) > 500) {
+                // one summary row, so a caller that sent more learns about it (the page sends 500 at a time)
+                $skipped[] = ['email' => '', 'why' => (count($all) - 500) . ' more left out: add at most 500 people at a time'];
             }
             ok(['added' => count($added), 'skipped' => $skipped]);
 
@@ -1442,10 +1521,15 @@ function sqRoute(string $r, array $b): never
             $s = $p->prepare('SELECT * FROM sq_enr WHERE id = ?');
             $s->execute([(string) $t['enr']]);
             $e = $s->fetch();
-            if ($e && (string) $e['st'] === 'task' && (int) $t['step'] >= 0) {
+            if ($e && in_array((string) $e['st'], ['task', 'paused'], true) && (int) $t['step'] >= 0 && (int) $t['step'] === (int) $e['step']) {
+                // only the task of the step they are on moves them on; a paused person stays paused at the next step
                 $S = sqSeqOf((string) $e['seq']);
                 $nix = (int) $e['step'] + 1;
-                sqSetEnr((string) $e['id'], ['st' => isset($S['steps'][$nix]) ? 'active' : 'finished', 'step' => $nix, 'next_at' => isset($S['steps'][$nix]) ? sqNextAt($S, $nix) : 0]);
+                $f = ['step' => $nix, 'next_at' => isset($S['steps'][$nix]) ? sqNextAt($S, $nix) : 0];
+                if ((string) $e['st'] === 'task') {
+                    $f['st'] = isset($S['steps'][$nix]) ? 'active' : 'finished';
+                }
+                sqSetEnr((string) $e['id'], $f);
                 sqEv((string) $e['seq'], (string) $e['id'], (string) $e['sender'], $done ? 'taskdone' : 'taskskip', (int) $e['step']);
             } elseif ($e && $done) {
                 sqEv((string) $e['seq'], (string) $e['id'], (string) $e['sender'], 'taskdone', max(0, (int) $t['step']), 'Done: ' . mb_substr((string) $t['t'], 0, 120));

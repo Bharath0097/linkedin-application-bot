@@ -70,6 +70,9 @@ const ATS_SETTINGS_DEFAULT = [
         'screen' => ['Walk me through your recent experience and the role you are looking for.', 'What is your work authorization and location / relocation situation?', 'What rate or salary are you expecting, and when could you start?'],
         'interview' => ['Describe a hard technical problem you solved recently. What was your part?', 'How do you handle a disagreement with a teammate or client?', 'What would you need from us to succeed in your first 90 days?'],
     ],
+    // v83: the e-mail templates saved under Settings (atsSettings() returns only the keys listed here, so without
+    // this entry they were saved but never read back: not by the Settings form, the Mail window or the stage e-mails)
+    'templates' => [],
 ];
 
 function atsStaff(bool $write = false): array
@@ -538,6 +541,16 @@ function atsHire(string $id, stdClass $c, array $opt, array $me): array
         $s->execute([$email]);
         $existing = $s->fetchColumn();
         if ($existing) {
+            // v83: the candidate's email is typed by the applicant and never verified: never link a staff account,
+            // and link any other existing account only after HR confirms it (opt.link = that account's id)
+            $ex = userRow((string) $existing);
+            $who = (string) ($ex['name'] ?? '');
+            if (userLevel($ex) >= 2) {
+                fail(409, 'invalid_argument', 'The email ' . $email . ' belongs to a staff account (' . $who . '). Correct the candidate\'s email before hiring.');
+            }
+            if ((string) ($opt['link'] ?? '') !== (string) $existing) {
+                fail(409, 'link_existing', 'A portal account already uses ' . $email . ' (' . $who . '). Hire into that account?', ['uid' => (string) $existing, 'who' => $who]);
+            }
             $out['uid'] = (string) $existing;
         } else {
             $r = createLogin(['name' => (string) ($c->n ?? ''), 'email' => $email, 'phone' => (string) ($c->ph ?? ''), 'title' => (string) ($offer->title ?? $c->jt ?? ''), 'kind' => $kind, 'portals' => [$kind], 'cids' => []], $me);
@@ -552,7 +565,8 @@ function atsHire(string $id, stdClass $c, array $opt, array $me): array
         if (!empty($opt['onboard']) && empty($r->onb)) {
             $r->onb = (object) ['kind' => 'onb', 'started' => now(), 'items' => new stdClass(), 'by' => $me['id']];
         }
-        if (!empty($opt['client']) && preg_match('/^[A-Za-z0-9_\-]{1,40}$/', (string) $opt['client'])) {
+        // v83: a hire does not move an account that is already linked to another client (the placement still records the client)
+        if (!empty($opt['client']) && preg_match('/^[A-Za-z0-9_\-]{1,40}$/', (string) $opt['client']) && (empty($r->cid) || (string) $r->cid === (string) $opt['client'])) {
             $r->cid = (string) $opt['client'];
             $cd = docGet('org/admin/clients/' . $r->cid);
             if ($cd) {
@@ -897,6 +911,11 @@ function atsRoute(string $r, string $method, array $b): never
                 fail(400, 'invalid_argument', 'Pick between 1 and 200 candidates.');
             }
             $act = str($b, 'act', 12);
+            if (!in_array($act, ['move', 'tag', 'email', 'pool'], true)) {
+                fail(400, 'invalid_argument', 'Unknown action.');
+            }
+            $st = preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) ($b['st'] ?? '')));
+            $skipped = [];
             $n = 0;
             foreach ($ids as $id) {
                 $c = docGet('ats/' . $id);
@@ -905,7 +924,13 @@ function atsRoute(string $r, string $method, array $b): never
                 }
                 unset($c->lite); // v36.2: chosen for an action: part of the working ATS from now on
                 if ($act === 'move') {
-                    atsMove($c, $id, preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) ($b['st'] ?? ''))), $u, str($b, 'reason', 120), '', !empty($b['silent']));
+                    // v83: a mixed selection can span jobs with different pipelines: a candidate whose job lacks the
+                    // stage is skipped and reported, instead of failing halfway after the earlier ones were moved and e-mailed
+                    if (!in_array($st, array_column(atsJob((string) ($c->job ?? ''))['stages'], 'k'), true)) {
+                        $skipped[] = $id;
+                        continue;
+                    }
+                    atsMove($c, $id, $st, $u, str($b, 'reason', 120), '', !empty($b['silent']));
                 } elseif ($act === 'tag') {
                     $tags = array_values(array_unique(array_merge(array_map('strval', (array) ($c->tags ?? [])), [str($b, 'tag', 40)])));
                     $c->tags = array_values(array_filter($tags));
@@ -931,7 +956,7 @@ function atsRoute(string $r, string $method, array $b): never
                 }
                 $n++;
             }
-            ok(['n' => $n]);
+            ok(['n' => $n, 'skipped' => $skipped]);
         case 'ats_interview':
             // create / update / cancel an interview; invitations with an .ics go to the candidate and interviewers
             $u = atsStaff(true);
@@ -1489,7 +1514,15 @@ function atsRoute(string $r, string $method, array $b): never
                     $id = atsNewCandidate($u, $f, 'Consultant portal', $jid, 'Imported from the ' . ($usr['role'] === 'consultant' ? 'consultant' : 'employee') . ' portal', ['uid' => (string) $pid]);
                     if ($p && (string) $p['resume_fid'] !== '') {
                         $doc = docGet('u/' . $pid . '/f/' . $p['resume_fid']);
-                        atsCopyResume($id, (string) $p['resume_fid'], (string) ($doc->n ?? $p['resume_name'] ?? 'resume.pdf'));
+                        $rn = (string) ($doc->n ?? $p['resume_name'] ?? 'resume.pdf');
+                        $newF = atsCopyResume($id, (string) $p['resume_fid'], $rn);
+                        // v83: the copy is the candidate's resume (panel, Send profiles, list links read c->rid)
+                        $x = $newF ? docGet('ats/' . $id) : null;
+                        if ($x) {
+                            $x->rid = $newF;
+                            $x->rn = $rn;
+                            docSet('ats/' . $id, $x);
+                        }
                     }
                 } else {
                     if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $pid)) {
@@ -1512,7 +1545,15 @@ function atsRoute(string $r, string $method, array $b): never
                     }
                     $id = atsNewCandidate($u, $f, 'Consultant database', $jid, 'Imported from the consultant database', ['cand' => (string) $pid]);
                     if ((string) ($c->rid ?? '') !== '') {
-                        atsCopyResume($id, (string) $c->rid, (string) ($c->rn ?? 'resume.pdf'));
+                        $rn = (string) ($c->rn ?? 'resume.pdf');
+                        $newF = atsCopyResume($id, (string) $c->rid, $rn);
+                        // v83: the copy is the candidate's resume
+                        $x = $newF ? docGet('ats/' . $id) : null;
+                        if ($x) {
+                            $x->rid = $newF;
+                            $x->rn = $rn;
+                            docSet('ats/' . $id, $x);
+                        }
                     }
                 }
                 if ($e !== '') {
@@ -1566,7 +1607,14 @@ function atsRoute(string $r, string $method, array $b): never
                     continue;
                 }
                 $id = atsNewCandidate($u, $f, $board, $jid, 'Imported from a ' . $board . ' resume');
-                storeUpload($f1, 'ats/' . $id, ['c' => 'resume']);
+                $sf = storeUpload($f1, 'ats/' . $id, ['c' => 'resume']);
+                // v83: the stored file is the candidate's resume
+                $x = docGet('ats/' . $id);
+                if ($x) {
+                    $x->rid = (string) $sf['id'];
+                    $x->rn = (string) $sf['n'];
+                    docSet('ats/' . $id, $x);
+                }
                 if ($e !== '') {
                     $in[$e] = $id;
                 }
@@ -1599,8 +1647,16 @@ function atsRoute(string $r, string $method, array $b): never
                 @mkdir($dir, 0775, true);
             }
             $fid = rid(16);
+            $fname = preg_replace('/[^A-Za-z0-9 ._\-]/', '', $f['n']) . ' - ' . $board . ' profile.txt';
             if (fileWritePath("$dir/$fid", $text)) {
-                docSet("ats/$id/f/$fid", (object) ['n' => preg_replace('/[^A-Za-z0-9 ._\-]/', '', $f['n']) . ' - ' . $board . ' profile.txt', 'ty' => MIME['txt'], 'sz' => strlen($text), 'at' => now(), 'c' => 'resume']);
+                docSet("ats/$id/f/$fid", (object) ['n' => $fname, 'ty' => MIME['txt'], 'sz' => strlen($text), 'at' => now(), 'c' => 'resume']);
+                // v83: the pasted profile is the candidate's resume
+                $x = docGet('ats/' . $id);
+                if ($x) {
+                    $x->rid = $fid;
+                    $x->rn = $fname;
+                    docSet('ats/' . $id, $x);
+                }
             }
             ok(['id' => $id, 'fields' => $f]);
         }

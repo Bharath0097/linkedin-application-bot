@@ -148,7 +148,8 @@ function stView(array $r, array $u, bool $staff, ?array $acc): array
     $isMgr = !$staff && $q && $hm !== '' && strcasecmp($hm, (string) $u['email']) === 0;
     $clientW = !$staff && $acc && caReqOk($acc, $q ?: ['data' => []], 'w');
     $can = [
-        'item' => in_array($st, ['planned', 'confirmed'], true),
+        // v83: a read-only contact (Executive) reads the checklist; only staff and contacts who write requests change items
+        'item' => in_array($st, ['planned', 'confirmed'], true) && ($staff || $clientW),
         'confirmStratedge' => $staff && in_array($st, ['planned'], true) && empty($d['conf']['stratedge']),
         'confirmConsultant' => $staff && in_array($st, ['planned'], true) && empty($d['conf']['consultant']),
         'confirmClient' => !$staff && $st === 'planned' && empty($d['conf']['client']) && ($isMgr || $clientW),
@@ -335,8 +336,12 @@ function stRoute(string $r, array $b, array $u, bool $staff, array $myC): never
         case 'cr_st_item':
             // an item: done (by its side, or StratEdge), supplied (then checked by the reviewer), blocked with a recovery action, reopened; a note; a due date
             $v = $view();
-            if (!$v['can']['item']) {
+            if (!in_array((string) $v['st'], ['planned', 'confirmed'], true)) {
                 fail(409, 'conflict', 'The checklist is closed (' . strtolower($v['stN']) . ').');
+            }
+            if (!$v['can']['item']) {
+                // v83: block, reopen, due and note need write access too, not only done
+                fail(403, 'forbidden', 'Your role at the company only reads start plans.');
             }
             $iid = $str('iid', 12);
             $act = (string) ($b['act'] ?? '');
@@ -384,6 +389,10 @@ function stRoute(string $r, array $b, array $u, bool $staff, array $myC): never
                     $msg = $u['name'] . ' returned "' . $it['text'] . '": ' . $note;
                     break;
                 case 'block':
+                    if ((string) $it['st'] === 'done') {
+                        // v83: a done item is reopened by its side first; nobody flags it blocked over their head
+                        fail(409, 'conflict', 'A done item is reopened by its side before it is flagged as blocked.');
+                    }
                     $rec = $str('recovery', 500);
                     if ($note === '' || $rec === '') {
                         fail(400, 'invalid_argument', 'Say what blocks it and the recovery action.');

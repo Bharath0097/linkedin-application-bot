@@ -58,7 +58,7 @@ function IntelCandidate({ initial }) {
     ${c&&html`<section className="panel"><div className="ph-row"><h3 className="ph">Best open requirement matches</h3><a className="btn ghost sm" href="#/portal/admin/vreqs">Requirements desk</a></div>
       ${(d.matches||[]).length?html`<div className="intel-match-list">${d.matches.map(x=>html`<div className="intel-match"><div><b>${x.title}</b><small>${x.client||'Client not set'} · ${x.why.join(' · ')}</small></div><strong>${x.score}%</strong></div>`)}</div>`:html`<${Empty} title="No strong open matches">No current requirement scored above the Candidate 360 threshold.<//>`}
     </section>`}
-    ${c&&html`<section className="panel"><h3 className="ph">Candidate timeline</h3>${(d.timeline||[]).length?html`<div className="intel-timeline">${[...(d.timeline||[])].reverse().slice(0,30).map((x,i)=>html`<div key=${i}><span>${x.t?dateFmt(x.t):''}</span><b>${x.ev||x.note||'Activity'}</b><small>${x.who||''}</small></div>`)}</div>`:html`<p className="muted">No timeline entries are stored yet.</p>`}</section>`}
+    ${c&&html`<section className="panel"><h3 className="ph">Candidate timeline</h3>${(d.timeline||[]).length?html`<div className="intel-timeline">${[...(d.timeline||[])].reverse().slice(0,30).map((x,i)=>html`<div key=${i}><span>${x.t?fmtTs(x.t):''}</span><b>${x.ev||x.note||'Activity'}</b><small>${x.who||''}</small></div>`)}</div>`:html`<p className="muted">No timeline entries are stored yet.</p>`}</section>`}
   </div>`;
 }
 function IntelQuality({ d }) {

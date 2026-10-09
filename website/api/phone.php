@@ -466,7 +466,7 @@ function phUidOf(string $from): string
         return '';
     }
     $id = substr($from, 7);
-    if (preg_match('/^ws_([0-9a-f]{2,60})__(.+)$/', $id, $m)) {
+    if (preg_match('/^ws_((?:[0-9a-f]{2}){1,30})__(.+)$/', $id, $m)) {
         // v83: a workspace browser on the central app: only that workspace's own site knows the person
         $s = function_exists('wsSlug') ? wsSlug() : '';
         return $s !== '' && hex2bin($m[1]) === $s ? $m[2] : '';
@@ -1033,6 +1033,19 @@ function phHookRoute(string $r): never
 
         case 'phw_out':
             // a call made in the browser: who it is, where to, which company number shows
+            // v83: a company workspace's browser on StratEdge's central app: the call belongs to that workspace's portal.
+            // Twilio follows the <Redirect> signed with the same Auth Token, so the workspace checks it as usual.
+            if (function_exists('wsSlug') && wsSlug() === '' && preg_match('/^client:ws_((?:[0-9a-f]{2}){1,30})__[A-Za-z0-9_]+$/', (string) ($p['From'] ?? ''), $m)) {
+                $slug = (string) hex2bin($m[1]);
+                $e = wsRegistry()[$slug] ?? null;
+                if (!is_array($e) || ($e['status'] ?? '') === 'deleted') {
+                    phXml(phSay('Calling from the portal is not switched on for you.') . '<Hangup/>');
+                }
+                $q = ['r' => 'phw_out'] + array_filter(['To' => (string) ($p['To'] ?? ''), 'cid' => (string) ($p['cid'] ?? ''), 'Lang' => (string) ($p['Lang'] ?? ''), 'ref' => (string) ($p['ref'] ?? '')], fn($v) => $v !== '');
+                phXml('<Redirect method="POST">' . phX(wsUrlOf($slug, $e) . 'api/index.php?' . http_build_query($q)) . '</Redirect>');
+            }
+            // v83: after that hand-off the dialed number and choices come in the (signed) address; normally in the form
+            $arg = fn(string $k): string => is_string($_GET[$k] ?? null) ? $_GET[$k] : (string) ($p[$k] ?? '');
             $uid = phUidOf((string) ($p['From'] ?? ''));
             $u = null;
             if ($uid !== '') {
@@ -1043,8 +1056,8 @@ function phHookRoute(string $r): never
             if (!$u || !grantOf($uid, 'phone') || !wsFeatureOn('phone')) {
                 phXml(phSay('Calling from the portal is not switched on for you.') . '<Hangup/>');
             }
-            $toRaw = (string) ($p['To'] ?? '');
-            $base = ['sid' => (string) ($p['CallSid'] ?? ''), 'dir' => 'out', 'uid' => $uid, 'ref' => mb_substr((string) preg_replace('/[^A-Za-z0-9_:\-]/', '', (string) ($p['ref'] ?? '')), 0, 80)];
+            $toRaw = $arg('To');
+            $base = ['sid' => (string) ($p['CallSid'] ?? ''), 'dir' => 'out', 'uid' => $uid, 'ref' => mb_substr((string) preg_replace('/[^A-Za-z0-9_:\-]/', '', $arg('ref')), 0, 80)];
             if (phIsEmergency($toRaw) && $c['e911'] !== 'allow') {
                 phCallAdd($base + ['other' => mb_substr($toRaw, 0, 32), 'od' => '', 'st' => 'blocked', 'data' => json_encode(['em' => true])]);
                 phXml(phSay('This phone cannot call emergency services. Please hang up and dial from a mobile phone or a desk phone.') . '<Hangup/>');
@@ -1059,13 +1072,13 @@ function phHookRoute(string $r): never
                 phXml(phSay('You have made the most calls allowed in an hour. Try again later.') . '<Hangup/>');
             }
             // v39.2: the number asked for, the person's choice, their personal line or a shared one; never someone else's line
-            $num = phFromFor($c, $uid, (string) ($p['cid'] ?? ''));
+            $num = phFromFor($c, $uid, $arg('cid'));
             if (!$num) {
                 phXml(phSay('There is no company number for you to call from yet.') . '<Hangup/>');
             }
             $rec = $c['recOut'];
             // v68: the language chosen in the dialer for this call (else the account's)
-            $lang = phLangOk((string) ($p['Lang'] ?? '')) ? (string) $p['Lang'] : '';
+            $lang = phLangOk($arg('Lang')) ? $arg('Lang') : '';
             $id = phCallAdd($base + ['num' => (string) $num['n'], 'other' => $to, 'od' => phOd($to), 'st' => 'ringing', 'data' => json_encode(['rec' => $rec] + ($lang !== '' ? ['lang' => $lang] : []))]);
             $x = $rec && $c['tx'] ? phTranscribe($c, $id, 'staff', 'other', 'both_tracks', 'se', $lang) : '';
             $x .= '<Dial callerId="' . phX((string) $num['n']) . '" answerOnBridge="true" timeLimit="14400" action="' . phX(phHook('phw_dial', ['c' => $id])) . '"'
@@ -1098,7 +1111,7 @@ function phHookRoute(string $r): never
             $x .= '<Dial timeout="' . max(5, min(60, (int) ($num['secs'] ?? 25))) . '" action="' . phX(phHook('phw_dial', ['c' => $id])) . '"'
                 . ($rec ? ' record="record-from-answer-dual" recordingStatusCallback="' . phX(phHook('phw_rec', ['c' => $id])) . '" recordingStatusCallbackEvent="completed"' : '') . '>';
             foreach ($ring as $ruid) {
-                $x .= '<Client statusCallbackEvent="answered" statusCallback="' . phX(phHook('phw_leg', ['c' => $id])) . '"><Identity>' . phX(phIdent($ruid)) . '</Identity><Parameter name="line" value="' . phX((string) ($num['label'] ?? '')) . '"/><Parameter name="callId" value="' . phX($id) . '"/><Parameter name="rec" value="' . ($rec ? '1' : '0') . '"/></Client>';
+                $x .= '<Client statusCallbackEvent="answered" statusCallback="' . phX(phHook('phw_leg', ['c' => $id])) . '"><Identity>' . phX(phClientId((string) $ruid)) . '</Identity><Parameter name="line" value="' . phX((string) ($num['label'] ?? '')) . '"/><Parameter name="callId" value="' . phX($id) . '"/><Parameter name="rec" value="' . ($rec ? '1' : '0') . '"/></Client>';
             }
             $x .= '</Dial>';
             phXml($x);
@@ -1581,7 +1594,7 @@ function phWhy(array $u, array $b): array
     if (!$row && $sid !== '') {
         // not in the portal's log: only when Twilio says the call came from this person's browser
         $call = phApi('GET', 'Calls/' . $sid . '.json', [], $c, 10);
-        if (!(is_array($call[1]) && (string) ($call[1]['from'] ?? '') === 'client:' . phIdent($uid))) {
+        if (!(is_array($call[1]) && (string) ($call[1]['from'] ?? '') === 'client:' . phClientId($uid))) {
             $sid = '';
         }
     }
@@ -1607,7 +1620,7 @@ function phWhy(array $u, array $b): array
         foreach (array_slice($al['list'], 0, 10) as $a) {
             if ($a['at'] >= $since && str_contains($a['url'], 'phw_out') && preg_match('/^CA[0-9a-f]{32}$/', $a['res'])) {
                 $call = phApi('GET', 'Calls/' . $a['res'] . '.json', [], $c, 10);
-                if (is_array($call[1]) && (string) ($call[1]['from'] ?? '') === 'client:' . phIdent($uid)) {
+                if (is_array($call[1]) && (string) ($call[1]['from'] ?? '') === 'client:' . phClientId($uid)) {
                     $hit = $a;
                     break;
                 }
@@ -1786,7 +1799,7 @@ function phRoute(string $r, array $b): never
                 fail(429, 'rate_limited', 'Too many phone sign-ins in an hour. Reload the page in a few minutes.');
             }
             $c = phCfg(true);
-            ok(['token' => phToken($c, phIdent($u['id'])), 'ttl' => 3600, 'ident' => phIdent($u['id'])]);
+            ok(['token' => phToken($c, phClientId((string) $u['id'])), 'ttl' => 3600, 'ident' => phClientId((string) $u['id'])]); // v83: names the workspace on the central app
 
         case 'ph_avail':
             $u = phUser();

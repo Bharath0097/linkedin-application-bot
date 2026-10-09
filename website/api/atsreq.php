@@ -1389,7 +1389,8 @@ function atsReqRoute(string $r, string $method, array $b): never
                 unset($job['pay'], $job['bill']);
             }
             if (empty($parts['post'])) {
-                foreach (['loc', 'd', 'rate', 'dur'] as $k) {
+                // v83: leave out everything the "The posting" box names (title, type, work mode, skills too)
+                foreach (['ti', 'ty', 'md', 'sk', 'loc', 'd', 'rate', 'dur'] as $k) {
                     unset($pub[$k]);
                 }
             }

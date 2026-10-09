@@ -5139,11 +5139,16 @@ const JOB_ADMIN_ONLY = [
     'settings_save',
     'cron_key',
 ];
+// v83: what a GET may do here (reading and the resume download); every change is a POST
+const JOB_READ_OPS = ['apps', 'app_resume', 'overview', 'sources', 'runs', 'run_log', 'jobs', 'consultants', 'matches', 'run_jobs'];
 function jobsAdmin(string $method, array $b): void
 {
     $me = requireJobsStaff();
     $src = $method === 'POST' ? $b : $_GET;
     $op = str($src, 'op', 24);
+    if ($method !== 'POST' && !in_array($op, JOB_READ_OPS, true)) {
+        fail(405, 'bad_request', 'Use POST.');
+    }
     $set = jobSettings();
     $staff = userLevel($me) >= 2;
     if (!$staff && in_array($op, JOB_ADMIN_ONLY, true)) {

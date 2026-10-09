@@ -282,15 +282,18 @@ function PracticePage({ q }) {
   if (err) return html`<${LoadError} error=${err} onRetry=${() => (setErr(null), load())} />`;
   if (!d || (q && q.s && !view)) return html`<${Spinner} />`;
   if (!d.can) return html`<${PlanGate} feature="mentor" />`;
-  const back = refresh => {
-    prHush();
-    setView(null);
-    if (refresh) load();
-  };
   // a finished call or an opened session has its own address (#/portal/practice?s=<id>): the menu item and the
   // browser's back button lead back to the list
   const home = '#' + ((P && P.base) || '/portal') + '/practice';
   const openSession = id => (location.hash = home + '?s=' + id);
+  const back = refresh => {
+    prHush();
+    setView(null);
+    // a call started from a session's address ("Practise this call again") goes back to the list's address, whose
+    // effect reloads the list: staying on ?s=<id> with no view would show a spinner for good
+    if (q && q.s) location.hash = home;
+    else if (refresh) load();
+  };
   if (view && view.kind === 'call')
     return html`<${PrCall} start=${view.start} prefs=${prefs} onEnd=${s => (s ? openSession(s.id) : back(true))} onCancel=${() => back(true)} />`;
   if (view && view.kind === 'session')
@@ -720,7 +723,7 @@ function PrRepeat({ set, prefs, onDone }) {
     if (!String(said || '').trim()) return toast('Nothing was heard. Try again, or type it.', true);
     setBusy(true);
     try {
-      const c = await api('pr_check', { kind: 'repeat', t: it.t, said });
+      const c = await api('pr_check', { kind: 'repeat', set: d.set, i: it.i, said });
       setRes(x => ({ ...x, [it.i]: { ...c, said, secs } }));
     } catch (e) {
       toast(errText(e), true);
@@ -731,7 +734,7 @@ function PrRepeat({ set, prefs, onDone }) {
   const save = async () => {
     setBusy(true);
     try {
-      const out = await api('pr_drill_save', { kind: 'repeat', set, items: d.items.filter(x => res[x.i]).map(x => ({ t: x.t, said: res[x.i].said, secs: res[x.i].secs || 0 })) });
+      const out = await api('pr_drill_save', { kind: 'repeat', set: d.set, items: d.items.filter(x => res[x.i]).map(x => ({ i: x.i, said: res[x.i].said, secs: res[x.i].secs || 0 })) });
       setSaved(out);
     } catch (e) {
       toast(errText(e), true);

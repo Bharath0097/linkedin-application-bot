@@ -122,6 +122,9 @@ function storageWhere(string $base, array &$cache): string
     if (preg_match('#^e/(u_[a-f0-9]+)#', $base, $m)) {
         return 'Client contact · ' . $name($m[1]);
     }
+    if (str_starts_with($base, 'sec/idscan/')) {
+        return 'ID check picture';
+    }
     return $base;
 }
 function storageRows(): array
@@ -148,6 +151,23 @@ function storageRows(): array
     }
     return $out;
 }
+/** Every file id a record points to: the documents ({base}/f/{id}) and the files sent in team messages
+    (chat_msgs.atts, which have no document). v83: chat files no longer count as unused, so the clean-up keeps them. */
+function storageKnownIds(array $rows): array
+{
+    $known = array_flip(array_map(fn($f) => $f['id'], $rows));
+    require_once __DIR__ . '/chat.php';
+    // cdb() creates the chat tables when they are missing; no try/catch, a failed read must not make chat files "unused"
+    foreach (cdb()->query("SELECT atts FROM chat_msgs WHERE atts <> '[]'")->fetchAll(PDO::FETCH_COLUMN) as $j) {
+        foreach ((array) (json_decode((string) $j, true) ?: []) as $a) {
+            $i = (string) (is_array($a) ? ($a['i'] ?? '') : '');
+            if (preg_match('/^[a-f0-9]{32}$/', $i)) {
+                $known[$i] = true;
+            }
+        }
+    }
+    return $known;
+}
 function storageStaff(): array
 {
     $u = requireUser();
@@ -161,7 +181,8 @@ function storageRoute(string $r, string $method, array $b): never
     switch ($r) {
         case 'storage_list':
             $u = storageStaff();
-            $admin = userLevel($u) >= 2;
+            // v83: only administrators see every file; HR, accounting and recruiters see what can() lets them read
+            $admin = hasRole($u, 'admin');
             $q = mb_strtolower(trim(str($b, 'q', 120)));
             $kind = str($b, 'kind', 20);
             $page = max(1, (int) ($b['page'] ?? 1));
@@ -184,6 +205,13 @@ function storageRoute(string $r, string $method, array $b): never
                     continue;
                 }
                 $f['where'] = storageWhere($f['base'], $cache);
+                // ID check pictures (sec/idscan/<id>) open through ids_img; their base is not a file route path
+                if (preg_match('#^sec/idscan/([a-f0-9]{16})$#', $f['base'], $m)) {
+                    $f['ids'] = $m[1];
+                }
+                $f['ro'] = !validPath($f['base'], true);
+                // v83: delete is offered per file, to administrators and to whoever may write it (the same rule as delfile)
+                $f['del'] = !$f['ro'] && ($admin || can($f['base'] . '/f/' . $f['id'], 'w'));
                 if ($q !== '' && !str_contains(mb_strtolower($f['n'] . ' ' . $f['where'] . ' ' . $f['kind']), $q)) {
                     continue;
                 }
@@ -197,7 +225,7 @@ function storageRoute(string $r, string $method, array $b): never
             $orphans = 0;
             $orphanBytes = 0;
             if ($admin && is_dir($dir)) {
-                $known = array_flip(array_map(fn($f) => $f['id'], $rows));
+                $known = storageKnownIds($rows);
                 foreach ((array) @scandir($dir) as $fn) {
                     if (preg_match('/^[a-f0-9]{32}$/', $fn) && !isset($known[$fn])) {
                         $orphans++;
@@ -207,22 +235,34 @@ function storageRoute(string $r, string $method, array $b): never
             }
             ok(['files' => $list, 'total' => $total, 'page' => $page, 'per' => $per, 'count' => count($rows), 'bytes' => $bytes, 'byKind' => $byKind, 'kinds' => STORAGE_KIND_NAMES, 'disk' => $disk, 'orphans' => $orphans, 'orphanBytes' => $orphanBytes, 'canDelete' => $admin]);
         case 'storage_delete':
-            $u = requireAdmin();
+            $u = storageStaff();
             $base = str($b, 'base', 500);
             $fid = str($b, 'id', 40);
             if (!validPath($base, true) || !preg_match('/^[a-f0-9]{32}$/', $fid)) {
                 fail(400, 'invalid_argument', 'Bad file.');
             }
-            docDelete("$base/f/$fid");
+            // v83: the file must belong to that record, and anyone but an administrator needs write access to it
+            // (before, any level-2 login could remove any file on disk by naming an unrelated base)
+            $path = "$base/f/$fid";
+            if (!docGet($path)) {
+                fail(404, 'not_found', 'That file is no longer there.');
+            }
+            if (!hasRole($u, 'admin') && !can($path, 'w')) {
+                fail(403, 'forbidden', 'You can\'t delete this file.');
+            }
+            docDelete($path);
             $f = cfg('files_dir') . '/' . $fid;
             if (is_file($f)) {
                 @unlink($f);
             }
             ok(['ok' => true]);
         case 'storage_cleanup':
-            requireAdmin();
+            // v83: the clean-up touches every file on the server, so it is for administrators only
+            if (!hasRole(requireAdmin(), 'admin')) {
+                fail(403, 'forbidden', 'Only an administrator can clean up unused files.');
+            }
             $dir = (string) cfg('files_dir');
-            $known = array_flip(array_map(fn($f) => $f['id'], storageRows()));
+            $known = storageKnownIds(storageRows());
             $n = 0;
             foreach ((array) @scandir($dir) as $fn) {
                 if (preg_match('/^[a-f0-9]{32}$/', $fn) && !isset($known[$fn]) && @filemtime($dir . '/' . $fn) < time() - 3600) {

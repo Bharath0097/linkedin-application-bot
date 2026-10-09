@@ -20,6 +20,25 @@ function vmaCfg(): array
     ];
 }
 function vmaId(): string { return 'va_' . rid(8); }
+/** v83: the saved vendor a reply address belongs to: one of its contacts' emails exactly, or the exact domain (or a
+ *  subdomain) of the vendor's website. Free-mail domains only match as an exact saved contact. '' = not a known vendor.
+ *  (Not vgVendorFor's str_contains test: 'staffing.com' would match 'bigvendorstaffing.com'.) */
+function vmaVendorOf(string $email): string
+{
+    require_once __DIR__ . '/vms.php';
+    $email = strtolower(trim($email)); $dom = strtolower(substr(strrchr($email, '@') ?: '', 1)); if ($dom === '') return '';
+    $free = in_array($dom, ['gmail.com','yahoo.com','outlook.com','hotmail.com','live.com','aol.com','icloud.com','msn.com','protonmail.com','yahoo.co.in','rediffmail.com'], true);
+    foreach (vmsVendorsRaw() as [$vid, $v]) {
+        foreach ((array) ($v->contacts ?? []) as $c) if (strtolower(trim((string) ($c->e ?? ''))) === $email) return (string) $vid;
+        if ($free) continue;
+        foreach (preg_split('/[\s,;]+/', strtolower(trim((string) ($v->site ?? '')))) ?: [] as $site) {
+            $site = ltrim($site, '@'); if ($site === '') continue;
+            $host = (string) (parse_url(str_contains($site, '://') ? $site : 'https://' . $site, PHP_URL_HOST) ?? ''); $host = (string) preg_replace('/^www\./', '', $host);
+            if ($host !== '' && ($dom === $host || str_ends_with($dom, '.' . $host))) return (string) $vid;
+        }
+    }
+    return '';
+}
 function vmaQueue(string $reqId, string $source = 'vendor email'): void
 {
     $cfg = vmaCfg();
@@ -72,6 +91,8 @@ function vmaProcessOne(string $id, stdClass $x, array $owner): array
     $cfg=vmaCfg(); $r=vmsReqGet((string)$x->req);
     if (!$r) { $x->st='cancelled'; vmaLog($x,'Requirement no longer exists.'); docSet(VMA_COL.'/'.$id,$x); return ['review'=>1]; }
     if (!filter_var((string)($r['ce']??''), FILTER_VALIDATE_EMAIL)) { $x->st='review'; vmaLog($x,'Vendor email is missing or invalid.'); docSet(VMA_COL.'/'.$id,$x); return ['review'=>1]; }
+    // v83: the reply address comes from an unauthenticated email; only saved vendor contacts/domains get automatic submissions.
+    if (vmaVendorOf((string)$r['ce'])==='') { $x->st='review'; vmaLog($x,'Reply address '.(string)$r['ce'].' is not a saved vendor contact or vendor domain; no email sent. Add the vendor (Vendors > Contacts) and retry, or submit by hand.'); docSet(VMA_COL.'/'.$id,$x); return ['review'=>1]; }
     $m=vmsMatch((string)$x->req); $cand=null;
     foreach ((array)$m['matches'] as $c) if (empty($c['sub']) && !empty($c['resume']) && in_array((string)$c['src'],['db','ats'],true)) { $cand=$c; break; }
     if (!$cand) { $x->st='review'; vmaLog($x,'No unsent candidate with a readable resume matched the requirement.'); docSet(VMA_COL.'/'.$id,$x); return ['review'=>1]; }
@@ -115,6 +136,7 @@ function vmaFollow(string $id, stdClass $x): array
 {
     $cfg=vmaCfg(); if(!$cfg['on']||!$cfg['follow']||(int)($x->followN??0)>=3) return [];
     $r=vmsReqGet((string)$x->req); if(!$r||!filter_var((string)($r['ce']??''),FILTER_VALIDATE_EMAIL)) return [];
+    if(vmaVendorOf((string)$r['ce'])==='') return []; // v83: no follow-ups to an address that is not a saved vendor
     $n=(int)($x->followN??0)+1; $sub='Follow-up: '.$r['ti'].' submission';
     $body="Hi ".(((string)($r['cn']??''))!==''?$r['cn']:'there').",\n\nFollowing up on our submission of ".(string)($x->candName??'our candidate')." for ".(string)$r['ti'].". Please let us know if you would like to schedule an interview or need anything else.\n\nRegards,\nStratEdge IT Consulting";
     $ok=false; try{$ok=sendMail((string)$r['ce'],(string)($r['cn']??''),$sub,$body,emailHtml($sub,array_map('nl2br',array_map('htmlspecialchars',explode("\n\n",$body)))));}catch(Throwable $e){}
@@ -125,12 +147,23 @@ function vmaCron(): array
 {
     $cfg=vmaCfg(); $out=['sent'=>0,'tailored'=>0,'follow'=>0,'review'=>0]; if(!$cfg['on']) return $out;
     $owner=vmaOwner(); if(!$owner){return $out+['error'=>'Vendor agent owner is not configured or active.'];}
-    foreach(colAll(VMA_COL) as [$id,$x]){
-        try{
-            if((string)($x->st??'')==='queued'){$r=vmaProcessOne((string)$id,$x,$owner);}
-            elseif((string)($x->st??'')==='sent'&&(int)($x->nextFollow??0)>0&&(int)$x->nextFollow<=now()){$r=vmaFollow((string)$id,$x);}else continue;
-            foreach($r as $k=>$v)if(isset($out[$k]))$out[$k]+=(int)$v;
-        }catch(Throwable $e){$x->st='review';vmaLog($x,'Agent error: '.$e->getMessage());docSet(VMA_COL.'/'.(string)$id,$x);$out['review']++;}
+    // v83: one run at a time (cron, replay); a second run would email a second consultant for the same requirement.
+    $lock=@fopen(storeDir().'/vma.lock','c');
+    if(!$lock||!flock($lock,LOCK_EX|LOCK_NB)){if($lock)fclose($lock);return $out+['busy'=>true,'error'=>'Another vendor-agent run is still working.'];}
+    // v83: a refusal (404/409) from vmsMatch/vmsSubmit sends that one item to review instead of ending the whole run.
+    $prev=$GLOBALS['SE_FAIL_THROWS']??null; $GLOBALS['SE_FAIL_THROWS']=true;
+    try{
+        foreach(colAll(VMA_COL) as [$id,$x0]){
+            $x=docGet(VMA_COL.'/'.(string)$id); if(!$x instanceof stdClass) continue; // the list snapshot can be stale
+            try{
+                if((string)($x->st??'')==='queued'){$r=vmaProcessOne((string)$id,$x,$owner);}
+                elseif((string)($x->st??'')==='sent'&&(int)($x->nextFollow??0)>0&&(int)$x->nextFollow<=now()){$r=vmaFollow((string)$id,$x);}else continue;
+                foreach($r as $k=>$v)if(isset($out[$k]))$out[$k]+=(int)$v;
+            }catch(Throwable $e){$x->st='review';vmaLog($x,'Agent error: '.$e->getMessage());docSet(VMA_COL.'/'.(string)$id,$x);$out['review']++;}
+        }
+    }finally{
+        if($prev===null)unset($GLOBALS['SE_FAIL_THROWS']);else $GLOBALS['SE_FAIL_THROWS']=$prev;
+        flock($lock,LOCK_UN); fclose($lock);
     }
     return $out;
 }

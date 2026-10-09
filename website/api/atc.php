@@ -335,7 +335,10 @@ function atcPull(string $prov, array $u, string $how = 'manual'): array
                 $m = cxMap($row, [], 'search');
                 $name = trim((string) ($m['name'] ?? '')) ?: trim((string) ($m['first'] ?? '') . ' ' . (string) ($m['last'] ?? ''));
                 $email = strtolower(trim((string) ($m['email'] ?? '')));
-                $xid = $prov . ':' . (string) ($m['id'] ?? ($email ?: substr(hash('sha256', $name . ($m['phone'] ?? '')), 0, 20)));
+                // v83: cxMap() returns '' (never null) for an unmapped id, so fall back on an empty id too;
+                // otherwise every id-less row shared the xid '<prov>:' and only the first one was ever imported.
+                $pid = trim((string) ($m['id'] ?? ''));
+                $xid = $prov . ':' . ($pid !== '' ? $pid : ($email !== '' ? $email : substr(hash('sha256', $name . '|' . ($m['phone'] ?? '')), 0, 20)));
                 if ($name === '') {
                     $out['cands']['skipped']++;
                     continue;

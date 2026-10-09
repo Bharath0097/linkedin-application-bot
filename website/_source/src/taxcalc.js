@@ -237,7 +237,8 @@ function txFederal(D, prof, facts) {
     const meCovered = covered(who);
     const other = who === 'you' ? 'sp' : 'you';
     let range = null;
-    if (meCovered) range = st === 'mfs' ? F.ira.phase.mfs : joint ? F.ira.phase.mfj : F.ira.phase.single;
+    // v83: a qualifying surviving spouse uses the MFJ range (Pub 590-A Table 1-2); the spouse range below stays MFJ-only
+    if (meCovered) range = st === 'mfs' ? F.ira.phase.mfs : txJointish(st) ? F.ira.phase.mfj : F.ira.phase.single;
     else if (joint && covered(other)) range = F.ira.phase.spouse;
     if (!range) return amt;
     const magi = preIra + L['6a'] * 0.85;

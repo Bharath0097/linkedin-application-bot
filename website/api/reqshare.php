@@ -22,6 +22,9 @@ require_once __DIR__ . '/mail.php';
 const RS_SHAREABLE = ['open', 'working', 'submitted', 'interview'];
 const RS_CHANNELS = ['email', 'careers', 'careers-off', 'linkedin', 'facebook', 'x', 'whatsapp', 'telegram', 'instagram', 'mailto', 'copy', 'native', 'image'];
 const RS_FREE_MAIL = ['gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'rocketmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'protonmail.com', 'proton.me', 'zoho.com', 'zohomail.com', 'gmx.com', 'gmx.net', 'mail.com', 'yandex.com', 'rediffmail.com', 'comcast.net', 'verizon.net', 'att.net'];
+// v83: rate lines in the vendor's text and rate-shaped amounts never go out; the rate people see is only the one typed in "Rate to show"
+const RS_RATE_LINE = '/^[\s*•·>\-–]*(?:(?:max(?:imum)?|bill|billing|pay|vendor|client|hourly|contract|c2c|w2|1099)\s+)*(?:rates?|pay|salary|compensation|budget|ctc)\b[^:#=\n]{0,30}[:#=–-]/iu';
+const RS_MONEY = '/\$\s?\d[\d,]*(?:\.\d+)?\s*k?(?:\s*(?:-|–|to)\s*\$?\s?\d[\d,]*(?:\.\d+)?\s*k?)?\s*(?:\/|per\s+|an?\s+)\s*(?:hr|hour|h|yr|year|annum)\b(?:\s*(?:on\s+)?(?:c2c|w2|1099|corp[- ]to[- ]corp|all[- ]inclusive))*/iu';
 
 /* ---------- where things live ---------- */
 
@@ -82,7 +85,7 @@ function rsLink(string $key, string $src = ''): string
 /* ---------- the public version of a requirement ---------- */
 
 /** Takes out what identifies the vendor (names, contacts, emails, phone numbers, links, signatures). */
-function rsScrub(string $s, array $drop, array $client, bool $title = false): string
+function rsScrub(string $s, array $drop, array $client, bool $title = false, string $rate = ''): string
 {
     $s = str_replace(["\r\n", "\r"], "\n", $s);
     $contact = '/[A-Z0-9._%+\'-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b(?:https?:\/\/|www\.)\S+|(?:\(\d{3}\)|\b\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b|\+\d{1,3}[\s.-]?\d{2,5}[\s.-]?\d{3,5}[\s.-]?\d{3,5}/i';
@@ -99,6 +102,7 @@ function rsScrub(string $s, array $drop, array $client, bool $title = false): st
                 preg_match('/^(e-?mail|phone|ph|mobile|mob|cell|fax|tel|telephone|whatsapp|linkedin|skype|website|address)(\s*(no\.?|number|#|id))?\s*[:#-]/i', $t) ||
                 preg_match('/^contact(\s*(no\.?|number|details|info|email|phone|person|name))?\s*[:#-]/i', $t) ||
                 preg_match('/^[-_=*~.]{3,}$/', $t) ||
+                preg_match(RS_RATE_LINE, $t) ||
                 preg_match('/^-*\s*(forwarded message|original message|begin forwarded message)/i', $t) ||
                 // the vendor's greeting and "please find the requirement below"
                 ($seen < 2 && preg_match('/^(hi|hello|hey|dear|greetings|good (morning|afternoon|evening))\b[^.!?]{0,40}[,!:.]?$/i', $t)) ||
@@ -126,6 +130,12 @@ function rsScrub(string $s, array $drop, array $client, bool $title = false): st
     $s = (string) preg_replace('~\b(?:https?://|www\.)[^\s<>()]+~i', '', $s);
     $s = (string) preg_replace('/(?<![\w$])(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?:\s*(?:x|ext\.?|extension)\s*\d{1,6})?(?!\w)/i', '', $s);
     $s = (string) preg_replace('/(?<![\w$])\+\d{1,3}[\s.-]?\d{2,5}[\s.-]?\d{3,5}[\s.-]?\d{3,5}(?!\w)/', '', $s);
+    // v83: the vendor's rate (amounts per hour/year and the requirement's own rate value) never goes out
+    $s = (string) preg_replace(RS_MONEY, '', $s);
+    $rate = trim($rate);
+    if (mb_strlen($rate) >= 3 && preg_match('/\d/', $rate)) {
+        $s = (string) preg_replace('/(?<![\w$])' . preg_quote($rate, '/') . '(?!\w|[.,]\d)/iu', '', $s);
+    }
     $name = fn(string $n) => '/(?<![\p{L}\p{N}])' . preg_quote($n, '/') . '(?![\p{L}\p{N}])/iu';
     foreach ($drop as $n) {
         $n = trim((string) $n);
@@ -144,6 +154,7 @@ function rsScrub(string $s, array $drop, array $client, bool $title = false): st
         $s = (string) preg_replace('/^((fw|fwd|re)\s*:\s*)+/i', '', $s);
         $s = (string) preg_replace('/^(urgent|immediate|hot|new)?\s*(need|requirement|req|position|opening|role)s?\s*(for|:|-)\s*/i', '', $s);
         $s = (string) preg_replace('/\(\s*\)|\[\s*\]/', '', $s);
+        $s = (string) preg_replace('/\s*([-–—|,\/])(?:\s*[-–—|,\/])+\s*/u', ' $1 ', $s);
         $s = (string) preg_replace('/(\s*[-–—|:@,\/]+\s*)+$/u', '', $s);
         $s = (string) preg_replace('/^(\s*[-–—|:@,\/]+\s*)+/u', '', $s);
         return mb_substr(trim((string) preg_replace('/\s+/', ' ', $s)), 0, 160);
@@ -199,9 +210,10 @@ function rsPublic(array $r, array $ps): array
 {
     [$drop, $client] = rsNames($r);
     $hide = $ps['client'] ? [] : $client;
-    $ti = rsScrub($ps['ti'] !== '' ? $ps['ti'] : (string) ($r['ti'] ?? ''), $drop, $hide, true);
-    $d = rsScrub($ps['d'] !== '' ? $ps['d'] : (string) ($r['d'] ?? ''), $drop, $hide);
-    $sk = rsScrub((string) ($r['sk'] ?? ''), $drop, $hide, true);
+    $raw = (string) ($r['rate'] ?? '');
+    $ti = rsScrub($ps['ti'] !== '' ? $ps['ti'] : (string) ($r['ti'] ?? ''), $drop, $hide, true, $raw);
+    $d = rsScrub($ps['d'] !== '' ? $ps['d'] : (string) ($r['d'] ?? ''), $drop, $hide, false, $raw);
+    $sk = rsScrub((string) ($r['sk'] ?? ''), $drop, $hide, true, $raw);
     $cl = $ps['client'] ? trim((string) (($r['ec'] ?? '') !== '' ? $r['ec'] : ($r['cl'] ?? ''))) : '';
     return [
         'ti' => $ti !== '' ? $ti : 'Open role',
@@ -415,7 +427,10 @@ function rsPublish(array $u, array $r, array $ps, ?array $img): array
     $key = rsKey((string) $r['id']);
     $pf = rsPublic($r, $ps);
     $cur = docGet("org/site/jobs/$key");
-    $job = (object) [
+    // v83: start from the posting as it is, so what the ATS keeps on it (job code, job boards, Dice record, screening
+    // questions, picture, share counts) stays; only the share's own fields are refreshed
+    $job = $cur ? clone $cur : new stdClass();
+    foreach ([
         'ti' => $pf['ti'],
         'loc' => $pf['loc'],
         'ty' => $pf['ty'],
@@ -433,12 +448,10 @@ function rsPublish(array $u, array $r, array $ps, ?array $img): array
         'u' => now(),
         'by' => (string) ($cur->by ?? $u['id']),
         'vreq' => (string) $r['id'],
-    ];
-    foreach (['qs', 'eeo', 'internal', 'img'] as $k) {
-        if ($cur && isset($cur->$k)) {
-            $job->$k = $cur->$k;
-        }
+    ] as $k => $v) {
+        $job->$k = $v;
     }
+    unset($job->closedAt); // re-listed: the take-down time from rsClose no longer applies
     if ($img && ($img['error'] ?? 1) === UPLOAD_ERR_OK && is_uploaded_file((string) $img['tmp_name'])) {
         uploadGuard((string) $img['tmp_name'], basename((string) $img['name']));
         $info = @getimagesize((string) $img['tmp_name']);

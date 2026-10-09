@@ -158,7 +158,7 @@ function TailorEmailModal({ item, scope, mymail, onClose, onSent }) {
     to: '',
     cc: '',
     subject: `Submission: ${who.n || r.name || 'Consultant'} – ${item.t || ''}${item.co ? ' – ' + item.co : ''}`,
-    text: `Hello,\n\nPlease find attached the resume of ${who.n || r.name || 'our consultant'} for the ${item.t || 'role'}${item.co ? ' at ' + item.co : ''}.\n\n${r.title ? r.title + (item.after && item.after.years && item.after.years.have ? ' with ' + item.after.years.have + '+ years of experience' : '') + '.' : ''}${sk ? ' Key skills: ' + sk + '.' : ''}${r.loc ? ' Location: ' + r.loc + '.' : ''}${r.auth ? ' Work authorization: ' + r.auth + '.' : ''}\n\nAvailable to interview at your convenience. Rate and availability on request.\n\nThank you,\n${(Cap.me && Cap.me.name) || ''}\nStratEdge IT Consulting\n+1 (302) 434-8889 · info@stratedgeitconsulting.com`,
+    text: `Hello,\n\nPlease find attached the resume of ${who.n || r.name || 'our consultant'} for the ${item.t || 'role'}${item.co ? ' at ' + item.co : ''}.\n\n${r.title ? r.title + (item.after && item.after.years && item.after.years.have ? ' with ' + item.after.years.have + '+ years of experience' : '') + '.' : ''}${sk ? ' Key skills: ' + sk + '.' : ''}${r.loc ? ' Location: ' + r.loc + '.' : ''}${r.auth ? ' Work authorization: ' + r.auth + '.' : ''}\n\nAvailable to interview at your convenience. Rate and availability on request.\n\nThank you,\n${(Cap.me && Cap.me.name) || ''}\n${CO.name || ''}${CO.phone || CO.email ? '\n' + [CO.phone, CO.email].filter(Boolean).join(' · ') : ''}`,
     which: 'both',
   });
   const [busy, setBusy] = useState(false);
@@ -241,11 +241,12 @@ function TailorResult({ item: item0, scope, staff, mymail, onChanged, onDeleted 
     setItem(item0);
     setEdit(false);
   }, [item0 && item0.id]);
+  // hooks stay above the early return so they run in the same order on every render
+  const [pg, setPg] = useState(item0 ? item0.pages || 0 : 0);
+  useEffect(() => setPg(item0 ? item0.pages || 0 : 0), [item0 && item0.id]);
   if (!item) return null;
   const r = item.out || {};
   const who = item.who || {};
-  const [pg, setPg] = useState(item0 ? item0.pages || 0 : 0);
-  useEffect(() => setPg(item0 ? item0.pages || 0 : 0), [item0 && item0.id]);
   const setPages = async pages => {
     setBusy(true);
     try {
@@ -282,7 +283,7 @@ function TailorResult({ item: item0, scope, staff, mymail, onChanged, onDeleted 
       setItem(res.item);
       setDraft(JSON.parse(JSON.stringify(res.item.out || draft)));
       setEdit(true);
-      toast(`ATS score updated: ${before} → ${res.item.after.score}.`);
+      toast(`Saved; the Word and PDF files were rewritten. ATS score ${before} → ${res.item.after.score}.`);
       onChanged && onChanged(res.item);
     } catch (e) { toast(errText(e), true); }
     setBusy(false);
@@ -350,7 +351,7 @@ function TailorResult({ item: item0, scope, staff, mymail, onChanged, onDeleted 
         <b>${edit ? 'Edit the tailored resume' : 'Tailored resume'}</b>
         <div className="actions">
           ${edit
-            ? html`<button type="button" className="btn ghost sm" disabled=${busy} onClick=${() => setEdit(false)}>Cancel</button><button type="button" className="btn ghost sm" disabled=${busy} onClick=${rescore}><${Icon} n="star" />ATS Score ${item.after && item.after.score != null ? item.after.score : ''}</button><button type="button" className="btn sm" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save and rewrite the files'}</button>`
+            ? html`<button type="button" className="btn ghost sm" disabled=${busy} onClick=${() => setEdit(false)}>Cancel</button><button type="button" className="btn ghost sm" disabled=${busy} onClick=${rescore} title="Saves the draft, rewrites the Word and PDF files and scores it; Cancel will not undo this"><${Icon} n="star" />Save and rescore${item.after && item.after.score != null ? ' (' + item.after.score + ')' : ''}</button><button type="button" className="btn sm" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save and rewrite the files'}</button>`
             : html`<button type="button" className="btn ghost sm" onClick=${() => { setDraft(JSON.parse(JSON.stringify(r))); setEdit(true); }}><${Icon} n="pen" />Edit</button>`}
         </div>
       </div>

@@ -350,21 +350,40 @@ function rvCompare(string $cid, int $start, int $end, ?array $acc): array
     $len = $end - $start;
     return ['cur' => rvScorecard($cid, $start, $end, $acc), 'prev' => rvScorecard($cid, $start - $len, $start, $acc), 'defs' => RV_METRICS, 'few' => RV_FEW];
 }
-function rvView(array $r, bool $staff): array
+function rvView(array $r, bool $staff, ?array $acc = null, bool $withAgenda = true): array
 {
     $d = $r['data'];
+    $agenda = $withAgenda ? ($d['agenda'] ?? null) : null;
+    $commit = array_values((array) ($d['commitments'] ?? []));
+    if (!$staff) {
+        // v83: actions of a review still being prepared are StratEdge's until it is shared
+        $drafts = rvDraftIds((string) $r['cid']);
+        $commit = array_values(array_filter($commit, fn($c) => !in_array((string) ($c['review'] ?? ''), $drafts, true)));
+        // v83: the stored scorecard is StratEdge's, unfiltered: a contact limited to business units reads it within their units
+        if ($agenda !== null && (!$acc || $acc['units'])) {
+            $agenda = $acc ? rvCompare((string) $r['cid'], (int) $r['p_start'], (int) $r['p_end'], $acc) : null;
+        }
+    }
     return [
         'id' => (string) $r['id'], 'cid' => (string) $r['cid'], 'co' => crCompanyName((string) $r['cid']), 'st' => (string) $r['st'], 'stN' => RV_ST[(string) $r['st']] ?? (string) $r['st'], 'ti' => (string) $r['ti'],
         'start' => (int) $r['p_start'], 'end' => (int) $r['p_end'], 'at' => (int) $r['at'], 'u' => (int) $r['u'], 'sharedAt' => (int) $r['shared_at'], 'closedAt' => (int) $r['closed_at'], 'byN' => (string) (userRow((string) $r['by_uid'])['name'] ?? ''),
-        'agenda' => $d['agenda'] ?? null, 'notes' => (string) ($d['notes'] ?? ''), 'decisions' => array_values((array) ($d['decisions'] ?? [])), 'actions' => array_values((array) ($d['actions'] ?? [])),
-        'feedback' => array_values((array) ($d['feedback'] ?? [])), 'commitments' => array_values((array) ($d['commitments'] ?? [])),
+        'agenda' => $agenda, 'notes' => (string) ($d['notes'] ?? ''), 'decisions' => array_values((array) ($d['decisions'] ?? [])), 'actions' => array_values((array) ($d['actions'] ?? [])),
+        'feedback' => array_values((array) ($d['feedback'] ?? [])), 'commitments' => $commit,
     ];
 }
+/** The ids of the company's reviews still being prepared (hidden from its contacts). */
+function rvDraftIds(string $cid): array
+{
+    $s = rvDb()->prepare("SELECT id FROM cr_review WHERE cid = ? AND st = 'draft'");
+    $s->execute([$cid]);
+    return array_map('strval', $s->fetchAll(PDO::FETCH_COLUMN));
+}
 /** Improvement actions still open from earlier reviews of the company (the commitments a new review carries). */
-function rvOpenActions(string $cid, string $except = ''): array
+function rvOpenActions(string $cid, string $except = '', bool $drafts = true): array
 {
     $out = [];
-    $s = rvDb()->prepare('SELECT * FROM cr_review WHERE cid = ? ORDER BY p_start');
+    // v83: the company's contacts do not see the actions of a review StratEdge is still preparing
+    $s = rvDb()->prepare('SELECT * FROM cr_review WHERE cid = ?' . ($drafts ? '' : " AND st <> 'draft'") . ' ORDER BY p_start');
     $s->execute([$cid]);
     foreach ($s->fetchAll() as $r) {
         if ((string) $r['id'] === $except) {
@@ -422,23 +441,23 @@ function rvRoute(string $r, array $b, array $u, bool $staff, array $myC): never
     $list = function () use ($cid, $staff, $acc) {
         $s = rvDb()->prepare('SELECT * FROM cr_review WHERE cid = ?' . ($staff ? '' : " AND st <> 'draft'") . ' ORDER BY p_start DESC, at DESC LIMIT 100');
         $s->execute([$cid]);
-        return array_map(function ($x) use ($staff) {
+        return array_map(function ($x) use ($staff, $acc) {
             $x['data'] = json_decode((string) $x['data'], true) ?: [];
-            return rvView($x, $staff);
+            return rvView($x, $staff, $acc, $staff);
         }, $s->fetchAll());
     };
     switch ($r) {
         case 'cr_rv_home':
             // the live scorecard for a period (with the one before), the reviews of the company
             [$start, $end] = $period();
-            $out = ['cid' => $cid, 'co' => $co, 'staff' => $staff, 'me' => $u['id'], 'score' => rvCompare($cid, $start, $end, $acc), 'reviews' => $list(), 'st' => RV_ST, 'open' => rvOpenActions($cid), 'manage' => $staff, 'mayFeedback' => !$staff];
+            $out = ['cid' => $cid, 'co' => $co, 'staff' => $staff, 'me' => $u['id'], 'score' => rvCompare($cid, $start, $end, $acc), 'reviews' => $list(), 'st' => RV_ST, 'open' => rvOpenActions($cid, '', $staff), 'manage' => $staff, 'mayFeedback' => !$staff];
             ok($out);
 
         case 'cr_rv_get':
             if (!$row || (!$staff && (string) $row['st'] === 'draft')) {
                 fail(404, 'not_found', 'No such review.');
             }
-            ok(['review' => rvView($row, $staff), 'open' => rvOpenActions($cid, (string) $row['id']), 'defs' => RV_METRICS, 'few' => RV_FEW, 'manage' => $staff, 'me' => $u['id']]);
+            ok(['review' => rvView($row, $staff, $acc), 'open' => rvOpenActions($cid, (string) $row['id'], $staff), 'defs' => RV_METRICS, 'few' => RV_FEW, 'manage' => $staff, 'me' => $u['id']]);
 
         case 'cr_rv_save':
             // StratEdge prepares or updates a review: the period (the scorecard is kept as it stands), notes, decisions, actions
@@ -491,7 +510,7 @@ function rvRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             ok(['review' => rvView(rvRow($id), true), 'open' => rvOpenActions($cid, $id)]);
 
         case 'cr_rv_act':
-            if (!$row) {
+            if (!$row || (!$staff && (string) $row['st'] === 'draft')) {
                 fail(404, 'not_found', 'No such review.');
             }
             $id = (string) $row['id'];
@@ -531,9 +550,13 @@ function rvRoute(string $r, array $b, array $u, bool $staff, array $myC): never
                         }
                     }
                     unset($a);
+                    if (!$found && !$staff && !in_array($aid, array_map(fn($c) => (string) ($c['id'] ?? ''), rvView($row, false, null, false)['commitments']), true)) {
+                        // v83: the company marks the actions and commitments of the review it reads, nothing else
+                        fail(404, 'not_found', 'No such action.');
+                    }
                     if (!$found) {
                         // an action carried from an earlier review lives there
-                        $s = rvDb()->prepare('SELECT * FROM cr_review WHERE cid = ?');
+                        $s = rvDb()->prepare('SELECT * FROM cr_review WHERE cid = ?' . ($staff ? '' : " AND st <> 'draft'"));
                         $s->execute([$cid]);
                         foreach ($s->fetchAll() as $x) {
                             $xd = json_decode((string) $x['data'], true) ?: [];
@@ -580,7 +603,7 @@ function rvRoute(string $r, array $b, array $u, bool $staff, array $myC): never
                 default:
                     fail(400, 'invalid_argument', 'Unknown action.');
             }
-            ok(['review' => rvView(rvRow($id), $staff), 'open' => rvOpenActions($cid, $id)]);
+            ok(['review' => rvView(rvRow($id), $staff, $acc), 'open' => rvOpenActions($cid, $id, $staff)]);
     }
     fail(404, 'not_found', 'Unknown request.');
 }

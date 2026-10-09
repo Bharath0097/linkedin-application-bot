@@ -36,6 +36,11 @@ function cborLen(string $s, int &$o, int $ai): int
         $v = ($v << 8) | ord($s[$o + $i]);
     }
     $o += $n;
+    // v83: an 8-byte length with the top bit set wraps to a negative int; refuse it (it walked the offset backwards
+    // and an array then re-read the same bytes until max_execution_time)
+    if ($v < 0) {
+        throw new RuntimeException('cbor length');
+    }
     return $v;
 }
 function cborDecode(string $s, int &$o = 0, int $depth = 0)
@@ -58,6 +63,9 @@ function cborDecode(string $s, int &$o = 0, int $depth = 0)
         }
         if ($ai === 25 || $ai === 26 || $ai === 27) {
             $n = [25 => 2, 26 => 4, 27 => 8][$ai];
+            if ($n > strlen($s) - $o) {
+                throw new RuntimeException('cbor');
+            }
             $o += $n; // floats never matter for passkeys
             return 0.0;
         }
@@ -71,19 +79,26 @@ function cborDecode(string $s, int &$o = 0, int $depth = 0)
             return -1 - $len;
         case 2:
         case 3:
-            if ($o + $len > strlen($s)) {
+            if ($len > strlen($s) - $o) { // v83: written so it cannot overflow
                 throw new RuntimeException('cbor bytes');
             }
             $v = substr($s, $o, $len);
             $o += $len;
             return $v;
         case 4:
+            // v83: every element takes at least one byte, so a count beyond what is left is malformed
+            if ($len > strlen($s) - $o) {
+                throw new RuntimeException('cbor length');
+            }
             $a = [];
             for ($i = 0; $i < $len; $i++) {
                 $a[] = cborDecode($s, $o, $depth + 1);
             }
             return $a;
         case 5:
+            if ($len > strlen($s) - $o) { // v83: as for arrays
+                throw new RuntimeException('cbor length');
+            }
             $m = [];
             for ($i = 0; $i < $len; $i++) {
                 $k = cborDecode($s, $o, $depth + 1);

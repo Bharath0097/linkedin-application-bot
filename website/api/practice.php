@@ -153,6 +153,21 @@ function prFill(string $t, array $v): string
 {
     return preg_replace_callback('/\{(\w+)\}/', fn($m) => array_key_exists($m[1], $v) ? (string) $v[$m[1]] : $m[0], $t) ?? $t;
 }
+/** The sentences of one listen-and-repeat set for this person, keyed by their index in the set (the sentences only
+ *  use profile variables, so they come out the same every time). */
+function prRepeatItems(array $who, string $set): array
+{
+    $vars = prPlan('vendor', prPackFor($who), 'friendly', $who)['vars'];
+    $out = [];
+    foreach (prRepeatSets()[$set]['s'] ?? [] as $i => $t) {
+        // a sentence about something the profile does not say (no skills, no work authorization) is left out
+        if ((!$who['skills'] && preg_match('/\{(skills|recent|skill1)\}/', $t)) || ($who['visa'] === '' && str_contains($t, '{visa'))) {
+            continue;
+        }
+        $out[$i] = prFill($t, $vars);
+    }
+    return $out;
+}
 /** A new call: the persona, the variables and the steps (technical questions taken from the pack). */
 function prPlan(string $scen, string $pack, string $lvl, array $who): array
 {
@@ -681,7 +696,14 @@ function prRoute(string $r, array $b): never
                 $ev = prEval($q, $said, ['skillsre' => '\bzzzz\b']);
                 ok(['acc' => (int) round(100 * $ev['cov']), 'missed' => $ev['miss'], 'pts' => array_map(fn($p) => $p[0], $q['pts']), 'better' => $q['model'], 'words' => $ev['words']]);
             }
-            ok(prRepeatScore(str($b, 't', 400), $said));
+            // v83: the sentence is the set's own (by index), not one the browser sends
+            $sets = prRepeatSets();
+            $set = isset($sets[str($b, 'set', 12)]) ? str($b, 'set', 12) : 'intro';
+            $t = prRepeatItems(prWho($u), $set)[(int) ($b['i'] ?? -1)] ?? null;
+            if ($t === null) {
+                fail(400, 'invalid_argument', 'That sentence is not there.');
+            }
+            ok(prRepeatScore($t, $said));
         case 'pr_remind':
             $scope = prStaff($u);
             if ($scope === '') {
@@ -811,14 +833,9 @@ function prRoute(string $r, array $b): never
             if ($kind === 'repeat') {
                 $sets = prRepeatSets();
                 $set = isset($sets[str($b, 'set', 12)]) ? str($b, 'set', 12) : 'intro';
-                $vars = prPlan('vendor', prPackFor($who), 'friendly', $who)['vars'];
                 $items = [];
-                foreach ($sets[$set]['s'] as $i => $t) {
-                    // a sentence about something the profile does not say (no skills, no work authorization) is left out
-                    if ((!$who['skills'] && preg_match('/\{(skills|recent|skill1)\}/', $t)) || ($who['visa'] === '' && str_contains($t, '{visa'))) {
-                        continue;
-                    }
-                    $items[] = ['i' => $i, 't' => prFill($t, $vars)];
+                foreach (prRepeatItems($who, $set) as $i => $t) {
+                    $items[] = ['i' => $i, 't' => $t];
                 }
                 ok(['kind' => 'repeat', 'set' => $set, 'n' => $sets[$set]['n'], 'items' => $items, 'missing' => array_values(array_filter([!$who['skills'] ? 'skills' : '', $who['visa'] === '' ? 'work authorization' : '']))]);
             }
@@ -834,12 +851,17 @@ function prRoute(string $r, array $b): never
             if ($kind === 'repeat') {
                 $sets = prRepeatSets();
                 $set = isset($sets[str($b, 'set', 12)]) ? str($b, 'set', 12) : 'intro';
+                // v83: each item names a sentence of the set by index (once each); the browser's text is not scored
+                $list = prRepeatItems($who, $set);
+                $seen = [];
                 foreach ($items as $x) {
-                    $t = mb_substr(trim((string) ($x['t'] ?? '')), 0, 400);
-                    $said = mb_substr(trim((string) ($x['said'] ?? '')), 0, 600);
-                    if ($t === '') {
+                    $i = (int) (is_array($x) ? ($x['i'] ?? -1) : -1);
+                    if (!isset($list[$i]) || isset($seen[$i])) {
                         continue;
                     }
+                    $seen[$i] = 1;
+                    $t = $list[$i];
+                    $said = mb_substr(trim((string) ($x['said'] ?? '')), 0, 600);
                     $out[] = ['t' => $t, 'said' => $said] + prRepeatScore($t, $said);
                     $secs += max(0, min(120, (int) ($x['secs'] ?? 0)));
                 }

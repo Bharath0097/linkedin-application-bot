@@ -68,24 +68,35 @@ function monIntegrity(): array
     // code that should not be there: any PHP-like file outside what was shipped (web shells, leftovers of hacks)
     $known = array_flip(array_keys($sha));
     $unexpected = [];
-    $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), function ($cur, $key, $iter) use ($root) {
-        $rel = substr($cur->getPathname(), strlen($root) + 1);
-        return !in_array($rel, ['_source/node_modules', 'storage/tmp', 'storage/backups'], true);
-    }));
-    $n = 0;
-    foreach ($it as $file) {
-        if (++$n > 60000) {
-            break;
+    // v83: the code is walked first and the data folder (uploads of every workspace) on its own budget, so a large
+    // upload store cannot use up the walk before the code folders are reached; a walk cut short is never reported ok.
+    $truncated = false;
+    $walk = function (string $dir, array $skip, int $cap) use ($root, $known, &$unexpected, &$truncated): void {
+        if (!is_dir($dir)) {
+            return;
         }
-        $rel = substr($file->getPathname(), strlen($root) + 1);
-        $name = $file->getFilename();
-        if (preg_match('/\.(php[0-9]?|phtml|phar|pht|phps|inc|cgi|pl|py|sh|asp|aspx|jsp)$/i', $name) && !isset($known[$rel]) && !in_array($rel, ['api/config.php'], true) && !str_starts_with($rel, '_source/')) {
-            $unexpected[] = $rel;
-        } elseif (str_starts_with($rel, 'storage/files/') && preg_match('/\.(php[0-9]?|phtml|phar|htaccess|html?|svg|js)$/i', $name) && $name !== '.htaccess') {
-            $unexpected[] = $rel;
+        $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS), function ($cur, $key, $iter) use ($root, $skip) {
+            $rel = substr($cur->getPathname(), strlen($root) + 1);
+            return !in_array($rel, $skip, true);
+        }));
+        $n = 0;
+        foreach ($it as $file) {
+            if (++$n > $cap) {
+                $truncated = true;
+                break;
+            }
+            $rel = substr($file->getPathname(), strlen($root) + 1);
+            $name = $file->getFilename();
+            if (preg_match('/\.(php[0-9]?|phtml|phar|pht|phps|inc|cgi|pl|py|sh|asp|aspx|jsp)$/i', $name) && !isset($known[$rel]) && !in_array($rel, ['api/config.php'], true) && !str_starts_with($rel, '_source/')) {
+                $unexpected[] = $rel;
+            } elseif (preg_match('#^storage/(ws/[^/]+/)?files/#', $rel) && preg_match('/\.(php[0-9]?|phtml|phar|htaccess|html?|svg|js)$/i', $name) && $name !== '.htaccess') {
+                $unexpected[] = $rel;
+            }
         }
-    }
-    $res = ['at' => now(), 'version' => (string) ($man['version'] ?? ''), 'build' => (string) ($man['build'] ?? ''), 'checked' => count($sha), 'changed' => $changed, 'missing' => $missing, 'edited' => $edited, 'unexpected' => array_slice($unexpected, 0, 200), 'ok' => !$changed && !$missing && !$unexpected];
+    };
+    $walk($root, ['_source/node_modules', 'storage'], 60000);
+    $walk($root . '/storage', ['storage/tmp', 'storage/backups'], 300000);
+    $res = ['at' => now(), 'version' => (string) ($man['version'] ?? ''), 'build' => (string) ($man['build'] ?? ''), 'checked' => count($sha), 'changed' => $changed, 'missing' => $missing, 'edited' => $edited, 'unexpected' => array_slice($unexpected, 0, 200), 'truncated' => $truncated, 'ok' => !$changed && !$missing && !$unexpected && !$truncated];
     $prev = secKv('integrity');
     secKvSet('integrity', $res);
     if (!$res['ok'] && (!is_array($prev) || ($prev['changed'] ?? []) !== $changed || ($prev['unexpected'] ?? []) !== $res['unexpected'])) {
@@ -337,7 +348,7 @@ function monScan(string $base): array
     }
     $iv = secKv('integrity');
     if (is_array($iv)) {
-        $out[] = !empty($iv['ok']) ? monCheck('integrity', 'Operations', 'ok', 'All ' . (int) $iv['checked'] . ' program files match this version') : monCheck('integrity', 'Operations', $iv['unexpected'] ? 'fail' : 'warn', 'Program files differ from this version', implode(', ', array_slice(array_merge($iv['unexpected'], $iv['changed'], $iv['missing']), 0, 6)), $iv['unexpected'] ? 'Unexpected PHP files can be a break-in: download them for review, delete them, change passwords, and record an incident.' : 'Upload the full zip of this version again.');
+        $out[] = !empty($iv['ok']) ? monCheck('integrity', 'Operations', 'ok', 'All ' . (int) $iv['checked'] . ' program files match this version') : monCheck('integrity', 'Operations', $iv['unexpected'] ? 'fail' : 'warn', 'Program files differ from this version', implode(', ', array_slice(array_merge($iv['unexpected'], $iv['changed'], $iv['missing']), 0, 6)) . (!empty($iv['truncated']) ? ' (the file check stopped early: too many files to walk)' : ''), $iv['unexpected'] ? 'Unexpected PHP files can be a break-in: download them for review, delete them, change passwords, and record an incident.' : 'Upload the full zip of this version again.');
     }
     $av = secKv('audit_verify');
     if (is_array($av)) {
@@ -406,11 +417,55 @@ function monDaily(bool $force = false, string $base = ''): array
         }
         if (!$iv['ok']) {
             $lines[] = 'Program files differ from the version: ' . implode(', ', array_slice(array_merge($iv['unexpected'], $iv['changed'], $iv['missing']), 0, 8));
+            if (!empty($iv['truncated'])) {
+                $lines[] = 'File check incomplete: too many files to walk, not every folder was searched for unexpected program files';
+            }
         }
         $lines[] = 'Audit log seal: ' . substr((string) $av['head'], 0, 16) . ' (' . (int) $av['n'] . ' entries' . ($av['ok'] ? ', unaltered' : ', ALTERED: ' . $av['why']) . ')';
         secAlertAdmins('daily:' . gmdate('Ymd'), 'Daily security check: ' . count($bad) . ' to fix, ' . count($warn) . ' to improve', implode("\n", $lines));
     }
     return ['ran' => true, 'fail' => count($bad), 'warn' => count($warn), 'integrity' => $iv['ok'], 'audit' => $av['ok']];
+}
+
+/** The address this page was opened at, for the self-check - but only when it is one of this site's (or this
+ *  workspace's) own addresses. v83: the Host header is the browser's to set: an address that is not ours would aim
+ *  the scanner at another server (another host or port), so the configured public address is checked instead. */
+function monOrigin(): string
+{
+    $site = siteUrl();
+    $hostPort = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($hostPort === '' || !preg_match('/^[a-z0-9.-]+(:\d{1,5})?$/', $hostPort)) {
+        return $site;
+    }
+    $own = [];
+    $add = function (string $u) use (&$own): void {
+        $h = strtolower((string) parse_url($u, PHP_URL_HOST));
+        if ($h === '') {
+            return;
+        }
+        $port = parse_url($u, PHP_URL_PORT);
+        $sfx = $port ? ':' . $port : '';
+        $bare = str_starts_with($h, 'www.') ? substr($h, 4) : $h;
+        $own[] = $bare . $sfx;
+        $own[] = 'www.' . $bare . $sfx;
+    };
+    $add($site);
+    $add((string) (cfgRaw()['site_url'] ?? ''));
+    $ws = wsCurrent();
+    if ($ws && empty($ws['missing'])) {
+        foreach ((array) ($ws['hosts'] ?? []) as $h) {
+            if (is_string($h) && $h !== '') {
+                $add('https://' . $h . '/');
+            }
+        }
+        if (!empty($ws['sub']) && wsMainHost() !== '') {
+            $add('https://' . $ws['slug'] . '.' . wsMainHost() . '/');
+        }
+    }
+    if (!in_array($hostPort, $own, true)) {
+        return $site;
+    }
+    return (sessSecure() ? 'https' : 'http') . '://' . $hostPort . rtrim(dirname(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/index.php'))), '/') . '/';
 }
 
 /* ---------- Security center routes (administrators) ---------- */
@@ -421,7 +476,7 @@ function trustRoute(string $r, array $b): never
         fail(403, 'forbidden', 'The Security center is for administrators.');
     }
     require_once __DIR__ . '/backup.php';
-    $origin = (sessSecure() ? 'https' : 'http') . '://' . (string) ($_SERVER['HTTP_HOST'] ?? 'localhost') . rtrim(dirname(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/index.php'))), '/') . '/';
+    $origin = monOrigin();
     switch ($r) {
         case 'trust_overview':
             require_once __DIR__ . '/auth.php';

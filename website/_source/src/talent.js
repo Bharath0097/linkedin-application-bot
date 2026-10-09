@@ -80,6 +80,7 @@ function TalentSearchPage({ q }) {
   const [f, setF] = useState(tsEmpty());
   const [res, setRes] = useState(null);
   const [dres, setDres] = useState(null);
+  const gen = useRef(0); // v83: which search the answers on screen belong to (a late answer from an earlier search or after Clear is dropped)
   const [dice, setDice] = useState(null);
   const [cat, setCat] = useState(null); // v68: the domain catalogs
   const [domPanel, setDomPanel] = useState(null);
@@ -142,19 +143,22 @@ function TalentSearchPage({ q }) {
     });
   }, [q && q.job, (jobs.docs || []).length]);
   const clean = x => ({ ...x, skills: (x.skills || []).filter(s => String(s.s || '').trim()).map(s => ({ s: s.s.trim(), y: +s.y || 0 })) });
-  const searchDice = async (use, page) => {
+  const searchDice = async (use, page, g = gen.current) => {
     setDres(d => ({ ...(page > 1 && d ? d : { rows: [] }), busy: true, err: '' }));
     try {
       const r = await api('ts_dice', { f: clean(use), page }, { timeout: 130000 });
+      if (g !== gen.current) return;
       setDres(d => {
         const prev = page > 1 && d ? d.rows : [];
         return { ...r, f: use, busy: false, rows: [...prev, ...r.rows.filter(x => !prev.some(y => y.k === x.k))], saved: (page > 1 && d ? d.saved || 0 : 0) + (r.saved || 0), found: (page > 1 && d ? d.found || 0 : 0) + (r.found || 0) };
       });
     } catch (e) {
+      if (g !== gen.current) return;
       setDres(d => ({ ...(d || { rows: [] }), busy: false, err: errText(e) }));
     }
   };
   const run = async (ff, reindex) => {
+    const g = ++gen.current;
     const use = ff || f;
     if (ff) setF(ff);
     setBusy('search');
@@ -162,15 +166,15 @@ function TalentSearchPage({ q }) {
     setTab('all');
     const withDice = diceOn && !!(use.src && use.src.dice);
     setDres(withDice ? { busy: true, rows: [] } : null);
-    if (withDice) searchDice(use, 1);
+    if (withDice) searchDice(use, 1, g);
     try {
       if (reindex) await api('ts_index', { full: false }, { timeout: 160000 });
       const r = await api('ts_search', { f: clean(use) }, { timeout: 100000 });
-      setRes(r);
+      if (g === gen.current) setRes(r);
     } catch (e) {
-      toast(errText(e), true);
+      if (g === gen.current) toast(errText(e), true);
     }
-    setBusy('');
+    if (g === gen.current) setBusy('');
   };
   const setSkill = (i, k, v) => setF({ ...f, skills: f.skills.map((s, j) => (j === i ? { ...s, [k]: v } : s)) });
   const fromJd = async () => {
@@ -349,7 +353,7 @@ function TalentSearchPage({ q }) {
         <button type="button" className="btn" disabled=${busy === 'search'} onClick=${() => run()}><${Icon} n="search" />${busy === 'search' ? 'Searching…' : 'Search'}</button>
         <select value=${f.sort} onChange=${e => setF({ ...f, sort: e.target.value })} aria-label="Sort" style=${{ maxWidth: 200 }}><option value="score">Best match first</option><option value="recent">Most recent first</option><option value="years">Most experience first</option></select>
         <button type="button" className="btn ghost" onClick=${() => setSaving({ name: '', alert: true })}>Save this search</button>
-        <button type="button" className="btn ghost" onClick=${() => { setF(tsEmpty()); setRes(null); setDres(null); }}>Clear</button>
+        <button type="button" className="btn ghost" onClick=${() => { gen.current++; setF(tsEmpty()); setRes(null); setDres(null); setBusy(b => (b === 'search' ? '' : b)); }}>Clear</button>
         <button type="button" className="btn ghost sm" disabled=${!!busy} onClick=${() => run(null, true)} title="Read new and changed resumes now">Refresh the index</button>
       </div>
     </section>

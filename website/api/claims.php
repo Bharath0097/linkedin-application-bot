@@ -62,6 +62,11 @@ function xcIsPayer(array $u): bool
 {
     return hasRole($u, 'admin') || hasRole($u, 'acct');
 }
+/** v83: paying claims and setting the policy change the books: administrators and bookkeepers with full books access. */
+function xcMayPay(array $u): bool
+{
+    return hasRole($u, 'admin') || (hasRole($u, 'acct') && acctLimits($u)['books'] === 'full');
+}
 function xcIsApprover(array $u, stdClass $c): bool
 {
     if ((string) $c->uid === $u['id']) {
@@ -144,7 +149,7 @@ function xcView(stdClass $c, array $u, bool $full = false): array
         'id' => (string) $c->id, 'num' => (string) ($c->num ?? ''), 'uid' => (string) $c->uid, 'n' => (string) ($c->n ?? ''), 'title' => (string) ($c->title ?? ''), 'st' => (string) $c->st,
         'total' => xcTotal($c), 'cur' => 'USD', 'lines' => array_values((array) ($c->lines ?? [])), 'at' => (int) ($c->at ?? 0), 'u' => (int) ($c->u ?? 0), 'sub' => (int) ($c->sub ?? 0),
         'appr' => (string) ($c->appr ?? ''), 'apprN' => (string) ($c->apprN ?? ''), 'dec' => $c->dec ?? null, 'paid' => $c->paid ?? null,
-        'mine' => (string) $c->uid === $u['id'], 'canDecide' => (string) $c->st === 'submitted' && xcIsApprover($u, $c), 'canPay' => (string) $c->st === 'approved' && xcIsPayer($u),
+        'mine' => (string) $c->uid === $u['id'], 'canDecide' => (string) $c->st === 'submitted' && xcIsApprover($u, $c), 'canPay' => (string) $c->st === 'approved' && xcMayPay($u),
         'canEdit' => (string) $c->uid === $u['id'] && in_array((string) $c->st, ['draft', 'returned'], true),
     ];
     if ($full) {
@@ -196,7 +201,7 @@ function xcRoute(string $r, array $b): never
             ok(['settings' => $S, 'payer' => xcIsPayer($u), 'st' => XC_ST, 'pay' => XC_PAY]);
 
         case 'xc_settings_save':
-            if (!xcIsPayer($u)) {
+            if (!xcMayPay($u)) {
                 fail(403, 'forbidden', 'Accounting and administrators set the expense policy.');
             }
             $S = xcSettings();
@@ -217,7 +222,7 @@ function xcRoute(string $r, array $b): never
                 $seen[$k] = true;
                 $cats[] = ['k' => mb_substr($k, 0, 20), 'n' => $n, 'limit' => max(0, round((float) ($c['limit'] ?? 0), 2)), 'acct' => mb_substr(trim((string) ($c['acct'] ?? '')), 0, 60) ?: 'Other expenses'];
             }
-            if (!isset($seen['mileage'])) {
+            if (!isset($seen['mileage']) && isset($b['cats'])) {
                 $cats[] = ['k' => 'mileage', 'n' => 'Mileage (own car)', 'limit' => 0, 'acct' => 'Travel'];
             }
             $new = ['rates' => $rates ?: $S['rates'], 'receipt' => max(0, round((float) ($b['receipt'] ?? $S['receipt']), 2)), 'days' => max(1, min(365, (int) ($b['days'] ?? $S['days']))), 'cats' => $cats ?: $S['cats']];
@@ -427,7 +432,7 @@ function xcRoute(string $r, array $b): never
         case 'xc_pay':
             // paid: recorded on the claim and in Bills & expenses (one entry per expense account of its lines)
             $c = xcGet($str('id', 30), $u);
-            if ((string) $c->st !== 'approved' || !xcIsPayer($u)) {
+            if ((string) $c->st !== 'approved' || !xcMayPay($u)) {
                 fail(403, 'forbidden', 'Accounting pays approved claims.');
             }
             $m = $str('m', 10);
@@ -447,6 +452,10 @@ function xcRoute(string $r, array $b): never
             foreach ((array) ($c->lines ?? []) as $l) {
                 $an = $acct[(string) $l->cat] ?? 'Other expenses';
                 $by[$an] = round(($by[$an] ?? 0) + (float) $l->a, 2);
+            }
+            // v83: a payment dated in closed books is refused before anything is written
+            foreach ($by as $an => $amt) {
+                booksGuard('exp/xc' . $c->id . substr(md5($an), 0, 6), (object) ['d' => $d]);
             }
             $now = now();
             $exp = [];

@@ -26,7 +26,8 @@ const WS_FEATURES = [
     'crm' => ['n' => 'Sales', 'd' => 'CRM, clients, ads, sequences, client talent requests and proposals', 'routes' => ['crm_', 'sq_', 'cr_', 'cq_', 'cw_', 'pub_cw']],
     'learning' => ['n' => 'Learning', 'd' => 'Courses, tests, certifications, practice calls, projects and the project vault', 'routes' => ['learn_', 'ex_', 'pr_', 'proj_', 'vault_']],
     'billing' => ['n' => 'Plans and payments', 'd' => 'Paid plans for students and outside consultants', 'routes' => ['bill_']],
-    'mail' => ['n' => 'Email, inbox and campaigns', 'd' => 'Mass email, contacts, deliverability checks, each person\'s inbox', 'routes' => ['mail_campaign', 'mail_contact', 'mail_audience', 'mail_preview', 'mail_sources', 'mail_deliv', 'mail_check', 'mail_suppress', 'mail_unsuppress', 'mail_bounces', 'mail_bounce_sync', 'mail_content_check', 'mail_safety_save', 'mymail_', 'dl_']],
+    // v83: the shared inbox (mail_inbox*, not mail_inbound) and the sent log belong to this part too
+    'mail' => ['n' => 'Email, inbox and campaigns', 'd' => 'Mass email, contacts, deliverability checks, each person\'s inbox', 'routes' => ['mail_campaign', 'mail_contact', 'mail_audience', 'mail_preview', 'mail_sources', 'mail_deliv', 'mail_check', 'mail_suppress', 'mail_unsuppress', 'mail_bounces', 'mail_bounce_sync', 'mail_content_check', 'mail_safety_save', 'mail_inbox', 'mail_log', 'mymail_', 'dl_']],
     'chat' => ['n' => 'Team messages', 'd' => 'Channels and direct messages', 'routes' => ['chat_']],
     'desk' => ['n' => 'Service desk', 'd' => 'Tickets, knowledge base and the help box', 'routes' => ['desk_', 'pub_support']],
     // v39: calls in the browser, incoming calls, voicemail, recordings and texts, through the company's own Twilio account

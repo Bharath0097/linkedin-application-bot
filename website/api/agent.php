@@ -55,6 +55,8 @@ const AG_BOARDS = ['dice.com' => 'Dice', 'linkedin.com' => 'LinkedIn', 'indeed.c
 const AG_TECH_YEAR = ['kubernetes' => 2014, 'k8s' => 2014, 'docker' => 2013, 'react native' => 2015, 'react' => 2013, 'vue' => 2014, 'typescript' => 2012, 'swift' => 2014, 'kotlin' => 2011, 'golang' => 2009, 'rust' => 2010, 'spring boot' => 2014, 'node.js' => 2009, 'nodejs' => 2009, 'terraform' => 2014, 'ansible' => 2012, 'kafka' => 2011, 'snowflake' => 2014, 'databricks' => 2013, 'airflow' => 2015, 'flutter' => 2017, 'next.js' => 2016, 'graphql' => 2015, 'aws lambda' => 2014, 'azure' => 2010, 'gcp' => 2008, 'google cloud' => 2008, 'aws' => 2006, 'power bi' => 2011, 'chatgpt' => 2022, 'generative ai' => 2022, 'genai' => 2022, 'langchain' => 2022, 'llm' => 2019, 'pytorch' => 2016, 'tensorflow' => 2015, '.net core' => 2016, 'dotnet core' => 2016, 'blazor' => 2018, 's/4hana' => 2015, 's4 hana' => 2015, 'mongodb' => 2009, 'elasticsearch' => 2010, 'github actions' => 2019, 'microservices' => 2011, 'devops' => 2009, 'salesforce lightning' => 2015, 'servicenow' => 2004];
 const AG_SEV = ['high' => 35, 'medium' => 15, 'low' => 5];
 const AG_ST_NAME = ['new' => 'Queued', 'notfit' => 'Not a match: recruiter decides', 'asked' => 'Waiting for the candidate', 'reminded' => 'Reminded', 'answered' => 'Answered: checking', 'verified' => 'Verified', 'review' => 'Needs a recruiter', 'noreply' => 'No reply', 'closed' => 'Closed', 'kept' => 'Kept in the pool', 'fake' => 'Marked fake', 'stopped' => 'Stopped', 'skipped' => 'Not screened'];
+// v83: a recruiter's final decisions: the candidate's form link no longer opens and email replies change nothing
+const AG_FINAL = ['closed', 'kept', 'fake'];
 
 /* ---------- settings, log, small helpers ---------- */
 function agCfg(): array
@@ -677,7 +679,7 @@ function agScreenBatch(array $ids, array $cfg, bool $force = false): int
     foreach ($ids as $id) {
         $c = $byId[$id] ?? docGet('ats/' . $id);
         if ($c instanceof stdClass) {
-            $todo[$id] = [$c, vmsResumeText('ats/' . $id)];
+            $todo[$id] = [$c, vmsResumeText('ats/' . $id), json_encode($c)];
         }
     }
     if (!$todo) {
@@ -720,7 +722,13 @@ function agScreenBatch(array $ids, array $cfg, bool $force = false): int
         $aiBy[$id] = $answers[$i] ?? null;
     }
     $n = 0;
-    foreach ($todo as $id => [$c, $text]) {
+    foreach ($todo as $id => [$c, $text, $was]) {
+        // v83: the assistant can take a minute: a record a recruiter or the candidate changed meanwhile is left for
+        // the next sweep (it is still queued) instead of being overwritten with the copy read before
+        $now = docGet('ats/' . $id);
+        if (!$now instanceof stdClass || json_encode($now) !== $was) {
+            continue;
+        }
         $ai = $aiBy[$id] ?? null;
         $ag = agOf($c);
         $ag['fit'] = agFitOf((string) $id, $c, $cfg, $ai);
@@ -973,11 +981,41 @@ function agEvaluate(string $id, stdClass $c, array $cfg, bool $withAi = true): v
 }
 
 /* ---------- the sweep (cron, "Run now", and right after a new candidate arrives) ---------- */
+/**
+ * Copies of ID and work-authorization documents are kept for the settings' number of days. v83: this runs on every
+ * sweep whether or not the agent is on (the form link and "Screen now" still take documents while it is off).
+ */
+function agDocsSweep(array $cfg): int
+{
+    $n = 0;
+    $cut = now() - max(7, (int) $cfg['keepDocs']) * 86400000;
+    foreach (agCards() as [$id, $c]) {
+        $id = (string) $id;
+        $ag = agOf($c);
+        if (empty($ag['docs']) || (int) ($ag['docsAt'] ?? 0) <= 0 || (int) $ag['docsAt'] >= $cut) {
+            continue;
+        }
+        foreach ((array) $ag['docs'] as $d) {
+            $fid = (string) ($d['id'] ?? '');
+            if (preg_match('/^[a-f0-9]{32}$/', $fid)) {
+                docDelete("ats/$id/f/$fid");
+                @unlink(cfg('files_dir') . '/' . $fid);
+            }
+        }
+        $ag['docs'] = [];
+        $ag['docsGone'] = now();
+        agNote($id, $c, 'Verification documents deleted after ' . (int) $cfg['keepDocs'] . ' days');
+        agSave($id, $c, $ag);
+        $n++;
+    }
+    return $n;
+}
 /** One pass: queue new candidates, screen them, remind, expire, read inbox messages, delete old documents. */
 function agSweep(int $budget = 25, int $max = 10): array
 {
     $cfg = agCfg();
     $out = ['on' => (bool) $cfg['on'], 'queued' => 0, 'screened' => 0, 'reminded' => 0, 'expired' => 0, 'evaluated' => 0, 'inbox' => 0, 'docs' => 0];
+    $out['docs'] = agDocsSweep($cfg);
     if (!$cfg['on']) {
         return $out;
     }
@@ -994,6 +1032,12 @@ function agSweep(int $budget = 25, int $max = 10): array
         $new = [];
         foreach (agCards() as [$id, $c]) {
             $id = (string) $id;
+            // v83: earlier rows can take a while (mail, the assistant): each row works from the record as saved now,
+            // so a form the candidate sent or a recruiter's change in the meantime is not overwritten
+            $c = docGet('ats/' . $id);
+            if (!$c instanceof stdClass || !isset($c->n)) {
+                continue;
+            }
             if (!isset($c->ag)) {
                 if ((int) ($c->at ?? 0) < (int) $cfg['since'] || empty($cfg['src'][agVia($c)])) {
                     continue;
@@ -1022,7 +1066,23 @@ function agSweep(int $budget = 25, int $max = 10): array
                     agSave($id, $c, $ag);
                     $out['expired']++;
                 } elseif ((int) ($ag['rem'] ?? 0) < (int) $cfg['reminders'] && (int) ($ag['last'] ?? 0) + (int) $cfg['remind'] * 3600000 <= now() && time() - $t0 < $budget) {
-                    if (agSend($id, $c, $ag, $cfg, 'remind')) {
+                    $sent = agSend($id, $c, $ag, $cfg, 'remind');
+                    // v83: the send can take a while: the reminder's fields go onto the record as saved now, and not
+                    // at all when the candidate answered (or a recruiter decided) in the meantime
+                    $c = docGet('ats/' . $id);
+                    $nag = $c instanceof stdClass ? agOf($c) : [];
+                    if (!$c instanceof stdClass || !empty($nag['used']) || !in_array((string) ($nag['st'] ?? ''), ['asked', 'reminded'], true)) {
+                        continue;
+                    }
+                    foreach (['tok', 'tokH', 'exp', 'used', 'ref', 'last', 'rem', 'st', 'to', 'err'] as $k) {
+                        if (array_key_exists($k, $ag)) {
+                            $nag[$k] = $ag[$k];
+                        } else {
+                            unset($nag[$k]);
+                        }
+                    }
+                    $ag = $nag;
+                    if ($sent) {
                         agNote($id, $c, 'Reminder ' . $ag['rem'] . ' sent to ' . $ag['to']);
                         $out['reminded']++;
                     }
@@ -1031,21 +1091,6 @@ function agSweep(int $budget = 25, int $max = 10): array
             } elseif ($st === 'answered' && empty($ag['evAt']) && time() - $t0 < $budget) {
                 agEvaluate($id, $c, $cfg);
                 $out['evaluated']++;
-            }
-            // copies of ID and work-authorization documents are kept for the settings' number of days
-            if (!empty($ag['docs']) && (int) ($ag['docsAt'] ?? 0) > 0 && (int) $ag['docsAt'] < now() - max(7, (int) $cfg['keepDocs']) * 86400000) {
-                foreach ((array) $ag['docs'] as $d) {
-                    $fid = (string) ($d['id'] ?? '');
-                    if (preg_match('/^[a-f0-9]{32}$/', $fid)) {
-                        docDelete("ats/$id/f/$fid");
-                        @unlink(cfg('files_dir') . '/' . $fid);
-                    }
-                }
-                $ag['docs'] = [];
-                $ag['docsGone'] = now();
-                agNote($id, $c, 'Verification documents deleted after ' . (int) $cfg['keepDocs'] . ' days');
-                agSave($id, $c, $ag);
-                $out['docs']++;
             }
         }
         foreach (array_chunk(array_slice($new, 0, $max), 4) as $chunk) {
@@ -1139,6 +1184,15 @@ function agInboxOne(array $row, array $cfg): array
     if ($cid !== '') {
         $c = docGet('ats/' . $cid);
         if ($c) {
+            // v83: only a reply the agent is waiting for, from the candidate or vendor it wrote to, is read and filed;
+            // anything else (a recruiter already decided, or someone else wrote) is a note for the recruiter only
+            $st = (string) ($c->ag->st ?? '');
+            $senders = array_filter([strtolower(trim((string) ($c->e ?? ''))), strtolower(trim((string) ($c->vend->e ?? ''))), strtolower(trim((string) ($c->ag->to ?? '')))]);
+            if (!in_array($st, ['asked', 'reminded', 'noreply'], true) || !in_array($from, $senders, true)) {
+                agNote($cid, $c, 'Email from ' . $from . ' about this candidate (' . (AG_ST_NAME[$st] ?? ($st ?: 'not screened')) . '); no automatic change');
+                docSet('ats/' . $cid, $c);
+                return ['kind' => 'note', 'cids' => [$cid], 'n' => (string) ($c->n ?? '')];
+            }
             agReply($cid, $c, $row, $atts, $cfg);
             return ['kind' => 'reply', 'cids' => [$cid], 'n' => (string) ($c->n ?? '')];
         }
@@ -1390,6 +1444,9 @@ function agRoute(string $r, array $b): never
                 ok(['state' => 'gone']);
             }
             $ag = agOf($c);
+            if (in_array((string) ($ag['st'] ?? ''), AG_FINAL, true)) {
+                ok(['state' => 'gone']);
+            }
             if (!empty($ag['used'])) {
                 ok(['state' => 'done', 'first' => agFirst((string) $c->n)]);
             }
@@ -1426,6 +1483,9 @@ function agRoute(string $r, array $b): never
                 fail(404, 'not_found', 'This link is no longer valid. Reply to the email and the recruiter will send a new one.');
             }
             $ag = agOf($c);
+            if (in_array((string) ($ag['st'] ?? ''), AG_FINAL, true)) {
+                fail(404, 'not_found', 'This link is no longer valid. Reply to the email and the recruiter will send a new one.');
+            }
             if (!empty($ag['used'])) {
                 fail(409, 'conflict', 'These details were already sent. Thank you!');
             }
@@ -1780,9 +1840,18 @@ function agRoute(string $r, array $b): never
                 }
                 $items[] = (object) ['k' => $k, 'v' => $v, 'why' => str($b, 'why', 160), 'by' => (string) $u['name'], 'at' => now()];
             } elseif ($op === 'remove') {
-                $i = (int) ($b['i'] ?? -1);
-                if (isset($items[$i])) {
-                    array_splice($items, $i, 1);
+                // v83: the entry is named by what it is (kind, value, when added), not by its place in a list that may
+                // have changed since the page loaded (other recruiters, "Mark fake" appending and trimming)
+                $k = str($b, 'k', 10);
+                $v = str($b, 'v', 200);
+                $at = (int) ($b['at'] ?? 0);
+                $items = array_values($items);
+                foreach ($items as $j => $x) {
+                    $x = (object) $x;
+                    if ((string) ($x->k ?? '') === $k && trim((string) ($x->v ?? '')) === $v && (int) ($x->at ?? 0) === $at) {
+                        array_splice($items, $j, 1);
+                        break;
+                    }
                 }
             }
             $blk->items = array_values($items);

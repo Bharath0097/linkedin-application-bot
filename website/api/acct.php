@@ -262,11 +262,16 @@ function acctCron(): array
     }
     return $out;
 }
-function acctStaff(): array
+function acctStaff(bool $write = true): array
 {
     $u = requireUser();
     if (!can('org/acct', 'w')) {
         fail(403, 'forbidden', 'Accounting is for administrators and the accounts team.');
+    }
+    // v83: org/acct itself is not a books record; probe one below it so view-only and reports-only bookkeepers
+    // are held to their level
+    if ($write && !can('org/acct/x', 'w')) {
+        fail(403, 'forbidden', 'Your access to the books is view-only.');
     }
     return $u;
 }
@@ -299,7 +304,7 @@ function acctRoute(string $r, string $method, array $b): never
             $ok = acctRemind($id, $d, (string) $u['name'], str($b, 'note', 2000), 'by hand');
             ok(['mailed' => $ok, 'to' => $to]);
         case 'acct_next_num':
-            requireAdmin();
+            acctStaff(); // v83: was any staff login (HR too); resetting the numbering changes the books
             $n = max(1, (int) ($b['n'] ?? 1));
             $y = date('Y');
             $k = "inv$y";
@@ -310,7 +315,7 @@ function acctRoute(string $r, string $method, array $b): never
             $p->prepare("UPDATE meta SET v = ? WHERE k = '$k'")->execute([$n - 1]);
             ok(['next' => sprintf('%s-%s-%04d', acctSettings()['prefix'], $y, $n)]);
         case 'acct_next_peek':
-            acctStaff();
+            acctStaff(false);
             $y = date('Y');
             $n = (int) (db()->query("SELECT v FROM meta WHERE k='inv$y'")->fetchColumn() ?: 0) + 1;
             ok(['next' => sprintf('%s-%s-%04d', acctSettings()['prefix'], $y, $n), 'n' => $n]);
