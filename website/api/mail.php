@@ -731,6 +731,11 @@ final class SmtpSession
             $this->close();
             return $this->fail($stage, 0, 'The mail server stopped answering.');
         }
+        if (!preg_match('/^[2-5]\d\d(?:[ -]|\r?\n|$)/', $reply)) {
+            // v83: something that is not a mail server answered: its words are not shown back
+            $this->close();
+            return $this->fail($stage, 0, 'The server on that port did not answer like a mail server.');
+        }
         return $this->fail($stage, $code, trim((string) preg_replace('/\s+/', ' ', $reply)));
     }
 
@@ -758,16 +763,19 @@ function mailDeliver(array $m, ?SmtpSession $session = null): bool
     $ref = (string) ($m['ref'] ?? '');
     $GLOBALS['mailErr'] = '';
     $GLOBALS['mailFail'] = ['stage' => '', 'code' => 0];
+    // v83: a security email's one-time code never goes into the logs (the sent log and mail.log are read by staff)
+    $logSubject = $kind === 'security' ? (string) preg_replace('/\b\d{6,8}\b/', '******', $subject) : $subject;
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         $GLOBALS['mailErr'] = 'Not a valid email address.';
         $GLOBALS['mailFail'] = ['stage' => 'rcpt', 'code' => 553];
-        mailRecord($to, $name, $subject, $kind, false, $GLOBALS['mailErr'], $ref);
+        mailRecord($to, $name, $logSubject, $kind, false, $GLOBALS['mailErr'], $ref);
         return false;
     }
     // v37: in a company workspace, emails written for StratEdge's own site carry the company's name
     if (wsSlug() !== '') {
         $subject = wsBrandText($subject);
         $m['subject'] = $subject;
+        $logSubject = $kind === 'security' ? (string) preg_replace('/\b\d{6,8}\b/', '******', $subject) : $subject;
         $m['text'] = wsBrandText((string) ($m['text'] ?? ''));
         $m['html'] = wsBrandText((string) ($m['html'] ?? ''), true);
     }
@@ -850,8 +858,8 @@ function mailDeliver(array $m, ?SmtpSession $session = null): bool
         }
     }
     $GLOBALS['mailErr'] = $err;
-    mailLog(($ok ? 'sent' : 'FAILED') . " to $to: $subject" . ($ok ? '' : " ($err)"));
-    mailRecord($to, $name, $subject, $kind, $ok, $err, $ref);
+    mailLog(($ok ? 'sent' : 'FAILED') . " to $to: $logSubject" . ($ok ? '' : " ($err)"));
+    mailRecord($to, $name, $logSubject, $kind, $ok, $err, $ref);
     return $ok;
 }
 
@@ -898,11 +906,11 @@ function mailSentSince(int $since): int
 
 // mailCanUse() lives in lib.php (the portal shows the menu item from the same answer)
 
-function mailUser(): array
+function mailUser(string $key = ''): array
 {
     $u = requireUser();
     $r = (string) ($GLOBALS['mailKind'] ?? '');
-    $key = featureRouteKey($r);
+    $key = $key !== '' ? $key : featureRouteKey($r);
     $d = (function () use ($u) {
         if (userLevel($u) >= 2) return true;
         $rr = myR((string) $u['id']);
@@ -913,6 +921,26 @@ function mailUser(): array
         fail(403, 'forbidden', 'This email feature is not switched on for your account. Ask an administrator under Roles & access.');
     }
     return $u;
+}
+
+// the do-not-contact reasons that come from a privacy request (privacy.php)
+const MAIL_SUPPRESS_PRIVACY = ['erased', 'privacy opt-out'];
+/** v83: takes an address off the do-not-contact list. A privacy erasure or opt-out comes off only by an administrator's
+ *  hand; every removal is audited. */
+function mailUnsuppress(string $email): void
+{
+    $u = currentUser();
+    $st = mdb()->prepare('SELECT why FROM mail_suppress WHERE email = ?');
+    $st->execute([$email]);
+    $why = $st->fetchColumn();
+    if ($why === false) {
+        return;
+    }
+    if (in_array((string) $why, MAIL_SUPPRESS_PRIVACY, true) && !($u && hasRole($u, 'admin'))) {
+        fail(403, 'forbidden', 'This person asked for their data to be erased or not to be contacted. Only an administrator can allow email to them again.');
+    }
+    mdb()->prepare('DELETE FROM mail_suppress WHERE email = ?')->execute([$email]);
+    audit('mail', 'Address allowed again', $email, ['why' => (string) $why], $u);
 }
 
 function mailOwner(): array
@@ -2238,7 +2266,10 @@ function mailInboundTake(string $fromRaw, string $fromHint, string $to, string $
     // from someone with a portal account opens a new one
     try {
         require_once __DIR__ . '/desk.php';
-        $sd = deskInbound($fromE, $fromN, $to, $subject, $text);
+        // v83: an email whose sender Mailgun's SPF check failed outright is not put on a ticket (it still reaches the
+        // Inbox); any one 'fail' counts, so a 'Pass' header written into the message itself changes nothing
+        $spfFail = in_array('fail', array_map(fn($v) => strtolower(trim((string) $v)), (array) ($headers['x-mailgun-spf'] ?? [])), true);
+        $sd = $spfFail ? '' : deskInbound($fromE, $fromN, $to, $subject, $text);
         if ($sd !== '') {
             $ref = $sd;
         }
@@ -2412,6 +2443,13 @@ function mailRoute(string $r, string $method, array $b): never
             }
             if (in_array($p, ['host', 'smtp'], true) && !preg_match('/^[a-z0-9.-]+$/', $host)) {
                 fail(400, 'invalid_argument', 'Enter the mail server name, for example mail.yourdomain.com.');
+            }
+            if (in_array($p, ['host', 'smtp'], true)) {
+                // v83: the portal never connects into a private network (the same rule as the Postal address below)
+                require_once __DIR__ . '/connectors.php';
+                if (cxUrlProblem('https://' . $host . '/') !== '') {
+                    fail(400, 'invalid_argument', 'Enter a mail server that can be reached on the internet (not a private or internal address).');
+                }
             }
             // v34: your own Postal server (its web address and an API credential) and Amazon SES (an access key)
             $region = str($b, 'region', 2) === 'eu' ? 'eu' : 'us';
@@ -2855,13 +2893,18 @@ function mailRoute(string $r, string $method, array $b): never
                 fail(400, 'invalid_argument', 'Enter a valid email address.');
             }
             if (!empty($b['on'])) {
-                mdb()
-                    ->prepare('REPLACE INTO mail_suppress (email, at, why) VALUES (?, ?, ?)')
-                    ->execute([$email, now(), 'manual']);
+                // v83: a privacy erasure or opt-out keeps its reason (a 'manual' row could be taken off by anyone)
+                $st = mdb()->prepare('SELECT why FROM mail_suppress WHERE email = ?');
+                $st->execute([$email]);
+                if (!in_array((string) $st->fetchColumn(), MAIL_SUPPRESS_PRIVACY, true)) {
+                    mdb()
+                        ->prepare('REPLACE INTO mail_suppress (email, at, why) VALUES (?, ?, ?)')
+                        ->execute([$email, now(), 'manual']);
+                }
             } else {
-                mdb()
-                    ->prepare('DELETE FROM mail_suppress WHERE email = ?')
-                    ->execute([$email]);
+                // v83: taking an address off the do-not-contact list is Contact cleanup (the same check as mail_unsuppress)
+                mailUser('mail_cleanup');
+                mailUnsuppress($email);
             }
             ok(['ok' => true]);
 
@@ -2984,6 +3027,9 @@ function mailRoute(string $r, string $method, array $b): never
                     $hdrs[strtolower((string) $hv[0])][] = (string) $hv[1];
                 }
             }
+            // v83: Mailgun adds no Authentication-Results of its own, so any found here came with the message and prove
+            // nothing (a list address trusts a sender only on its receiving server's DMARC pass; see dlSenderVouched)
+            unset($hdrs['authentication-results'], $hdrs['arc-authentication-results']);
             mailInboundTake(
                 (string) ($_POST['from'] ?? ($_POST['sender'] ?? '')),
                 strtolower(trim((string) ($_POST['sender'] ?? ''))),

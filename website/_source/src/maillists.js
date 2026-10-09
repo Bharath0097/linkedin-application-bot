@@ -588,7 +588,7 @@ function DlAddress({ L, meta, onSaved }) {
           <div className="dlroles">
             ${Object.entries(meta.post || {}).map(([k, n]) => html`<label key=${k} className="check"><input type="radio" name="dlpost" value=${k} checked=${f.post === k} onChange=${() => setF({ ...f, post: k })} /><span>${n}</span></label>`)}
           </div>
-          <span className="muted small">Mail from anyone else waits under Activity for an administrator to pass it on or discard it. Automatic replies, delivery reports and the list's own copies are never passed on.</span>
+          <span className="muted small">Mail from anyone else, or mail whose sender the receiving mail server could not confirm (no DMARC pass), waits under Activity for an administrator to pass it on or discard it. Automatic replies, delivery reports and the list's own copies are never passed on.</span>
         </div>
         <div className="actions"><button className="btn" disabled=${busy === 'addr'} onClick=${saveAddr}>${busy === 'addr' ? 'Saving…' : 'Save'}</button></div>
       </div>
@@ -610,7 +610,7 @@ function DlAddress({ L, meta, onSaved }) {
           </div>
           <div className="row3">
             <${Field} label="Mailbox sign-in"><input value=${im.user} onInput=${e => set('user', e.target.value.trim())} placeholder="reqs@yourcompany.com" autoComplete="off" /><//>
-            <${Field} label="Password" hint=${last && last.passSet ? 'Saved (encrypted). Leave empty to keep it.' : 'Gmail and Microsoft 365 need an app password.'}><input type="password" value=${im.pass} onInput=${e => set('pass', e.target.value)} autoComplete="new-password" placeholder=${last && last.passSet ? '••••••••' : ''} /><//>
+            <${Field} label="Password" hint=${last && last.passSet ? 'Saved (encrypted). Leave empty to keep it; a new server, port, security or sign-in needs it again.' : 'Gmail and Microsoft 365 need an app password.'}><input type="password" value=${im.pass} onInput=${e => set('pass', e.target.value)} autoComplete="new-password" placeholder=${last && last.passSet ? '••••••••' : ''} /><//>
             <${Field} label="Folder"><input value=${im.folder} onInput=${e => set('folder', e.target.value)} /><//>
           </div>
         </div>

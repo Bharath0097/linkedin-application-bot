@@ -12,8 +12,9 @@ declare(strict_types=1);
  *
  * Who approves talent requests stays the company's approver list (cr_cfg); an approver may delegate their approvals
  * to a colleague for a period (a delegation covers approvals only, within the delegator's units, and ends by itself).
- * StratEdge (whoever works client accounts) and the company's own full-access people manage roles, units and
- * delegations, revoke a colleague's access (sessions ended at once) and record access reviews. Everything is audited.
+ * StratEdge (whoever works client accounts) and the company's own full-access people manage roles and units, end
+ * delegations (an approver delegates their own; StratEdge may record one for an approver), revoke a colleague's access
+ * (sessions ended at once) and record access reviews. Everything is audited.
  *
  * Table (main database): cr_acc (one row per company: people, delegations, reviews).
  */
@@ -211,7 +212,9 @@ function caRoute(string $r, array $b, array $u, bool $staff, array $myC): never
     $acc = $staff ? null : caAccess($u, $cid);
     $manage = $staff || ($acc && caMay($acc, 'people', 'w'));
     $view = $staff || ($acc && caMay($acc, 'people', 'r'));
-    if (!$view) {
+    // v83: an approver delegates their own approvals whatever their role (the people area is not needed for that)
+    $ownDeleg = !$staff && $r === 'cr_acc_deleg' && $acc && caMay($acc, 'requests', 'r') && $str('from', 40) === (string) $u['id'];
+    if (!$view && !$ownDeleg) {
         fail(403, 'forbidden', 'People and access are for the company\'s full-access people and StratEdge.');
     }
     $needManage = fn() => $manage ?: fail(403, 'forbidden', 'Only the company\'s full-access people and StratEdge change access.');
@@ -275,14 +278,19 @@ function caRoute(string $r, array $b, array $u, bool $staff, array $myC): never
 
         case 'cr_acc_deleg':
             // an approver hands their approvals to a colleague for a period (within the delegator's units)
-            $needManage();
             $from = $str('from', 40);
             $to = $str('to', 40);
             if (!isset($contacts[$from]) || !isset($contacts[$to]) || $from === $to) {
                 fail(400, 'invalid_argument', 'Choose who delegates and the colleague who takes over.');
             }
-            if (!$staff && $from !== $u['id'] && !caMay(caAccess($u, $cid), 'people', 'w')) {
+            // v83: a contact delegates only their own approvals (full access no longer hands someone else's to anyone),
+            // and only an approver StratEdge named delegates; StratEdge may record a delegation for an approver
+            if (!$staff && $from !== $u['id']) {
                 fail(403, 'forbidden', 'You can delegate your own approvals.');
+            }
+            $cfgA = crCfg($cid, true);
+            if ($cfgA['appr'] && !in_array($from, $cfgA['appr'], true)) {
+                fail(400, 'invalid_argument', $nameOf($from) . ' is not an approver of ' . $co . '; StratEdge names the approvers.');
             }
             $start = (int) ($b['start'] ?? now());
             $end = (int) ($b['end'] ?? 0);
@@ -300,12 +308,20 @@ function caRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             if (!$toRow || !caMay(caAccess($toRow, $cid), 'requests', 'r')) {
                 fail(409, 'conflict', $nameOf($to) . ' cannot read talent requests (their role); give them a role that can first.');
             }
-            $x = ['id' => rid(6), 'from' => $from, 'to' => $to, 'start' => $start, 'end' => $end, 'note' => $str('note', 300), 'by' => (string) $u['name'], 'at' => now()];
+            $x = ['id' => rid(6), 'from' => $from, 'to' => $to, 'start' => $start, 'end' => $end, 'note' => $str('note', 300), 'by' => (string) $u['name'], 'byUid' => (string) $u['id'], 'at' => now()];
             $d['deleg'][] = $x;
             $d['deleg'] = array_slice($d['deleg'], -200);
             caSave($cid, $d);
             audit('client', 'Approvals delegated', $co, ['from' => $nameOf($from), 'to' => $nameOf($to), 'until' => gmdate('Y-m-d', (int) ($end / 1000))], $u);
             crMail([$to], 'Approvals delegated to you: ' . $co, [$nameOf($from) . ' delegated their talent request approvals at ' . $co . ' to you until ' . gmdate('j M Y', (int) ($end / 1000)) . '.', $x['note'] !== '' ? $x['note'] : 'Requests waiting for their approval now wait for yours.'], 'req', '');
+            // v83: the approver always hears when StratEdge recorded a delegation of their approvals
+            if ($from !== $u['id']) {
+                crMail([$from], 'Your approvals were delegated: ' . $co, [$u['name'] . ' delegated your talent request approvals at ' . $co . ' to ' . $nameOf($to) . ' until ' . gmdate('j M Y', (int) ($end / 1000)) . '.'], 'req', '');
+            }
+            // an approver without the people area gets no people listing back
+            if (!$view) {
+                ok(['ok' => true]);
+            }
             $home();
 
         case 'cr_acc_deleg_end':
@@ -366,7 +382,9 @@ function caRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             $rr->u = now();
             docSet('r/' . $uid, $rr);
             $n = sessRevokeAll($uid, 'access revoked by ' . $u['name'] . ($why !== '' ? ': ' . $why : ''));
-            unset($d['people'][$uid]);
+            // v83: their role and units stay recorded, so a restored or re-attached contact comes back with the access
+            // they had, never more (a missing entry reads as full access)
+            $was = (string) ($d['people'][$uid]['role'] ?? 'full');
             // their delegations end too
             foreach ($d['deleg'] as &$x) {
                 if (((string) $x['from'] === $uid || (string) $x['to'] === $uid) && empty($x['ended'])) {
@@ -376,7 +394,7 @@ function caRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             }
             unset($x);
             caSave($cid, $d);
-            audit('access', 'Client contact access revoked', (string) ($contacts[$uid]['e'] ?? $uid), ['company' => $co, 'why' => $why, 'sessions' => $n, 'paused' => !$others], $u);
+            audit('access', 'Client contact access revoked', (string) ($contacts[$uid]['e'] ?? $uid), ['company' => $co, 'why' => $why, 'sessions' => $n, 'paused' => !$others, 'role' => $was], $u);
             if ($row && filter_var((string) $row['email'], FILTER_VALIDATE_EMAIL)) {
                 $paras = [$u['name'] . ' ended your access to ' . $co . ($others ? '. Your other companies are not affected.' : '; your portal account is paused.') . ($why !== '' ? ' Reason given: ' . $why : ''), 'If this is a mistake, ask ' . $co . ' or StratEdge.'];
                 try {

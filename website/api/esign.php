@@ -577,6 +577,7 @@ function esRoute(string $r, array $b): never
             $in = is_array($in) ? $in : [];
             $id = preg_replace('/[^a-f0-9]/', '', (string) ($in['id'] ?? ''));
             $now = now();
+            $isNew = $id === '';
             if ($id !== '') {
                 $d = esLibGet($id, $u);
                 if (!esLibMayEdit($d, $u)) {
@@ -599,6 +600,10 @@ function esRoute(string $r, array $b): never
             $vis = isset(ES_VIS[$in['vis'] ?? '']) ? (string) $in['vis'] : (string) ($d->vis ?? 'senders');
             if ($vis === 'hr' && !esMayManage($u)) {
                 $vis = 'senders';
+            }
+            // v83: a change of who may see the document retires its file links (a new token, sent with the answer)
+            if (!$isNew && $vis !== (string) ($d->vis ?? 'senders')) {
+                $d->tok = rid(16);
             }
             $d->vis = $vis;
             if (isset($in['pat']) && is_array($in['pat'])) {
@@ -629,6 +634,7 @@ function esRoute(string $r, array $b): never
                 fail(403, 'forbidden', 'Only the person who added it or an e-signature manager archives it.');
             }
             $d->arch = !empty($b['arch']) ? now() : 0;
+            $d->tok = rid(16); // v83: archiving (or bringing it back) retires the file links handed out before
             docSet('esd/' . $str('id', 20), $d);
             ok(['doc' => esLibView($str('id', 20), $d, $u)]);
 

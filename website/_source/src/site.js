@@ -2300,6 +2300,7 @@ const SSO_ERR = {
   denied: 'The sign-in was cancelled.',
   token: 'The provider did not confirm the sign-in. Try again, or use your password.',
   profile: 'The provider did not share an email address, so the account could not be matched.',
+  unverified: 'The provider has not confirmed that email address. Confirm it with the provider, or sign in with your password.',
   disabled: 'That account is paused. Contact StratEdge.',
   blocked: 'That sign-in could not be completed. Contact StratEdge at ' + CO.email + '.',
   locked: 'This account is locked for a while after too many failed sign-ins. Try again later, or reset your password.',

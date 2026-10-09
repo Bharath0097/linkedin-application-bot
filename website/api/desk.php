@@ -468,6 +468,10 @@ function deskMail(array $t, string $uid, string $email, string $name, string $le
     $s = deskSettings();
     $link = deskLink($t, $uid, $agent);
     $subject = '[SD-' . $t['num'] . '] ' . mb_substr((string) $t['title'], 0, 120);
+    if ($agent && $uid !== '') {
+        // v83: a reply to an email for someone working the ticket posts as them only with their own reference
+        $subject .= ' [ref:' . deskReplyRef($t, $uid) . ']';
+    }
     $text = $lead . "\n\n" . implode("\n\n", $paras) . "\n\nOpen it: $link\n\nReply to this email to add to the ticket (keep [SD-" . $t['num'] . '] in the subject).';
     try {
         require_once __DIR__ . '/mail.php';
@@ -632,6 +636,14 @@ function deskAct(array $u, array $t, string $act, array $b): array
     $now = now();
     $groups = deskGroups();
     $note = mb_substr(trim((string) ($b['note'] ?? '')), 0, 20000);
+    // v83: a request waiting for approval is only approved, rejected (desk_approve) or cancelled; a closed or cancelled
+    // ticket is only reopened (group members could otherwise work or resolve a request nobody approved)
+    if ($t['st'] === 'approval' && $act !== 'cancel') {
+        fail(400, 'invalid_argument', 'This request is waiting for approval. It can be worked once it is approved.');
+    }
+    if (in_array($t['st'], ['closed', 'cancelled'], true) && $act !== 'reopen') {
+        fail(400, 'invalid_argument', 'This ticket is closed. Reopen it first.');
+    }
     switch ($act) {
         case 'take':
         case 'assign':
@@ -1024,6 +1036,11 @@ function deskInbound(string $fromE, string $fromN, string $to, string $subject, 
         if (!$t || !deskCanSee($who, $t) || in_array($t['st'], ['closed', 'cancelled'], true)) {
             return '';
         }
+        // v83: a From address can be forged: answering as someone who works the ticket (not its requester) needs the
+        // reference from that person's own ticket email; the email still reaches the Inbox
+        if ((string) $t['by_uid'] !== (string) $who['id'] && !(preg_match('/\[ref:([a-f0-9]{12})\]/i', $subject, $k) && hash_equals(deskReplyRef($t, (string) $who['id']), strtolower($k[1])))) {
+            return '';
+        }
         $body = deskReplyText($text);
         if ($body === '') {
             return '';
@@ -1048,6 +1065,12 @@ const DESK_WEB_PORTALS = ['consultant' => 'Consultant', 'employee' => 'Employee'
 function deskGuestToken(array $t): string
 {
     return $t['num'] . '.' . substr(secMac('deskguest', $t['id'] . '|' . strtolower((string) $t['by_email'])), 0, 32);
+}
+/** v83: the reference in a ticket email to someone working it: an emailed reply posts as them only when it carries
+ *  their own reference (a From address can be forged). */
+function deskReplyRef(array $t, string $uid): string
+{
+    return substr(secMac('deskreply', $t['id'] . '|' . $uid), 0, 12);
 }
 /** The person behind a website request, for the functions that expect a signed-in user. */
 function deskGuestUser(array $t): array
@@ -1273,10 +1296,20 @@ function deskFull(array $u, array $t): array
             }
         }
         $out['groups'] = array_values(array_map(fn($g) => ['id' => $g['id'], 'n' => $g['n'], 'members' => array_values(array_filter(array_map(fn($uid) => isset($names[$uid]) ? ['id' => $uid, 'n' => $names[$uid]] : null, $g['members'])))], $groups));
-        // the requester's other open tickets, for context
-        $st = ddb()->prepare("SELECT num, title, st FROM desk_tickets WHERE by_uid = ? AND id <> ? ORDER BY created DESC LIMIT 5");
-        $st->execute([$t['by_uid'], $t['id']]);
-        $out['others'] = array_map(fn($r) => ['num' => 'SD-' . $r['num'], 'title' => $r['title'], 'st' => DESK_ST[$r['st']] ?? $r['st']], $st->fetchAll());
+        // the requester's other tickets, for context. v83: only the ones this person may open, and a website ticket (no
+        // account: by_uid '') matches the same address, not every other guest's ticket
+        $rows = [];
+        if ((string) $t['by_uid'] !== '') {
+            $st = ddb()->prepare("SELECT * FROM desk_tickets WHERE by_uid = ? AND id <> ? ORDER BY created DESC LIMIT 40");
+            $st->execute([(string) $t['by_uid'], $t['id']]);
+            $rows = $st->fetchAll();
+        } elseif ((string) $t['by_email'] !== '') {
+            $st = ddb()->prepare("SELECT * FROM desk_tickets WHERE by_uid = '' AND LOWER(by_email) = ? AND id <> ? ORDER BY created DESC LIMIT 40");
+            $st->execute([strtolower((string) $t['by_email']), $t['id']]);
+            $rows = $st->fetchAll();
+        }
+        $rows = array_slice(array_values(array_filter($rows, fn($r) => deskCanSee($u, $r))), 0, 5);
+        $out['others'] = array_map(fn($r) => ['num' => 'SD-' . $r['num'], 'title' => $r['title'], 'st' => DESK_ST[$r['st']] ?? $r['st']], $rows);
     }
     return $out;
 }
@@ -1416,11 +1449,19 @@ function deskRoute(string $r, array $b): never
             ok(['article' => $a + ['catName' => DESK_CATS[$a['cat']][0] ?? '']]);
 
         case 'desk_kb_vote':
-            $d = docGet('desk/x/kb/' . preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($b['id'] ?? '')));
-            if ($d) {
-                $k = !empty($b['up']) ? 'up' : 'down';
-                $d->$k = (int) ($d->$k ?? 0) + 1;
-                docSet('desk/x/kb/' . $b['id'], $d);
+            // v83: only an article this person may open (as desk_kb_get), written back under its own stored id (a raw id
+            // with extra characters made a copy of the article), and one vote per person and article a day
+            $a = deskArticles($u, deskIsAgent($u))[(string) ($b['id'] ?? '')] ?? null;
+            if (!$a) {
+                fail(404, 'not_found', 'That article is not available.');
+            }
+            if (!throttleHit('deskkbvote:' . $u['id'] . ':' . $a['id'], 1, 86400)) {
+                $d = docGet('desk/x/kb/' . $a['id']);
+                if ($d) {
+                    $k = !empty($b['up']) ? 'up' : 'down';
+                    $d->$k = (int) ($d->$k ?? 0) + 1;
+                    docSet('desk/x/kb/' . $a['id'], $d);
+                }
             }
             ok(['ok' => true]);
 

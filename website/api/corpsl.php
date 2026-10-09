@@ -38,7 +38,7 @@ function slDb(): PDO
     $p = crDb();
     if (!$ready) {
         $ready = true;
-        $p->exec("CREATE TABLE IF NOT EXISTS cr_sl (id VARCHAR(20) PRIMARY KEY, req VARCHAR(20) NOT NULL, cid VARCHAR(40) NOT NULL, cand VARCHAR(40) NOT NULL DEFAULT '', sub VARCHAR(40) NOT NULL DEFAULT '', alias VARCHAR(40) NOT NULL, st VARCHAR(12) NOT NULL, ver INT NOT NULL DEFAULT 0, anon INT NOT NULL DEFAULT 1, data TEXT NOT NULL, intv TEXT NOT NULL, dec TEXT NOT NULL, by_uid VARCHAR(40) NOT NULL, at BIGINT NOT NULL, u BIGINT NOT NULL, shared_at BIGINT NOT NULL DEFAULT 0, dec_at BIGINT NOT NULL DEFAULT 0)");
+        $p->exec("CREATE TABLE IF NOT EXISTS cr_sl (id VARCHAR(20) PRIMARY KEY, req VARCHAR(20) NOT NULL, cid VARCHAR(40) NOT NULL, cand VARCHAR(40) NOT NULL DEFAULT '', sub VARCHAR(40) NOT NULL DEFAULT '', alias VARCHAR(40) NOT NULL, st VARCHAR(12) NOT NULL, ver INT NOT NULL DEFAULT 0, anon INT NOT NULL DEFAULT 1, data TEXT NOT NULL, intv TEXT NOT NULL, `dec` TEXT NOT NULL, by_uid VARCHAR(40) NOT NULL, at BIGINT NOT NULL, u BIGINT NOT NULL, shared_at BIGINT NOT NULL DEFAULT 0, dec_at BIGINT NOT NULL DEFAULT 0)");
         $p->exec('CREATE INDEX IF NOT EXISTS cr_sl_req ON cr_sl (req, st)');
         $p->exec("CREATE TABLE IF NOT EXISTS cr_slver (id VARCHAR(20) PRIMARY KEY, sl VARCHAR(20) NOT NULL, n INT NOT NULL, data TEXT NOT NULL, anon INT NOT NULL DEFAULT 1, at BIGINT NOT NULL, by_uid VARCHAR(40) NOT NULL, byn VARCHAR(120) NOT NULL DEFAULT '', note VARCHAR(500) NOT NULL DEFAULT '')");
         $p->exec('CREATE INDEX IF NOT EXISTS cr_slver_sl ON cr_slver (sl, n)');
@@ -74,7 +74,7 @@ function slSet(string $id, array $f): void
     $sets = [];
     $vals = [];
     foreach ($f as $k => $v) {
-        $sets[] = "$k = ?";
+        $sets[] = "`$k` = ?"; // v83: quoted (the column dec is a reserved word on MySQL/MariaDB)
         $vals[] = is_array($v) ? json_encode($v) : $v;
     }
     $sets[] = 'u = ?';
@@ -386,7 +386,7 @@ function slRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             }
             $id = rid(8);
             $alias = slAlias((string) $q['id']);
-            $p->prepare("INSERT INTO cr_sl (id, req, cid, cand, sub, alias, st, ver, anon, data, intv, dec, by_uid, at, u) VALUES (?,?,?,?,?,?,'draft',0,1,?,'[]','{}',?,?,?)")->execute([$id, (string) $q['id'], (string) $q['cid'], $candId, $sid, $alias, json_encode(slSeed($q, $cand, $sub)), $u['id'], now(), now()]);
+            $p->prepare("INSERT INTO cr_sl (id, req, cid, cand, sub, alias, st, ver, anon, data, intv, `dec`, by_uid, at, u) VALUES (?,?,?,?,?,?,'draft',0,1,?,'[]','{}',?,?,?)")->execute([$id, (string) $q['id'], (string) $q['cid'], $candId, $sid, $alias, json_encode(slSeed($q, $cand, $sub)), $u['id'], now(), now()]);
             crEv('req', (string) $q['id'], $u, 'staff', 'note', $alias . ' (' . ($cand ? (string) ($cand->n ?? '') : (string) ($sub->cn ?? '')) . ') added to the shortlist.', false);
             ok(['id' => $id, 'alias' => $alias]);
 

@@ -1962,6 +1962,37 @@ function resumeLocation(array $lines): string
 }
 
 /* ---------- HTTP ---------- */
+/** v83: '' when a job source address may be fetched; otherwise why not. Public internet only: http(s), no user:password,
+ *  a name that resolves, no loopback/private/link-local/reserved address (also not IPv4 hidden in IPv6: ::ffff:, ::a.b.c.d,
+ *  64:ff9b::, 2002::). Feeds are typed by an administrator - also a company workspace's - and must never reach StratEdge's
+ *  own network or a cloud metadata service. $pin gets "host:port:ip" for CURLOPT_RESOLVE, so the address checked is the
+ *  address connected to (no DNS rebinding between the check and the call). */
+function jhttpUrlProblem(string $url, ?string &$pin = null): string
+{
+    $pin = null;
+    $p = parse_url($url);
+    $scheme = strtolower((string) ($p['scheme'] ?? ''));
+    $host = strtolower(trim((string) ($p['host'] ?? ''), '[]'));
+    if ($host === '' || !in_array($scheme, ['http', 'https'], true) || isset($p['user']) || isset($p['pass'])) {
+        return 'Use a full web address starting with https:// or http://';
+    }
+    $literal = (bool) filter_var($host, FILTER_VALIDATE_IP);
+    $ips = $literal ? [$host] : (gethostbynamel($host) ?: []);
+    if (!$ips) {
+        return 'The name ' . $host . ' could not be found.';
+    }
+    foreach ($ips as $ip) {
+        $bin = (string) @inet_pton($ip);
+        $v4in6 = strlen($bin) === 16 && (substr($bin, 0, 10) === str_repeat("\0", 10) || substr($bin, 0, 4) === "\0\x64\xff\x9b" || substr($bin, 0, 2) === "\x20\x02");
+        if ($v4in6 || !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return 'That address points inside a private network, which the portal does not call.';
+        }
+    }
+    if (!$literal) {
+        $pin = $host . ':' . (int) ($p['port'] ?? ($scheme === 'https' ? 443 : 80)) . ':' . $ips[0];
+    }
+    return '';
+}
 function jhttp(
     string $method,
     string $url,
@@ -1979,36 +2010,70 @@ function jhttp(
         'Mozilla/5.0 (compatible; StratEdgeJobs/1.0; +' .
         (string) (cfg('site_url') ?: 'https://stratedgeitconsulting.com') .
         ')';
+    $cap = 8 * 1048576; // v83: the most of an answer read (a feed is never this big)
     if (function_exists('curl_init')) {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 3,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 7,
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_ENCODING => '',
-            CURLOPT_HTTPHEADER => array_merge(
-                ['Accept: application/json, application/xml;q=0.9, */*;q=0.5'],
-                $headers,
-            ),
-        ]);
-        if (!$hasUa) {
-            curl_setopt($ch, CURLOPT_USERAGENT, $ua);
+        // v83: redirects are followed here, not by curl, so every hop is checked (and pinned) like the first address
+        for ($hop = 0; ; $hop++) {
+            $why = jhttpUrlProblem($url, $pin);
+            if ($why !== '') {
+                return ['status' => 0, 'body' => '', 'error' => $why];
+            }
+            $buf = '';
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                CURLOPT_RESOLVE => $pin ? [$pin] : [],
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => 7,
+                CURLOPT_CUSTOMREQUEST => $method,
+                CURLOPT_ENCODING => '',
+                CURLOPT_HTTPHEADER => array_merge(
+                    ['Accept: application/json, application/xml;q=0.9, */*;q=0.5'],
+                    $headers,
+                ),
+                CURLOPT_WRITEFUNCTION => function ($c, $chunk) use (&$buf, $cap) {
+                    if (strlen($buf) > $cap) {
+                        return 0;
+                    }
+                    $buf .= $chunk;
+                    return strlen($chunk);
+                },
+            ]);
+            if (!$hasUa) {
+                curl_setopt($ch, CURLOPT_USERAGENT, $ua);
+            }
+            if ($body !== null) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            }
+            $raw = curl_exec($ch);
+            $st = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $loc = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+            $cut = strlen($buf) > $cap;
+            $err = curl_errno($ch) && !$cut ? (string) curl_error($ch) : '';
+            curl_close($ch);
+            if ($st >= 300 && $st < 400 && $loc !== '' && $hop < 3) {
+                if (strtolower((string) parse_url($loc, PHP_URL_HOST)) !== strtolower((string) parse_url($url, PHP_URL_HOST))) {
+                    // another host: keys and tokens stay with the service they were meant for (as curl did)
+                    $headers = array_values(array_filter($headers, fn($h) => stripos($h, 'user-agent:') === 0 || stripos($h, 'accept') === 0));
+                }
+                if (in_array($st, [301, 302, 303], true) && $method !== 'HEAD') {
+                    $method = 'GET';
+                    $body = null;
+                }
+                $url = $loc;
+                continue;
+            }
+            return [
+                'status' => $raw === false && !$cut ? 0 : $st,
+                'body' => $raw === false && !$cut ? '' : $buf,
+                'error' => $err,
+            ];
         }
-        if ($body !== null) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        }
-        $raw = curl_exec($ch);
-        $st = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $err = (string) curl_error($ch);
-        curl_close($ch);
-        return [
-            'status' => $raw === false ? 0 : $st,
-            'body' => $raw === false ? '' : (string) $raw,
-            'error' => $err,
-        ];
+    }
+    $why = jhttpUrlProblem($url); // v83: same address check without curl; redirects are not followed (no way to re-check them)
+    if ($why !== '') {
+        return ['status' => 0, 'body' => '', 'error' => $why];
     }
     $ctx = stream_context_create([
         'http' => [
@@ -2024,10 +2089,10 @@ function jhttp(
             'content' => $body ?? '',
             'timeout' => $timeout,
             'ignore_errors' => true,
-            'follow_location' => 1,
+            'follow_location' => 0,
         ],
     ]);
-    $raw = @file_get_contents($url, false, $ctx);
+    $raw = @file_get_contents($url, false, $ctx, 0, $cap);
     $st = 0;
     foreach ((array) ($http_response_header ?? []) as $h) {
         if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m)) {
@@ -2914,7 +2979,11 @@ function jobNormalize(string $src, array $r): ?array
         'salary' => $sal,
         'url' => mb_substr($url, 0, 1000),
         'boards' => array_values(
-            array_filter((array) ($r['also'] ?? []), fn($a) => !empty($a['p']) && !empty($a['u'])),
+            // v83: board links become href in the job lists, so only http(s) addresses are kept (like the main url)
+            array_filter(
+                (array) ($r['also'] ?? []),
+                fn($a) => !empty($a['p']) && !empty($a['u']) && preg_match('#^https?://#i', (string) $a['u']),
+            ),
         ),
         'summary' => mb_substr($desc, 0, 320),
         'description' => $desc,
@@ -4146,10 +4215,14 @@ function jobOut(array $r, ?array $m = null, bool $withDesc = false): array
         'portal' => $r['pub'],
         'source' => $r['src'],
         'source_name' => jobSourceName((string) $r['src']),
+        // v83: rows stored before the scheme check are cleaned on the way out too
         'also' => array_values(
-            array_map(
-                fn($b) => ['portal' => (string) $b['p'], 'url' => (string) $b['u']],
-                jdec($r['boards']),
+            array_filter(
+                array_map(
+                    fn($b) => ['portal' => (string) ($b['p'] ?? ''), 'url' => (string) ($b['u'] ?? '')],
+                    jdec($r['boards']),
+                ),
+                fn($a) => preg_match('#^https?://#i', $a['url']) === 1,
             ),
         ),
         'summary' => $r['summary'],
@@ -4201,7 +4274,7 @@ function jobPersonDomains(string $uid, array $p): ?array
     if ((string) $p['resume_text'] === '') {
         return null;
     }
-    require_once __DIR__ . '/domains.php';
+    require_once __DIR__ . '/talent.php'; // v83: domRecognize() needs tsNorm(), which lives in talent.php (it loads domains.php)
     $prof = docGet('u/' . $uid);
     $cur = $prof && isset($prof->dom) ? json_decode(json_encode($prof->dom), true) : null;
     if ($cur && (int) ($cur['at'] ?? 0) >= (int) $p['resume_at']) {
@@ -4723,6 +4796,26 @@ function jobApply(array $u, array $b): array
     $mailed = false;
     if ($careersId !== '') {
         // apply to a StratEdge role: straight into the ATS with this resume
+        // v83: one application per person and role in 30 days, shared with the public careers form (ats/x/applied):
+        // applying again adds this resume to the first application, without a second candidate, row or team email
+        require_once __DIR__ . '/ats.php';
+        $dupKey = substr(hash('sha256', strtolower(trim((string) $u['email'])) . '|' . $careersId), 0, 40);
+        $prev = docGet('ats/x/applied/' . $dupKey);
+        $prevC = $prev && (int) ($prev->at ?? 0) > $now - 30 * 86400000 && preg_match('/^[a-f0-9]{12}$/', (string) ($prev->aid ?? '')) ? docGet('ats/' . $prev->aid) : null;
+        if ($prevC) {
+            $aid = (string) $prev->aid;
+            $fid = rid(16);
+            $dir = cfg('files_dir');
+            @copy($file, "$dir/$fid");
+            fileSealPath("$dir/$fid");
+            docSet("ats/$aid/f/$fid", (object) ['n' => $res['name'], 'ty' => MIME[$ext] ?? 'application/octet-stream', 'sz' => filePlainSize("$dir/$fid"), 'at' => $now, 'c' => 'resume']);
+            $prevC->rid = $fid;
+            $prevC->rn = $res['name'];
+            atsLog($prevC, (string) $u['name'], 'Applied again from the consultant portal with resume "' . $res['label'] . '"' . ($note !== '' ? '. Note: ' . mb_substr($note, 0, 200) : ''));
+            $prevC->u = $now;
+            docSet('ats/' . $aid, $prevC);
+            return ['ok' => true, 'how' => 'careers', 'again' => true, 'to' => '', 'mailed' => false, 'team' => 0, 'resume' => (string) $res['label']];
+        }
         $aid = rid(6);
         $fid = rid(16);
         $dir = cfg('files_dir');
@@ -4769,6 +4862,7 @@ function jobApply(array $u, array $b): array
                 ],
             ],
         );
+        docSet('ats/x/applied/' . $dupKey, (object) ['aid' => $aid, 'at' => $now]); // v83: found by a second application
         $how = 'careers';
         foreach ($team as $i => $e) {
             sendMail(
@@ -5187,6 +5281,7 @@ function jobsAdmin(string $method, array $b): void
             if (!is_file($file)) {
                 fail(404, 'not_found', 'That resume file is no longer stored.');
             }
+            guardDlp($me, 'file', (string) $r['name']); // v83: counted by the data-theft guard (and refused when paused), like other files
             $ext = strtolower(pathinfo((string) $r['name'], PATHINFO_EXTENSION));
             header('Content-Type: ' . (MIME[$ext] ?? 'application/octet-stream'));
             header(
@@ -5429,6 +5524,10 @@ function jobsAdmin(string $method, array $b): void
             $url = str($b, 'url', 500);
             if ($name === '' || !preg_match('#^https?://\S+$#i', $url)) {
                 fail(400, 'bad_request', 'Give the feed a name and a full web address (https://...).');
+            }
+            $why = jhttpUrlProblem(str_replace(['{keywords}', '{location}'], 'x', $url)); // v83: public addresses only
+            if ($why !== '') {
+                fail(400, 'bad_request', $why);
             }
             $found = false;
             foreach ($set['feeds'] as &$f) {
@@ -5695,6 +5794,14 @@ function jobsAdmin(string $method, array $b): void
             }
             $id = 'g' . $jid;
             $cur = docGet("org/site/jobs/$id");
+            // v83: a posting that became an ATS requisition is changed by those with ATS access, and only while it is open there
+            $ij = $cur ? docGet("ats/x/jobs/$id") : null;
+            if ($ij && !can('ats/x', 'w')) {
+                fail(403, 'forbidden', 'This job is a requisition in the ATS; change it under Candidates (ATS).');
+            }
+            if ($ij && in_array((string) ($ij->status ?? 'open'), ['draft', 'closed', 'filled'], true)) {
+                fail(409, 'conflict', 'This requisition is ' . (string) $ij->status . ' in the ATS; open it again there first.');
+            }
             $m = jobSources()[$j['src']] ?? null;
             $md = $j['remote'] === 'Remote' ? 'Remote' : ($j['remote'] === 'Hybrid' ? 'Hybrid' : 'Onsite');
             $ty = in_array($j['job_type'], JOB_TYPES, true)
@@ -5703,32 +5810,37 @@ function jobsAdmin(string $method, array $b): void
                     : $j['job_type'])
                 : 'C2C';
             $desc = trim((string) $j['description']) ?: trim((string) $j['summary']);
-            $doc = (object) [
+            $fresh = [
                 'ti' => mb_substr((string) $j['title'], 0, 160),
                 'loc' => mb_substr((string) $j['location'], 0, 120),
                 'ty' => $ty,
                 'md' => $md,
                 'sk' => implode(', ', array_slice(jdec($j['skills']), 0, 8)),
                 'd' => mb_substr($desc, 0, 4000),
-                'open' => true,
-                'at' => $cur->at ?? now(),
-                'by' => $me['id'],
-                'src' => (object) [
-                    'portal' => $j['pub'],
-                    'url' => $j['url'],
-                    'company' => $j['company'],
-                    'job_id' => $jid,
-                    'source' => $j['src'],
-                    'credit' => $m ? !empty($m['credit']) : false,
-                ],
             ];
-            if ($cur) {
-                foreach (['ti', 'loc', 'ty', 'md', 'sk', 'd', 'open'] as $k) {
-                    if (isset($cur->$k) && ($b['overwrite'] ?? false) !== true) {
-                        $doc->$k = $cur->$k;
-                    }
-                };
+            // v83: merged onto the posting that is there, so its code, questions, boards and ATS fields survive; the job's
+            // own text is refreshed only with overwrite, and never on a requisition (that is edited in the ATS)
+            $doc = $cur ? clone $cur : new stdClass();
+            foreach ($fresh as $k => $v) {
+                if (!isset($doc->$k) || (($b['overwrite'] ?? false) === true && !$ij)) {
+                    $doc->$k = $v;
+                }
             }
+            if ($cur && ($cur->open ?? true) === false) {
+                $doc->u = now(); // listed again: a fresh date for the job boards, as the ATS does
+                unset($doc->closedAt);
+            }
+            $doc->open = true;
+            $doc->at = $cur->at ?? now();
+            $doc->by = (string) ($cur->by ?? $me['id']);
+            $doc->src = (object) [
+                'portal' => $j['pub'],
+                'url' => $j['url'],
+                'company' => $j['company'],
+                'job_id' => $jid,
+                'source' => $j['src'],
+                'credit' => $m ? !empty($m['credit']) : false,
+            ];
             docSet("org/site/jobs/$id", $doc);
             jdb()
                 ->prepare('UPDATE job_posts SET published = 1 WHERE id = ?')
@@ -5736,8 +5848,15 @@ function jobsAdmin(string $method, array $b): void
             ok(['id' => $id, 'job' => $doc]);
         case 'unpublish':
             $jid = (int) ($b['job_id'] ?? 0);
-            if (docGet("org/site/jobs/g$jid")) {
-                docDelete("org/site/jobs/g$jid");
+            // v83: closed, not deleted: the posting may be an ATS requisition with candidates, code and questions
+            $p = docGet("org/site/jobs/g$jid");
+            if ($p && docGet("ats/x/jobs/g$jid") && !can('ats/x', 'w')) {
+                fail(403, 'forbidden', 'This job is a requisition in the ATS; change it under Candidates (ATS).');
+            }
+            if ($p && ($p->open ?? true) !== false) {
+                $p->open = false;
+                $p->closedAt = now();
+                docSet("org/site/jobs/g$jid", $p);
             }
             jdb()
                 ->prepare('UPDATE job_posts SET published = 0 WHERE id = ?')

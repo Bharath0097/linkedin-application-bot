@@ -143,7 +143,8 @@ function exProgOut(string $id, array $p): array
 }
 function exProg(string $id): ?array
 {
-    if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $id)) {
+    // v83: up to 128 characters, the same rule as ex_prog_save (ids made from long titles were listed but unusable)
+    if (!preg_match('/^[A-Za-z0-9_\-]{1,128}$/', $id)) {
         return null;
     }
     $d = docGet("learn/x/certp/$id");
@@ -334,7 +335,8 @@ function exAiWrite(string $topic, int $n, int $lvl): array
 function exStaff(bool $write = false): array
 {
     $u = requireUser();
-    if (userLevel($u) < 2 && !in_array('hr', accessOf($u)['portals'] ?? [], true) && empty(grantsOf($u['id'])['hr'])) {
+    // v83: HR and administrators (and the "HR pages" grant) only; userLevel() >= 2 also let in acct and outside bookkeepers
+    if (!hasRole($u, 'admin') && !hasRole($u, 'hr') && empty(grantsOf($u['id'])['hr'])) {
         fail(403, 'forbidden', 'Certifications and tests are run by HR and administrators.');
     }
     return $u;
@@ -667,7 +669,9 @@ function exRoute(string $r, array $b): never
             if ($t === '') {
                 fail(400, 'invalid_argument', 'Name the certification.');
             }
-            $id = preg_match('/^[A-Za-z0-9_\-]{1,40}$/', (string) ($x['id'] ?? '')) ? (string) $x['id'] : (trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($t)), '-') ?: rid(4));
+            // v83: a new id is the title slug cut to 100 characters, so exProg() and ex_prog_delete accept it
+            $slug = rtrim(substr(trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($t)), '-'), 0, 100), '-');
+            $id = preg_match('/^[A-Za-z0-9_\-]{1,128}$/', (string) ($x['id'] ?? '')) ? (string) $x['id'] : ($slug !== '' ? $slug : rid(4));
             if (empty($x['id']) && docGet("learn/x/certp/$id")) {
                 $id .= '-' . rid(2);
             }
@@ -690,9 +694,10 @@ function exRoute(string $r, array $b): never
         case 'ex_prog_delete': {
             exStaff(true);
             $id = (string) ($b['id'] ?? '');
-            if (preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $id)) {
-                docDelete("learn/x/certp/$id");
+            if (!exProg($id)) {
+                fail(404, 'not_found', 'That certification is not there.');
             }
+            docDelete("learn/x/certp/$id");
             ok(['ok' => true]);
         }
         case 'ex_cfg_save': {

@@ -482,7 +482,13 @@ function cpPrepareWrite(array $u, string $tool, array $args): array
             $card['args'] = ['to' => $to, 'subject' => $subject, 'body' => $body];
             $card['title'] = 'Send an email';
             $card['summary'] = 'To ' . $to . ' · ' . $subject;
-            $card['effect'] = 'Sends this email now, from ' . ($u['email'] ?? 'your address') . '.';
+            $via = '';
+            if (!mailCanUse($u)) {
+                require_once __DIR__ . '/sso.php';
+                $mb = mymailAcct((string) $u['id']);
+                $via = $mb ? (string) $mb['email'] : '';
+            }
+            $card['effect'] = $via !== '' ? 'Sends this email now, from your own mailbox ' . $via . '.' : 'Sends this email now, from the company address with replies to ' . ($u['email'] ?? 'you') . '.';
             $card['confirm'] = 'Send email';
             return [true, $card, ''];
         }
@@ -662,6 +668,28 @@ function cpExecute(array $u, string $tool, array $a): array
             $body = (string) ($a['body'] ?? '');
             $sig = sigOf((string) $u['id']);
             $full = $body . ($sig !== '' ? "\n\n" . $sig : '');
+            if (!mailCanUse($u)) {
+                // v83: without Email, inbox & campaigns the assistant sends only through the person's own connected mailbox
+                // (My email), never through the company sending connection
+                require_once __DIR__ . '/sso.php';
+                $mb = mymailAcct((string) $u['id']);
+                if (!$mb) {
+                    fail(403, 'forbidden', 'Sending email needs the Email feature, or your own mailbox connected under My email.');
+                }
+                $fromName = $mb['name'] !== '' ? $mb['name'] : (string) $u['name'];
+                [$ok, $err] = mymailSendRaw($mb, mymailMime($fromName, (string) $mb['email'], [$to], [], [], $subject, $full), [$to]);
+                // kept in My email > Sent, like any message written there
+                mymailDb()->prepare('INSERT INTO mail_user_msgs (id, uid, dir, at, from_email, from_name, to_email, cc, subject, text, snippet, msgid, thread, label, seen, starred, gid, err) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([
+                    rid(12), $u['id'], 'out', now(), $mb['email'], $fromName, $to, '', mb_substr($subject, 0, 500),
+                    $full, mb_substr(preg_replace('/\s+/', ' ', $full) ?? '', 0, 300), '', '', '', 1, 0, '', $ok ? '' : $err,
+                ]);
+                mymailBook((string) $u['id'], $to, '', now());
+                audit('ai', 'StratEdge AI sent an email', $to, ['subject' => mb_substr($subject, 0, 120), 'ok' => $ok, 'via' => 'mymail'], $u);
+                if (!$ok) {
+                    fail(502, 'unavailable', 'Your connected mailbox (' . $mb['email'] . ') refused the message' . ($err !== '' ? ': ' . rtrim($err, '. ') : '') . '. Reconnect it under My email.');
+                }
+                return ['done' => 'Email sent to ' . $to . ' from ' . $mb['email'] . '.'];
+            }
             $ok = sendMail($to, '', $subject, $full, emailHtml($subject, preg_split('/\n{2,}/', $full) ?: [$full]), [], (string) $u['email']);
             audit('ai', 'StratEdge AI sent an email', $to, ['subject' => mb_substr($subject, 0, 120), 'ok' => $ok], $u);
             if (!$ok) {

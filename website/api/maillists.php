@@ -350,6 +350,35 @@ function dlLoopWhy(array $L, array $m): string
     return '';
 }
 /**
+ * v83: whether the server that received the message vouches for its From address: the topmost Authentication-Results
+ * (added by the list's mail server: Gmail, Microsoft 365, most cPanel servers) reports dmarc=pass for the From's own
+ * domain. A From header proves nothing by itself, so mail without this waits for an administrator like a stranger's.
+ */
+function dlSenderVouched(array $h, string $from): bool
+{
+    $at = strrpos($from, '@');
+    $dom = $at === false ? '' : rtrim(strtolower(substr($from, $at + 1)), '.');
+    $ar = strtolower((string) ($h['authentication-results'][0] ?? ''));
+    if ($dom === '' || $ar === '') {
+        return false;
+    }
+    // quoted strings and (comments) can carry the sender's own text (a quoted envelope address with ';' in it): drop them
+    $ar = (string) preg_replace('/"(?:[^"\\\\]|\\\\.)*"/', ' ', $ar);
+    for ($i = 0; $i < 5 && str_contains($ar, '('); $i++) {
+        $ar = (string) preg_replace('/\([^()]*\)/', ' ', $ar);
+    }
+    if (preg_match('/[()"]/', $ar)) {
+        return false;
+    }
+    // the first part is the checking server's name; then one result per method ("dmarc=pass ... header.from=domain")
+    foreach (array_slice(explode(';', $ar), 1) as $part) {
+        if (preg_match('/^\s*dmarc\s*=\s*([a-z]+)/', $part, $mm)) {
+            return $mm[1] === 'pass' && preg_match('/\bheader\.from\s*=\s*"?([a-z0-9.-]+)/', $part, $hf) === 1 && rtrim($hf[1], '.') === $dom;
+        }
+    }
+    return false;
+}
+/**
  * One message that reached a list's address. $m: from [email, name], subject, text, html, files [[name, type, data]],
  * headers, msgid. Relayed, held for an administrator, or dropped; returns ['st', 'why', 'id', 'n'].
  */
@@ -413,15 +442,23 @@ function dlInbound(array $L, array $m): array
         $text = '[Removed by the security check: ' . implode('; ', $removed) . ".]\n\n" . $text;
     }
     // who wrote: a portal account (they may send to this list), a member, or someone else
+    // v83: the From address counts only when the receiving mail server confirmed it (DMARC pass); a forged From of a
+    // staff address or a member is held like anyone else's, and is not recorded under that person's name
     $poster = null;
+    $claimed = null;
+    $vouched = dlSenderVouched((array) ($m['headers'] ?? []), $from);
     $q = db()->prepare("SELECT id, email, name, role, status, access FROM users WHERE email = ? AND status = 'active'");
     $q->execute([$from]);
     if ($u = $q->fetch()) {
-        $poster = $u;
+        if ($vouched) {
+            $poster = $u;
+        } else {
+            $claimed = $u;
+        }
     }
     $mayPost = $poster && dlMaySend($L, $poster);
     $recips = dlRecipients($L);
-    if (!$mayPost && $L['post'] === 'members' && isset($recips[$from])) {
+    if (!$mayPost && $vouched && $L['post'] === 'members' && isset($recips[$from])) {
         $mayPost = true;
     }
     if (!$mayPost && $L['post'] === 'anyone') {
@@ -448,7 +485,10 @@ function dlInbound(array $L, array $m): array
         return $r;
     }
     if (!$mayPost) {
-        $why = $poster ? $poster['name'] . ' is not among the people who may send to this list' : $from . ' may not write to this list';
+        $why = $poster ? $poster['name'] . ' is not among the people who may send to this list'
+            : ($claimed || ($L['post'] === 'members' && isset($recips[$from]))
+                ? 'the mail server did not confirm it really came from ' . $from . ' (no DMARC pass)'
+                : $from . ' may not write to this list');
         $r = $save('held', $why, $keep(), '', 0, $poster);
         dlTellHeld($L, $r['id'], $from, $subject, $why);
         return $r;
@@ -971,7 +1011,9 @@ function dlRoute(string $r, array $b): never
             }
             $im = $L['imap'];
             $pass = (string) ($b['pass'] ?? '');
-            $im = ['on' => $on, 'host' => $host, 'port' => $port, 'sec' => $sec, 'user' => $user, 'folder' => $folder, 'pass' => $pass !== '' ? secSeal($pass) : (string) ($im['pass'] ?? '')] + $im;
+            // v83: the saved password only ever goes back to the server and sign-in it was given for; a new server, port, security or sign-in needs it again
+            $same = (string) ($im['host'] ?? '') === $host && (int) ($im['port'] ?? 993) === $port && (string) ($im['sec'] ?? 'ssl') === $sec && strtolower((string) ($im['user'] ?? '')) === strtolower($user);
+            $im = ['on' => $on, 'host' => $host, 'port' => $port, 'sec' => $sec, 'user' => $user, 'folder' => $folder, 'pass' => $pass !== '' ? secSeal($pass) : ($same ? (string) ($im['pass'] ?? '') : '')] + $im;
             if ($on && (string) $im['pass'] === '') {
                 fail(400, 'invalid_argument', 'Give the mailbox\'s password (an app password for Gmail or Microsoft 365).');
             }

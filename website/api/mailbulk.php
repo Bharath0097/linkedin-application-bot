@@ -311,7 +311,20 @@ function mailRoom(): void
 function mailRawMessage(array $c, array $m): array
 {
     $to = strtolower(trim((string) ($m['to'] ?? '')));
-    $cc = (string) ($m['cc'] ?? '');
+    // v83: as mailDeliver: Cc and Reply-To carry only valid addresses, the same in the header and the envelope (bulk
+    // sends reach this without passing mailDeliver)
+    $ccList = [];
+    foreach (explode(',', str_replace(["\r", "\n"], ',', (string) ($m['cc'] ?? ''))) as $x) {
+        $x = trim($x);
+        if ($x !== '' && filter_var($x, FILTER_VALIDATE_EMAIL) && strcasecmp($x, $to) !== 0 && !in_array($x, $ccList, true)) {
+            $ccList[] = $x;
+        }
+    }
+    $cc = implode(', ', $ccList);
+    $reply = trim(str_replace(["\r", "\n"], ' ', (string) ($m['reply'] ?? '')));
+    if ($reply !== '' && !filter_var($reply, FILTER_VALIDATE_EMAIL) && !(preg_match('/^[^<>]*<([^<>\s]+)>$/', $reply, $rm) && filter_var($rm[1], FILTER_VALIDATE_EMAIL))) {
+        $reply = '';
+    }
     [$headers, $body] = buildMime(
         (string) (($m['from_name'] ?? '') ?: $c['from_name']),
         (string) $c['from'],
@@ -321,7 +334,7 @@ function mailRawMessage(array $c, array $m): array
         (string) ($m['text'] ?? ''),
         (string) ($m['html'] ?? ''),
         $m['atts'] ?? [],
-        (string) ($m['reply'] ?? ''),
+        $reply,
         $cc,
         $m['headers'] ?? [],
     );

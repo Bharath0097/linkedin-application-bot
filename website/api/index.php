@@ -357,6 +357,11 @@ switch ($r) {
         $s = $p->prepare('SELECT id FROM users WHERE email = ?');
         $s->execute([$email]);
         if ($s->fetch()) {
+            // v83: sign-up signs a new address in at once, so "already has an account" cannot be hidden; a network
+            // gets only a few such answers an hour, which keeps checking addresses one by one slow
+            if (throttleHit('regdup:' . clientIp(), 5, 3600)) {
+                fail(429, 'rate_limited', 'Too many sign-ups from this network. Try again later.');
+            }
             fail(409, 'invalid_argument', 'An account with that email already exists. Log in instead.');
         }
         $first = !$p->query('SELECT id FROM users LIMIT 1')->fetch();
@@ -722,6 +727,22 @@ switch ($r) {
                     if (property_exists($prevPl, $k)) {
                         $data->$k = $prevPl->$k;
                     }
+                }
+            }
+        }
+        // v83: a person's documents (u/{id}/f/{fid}) are created by uploads only, and HR's marks on them (verified or
+        // sent back, replaced, expiry, approval source) are set by HR and the server, never by the person
+        if (preg_match('#^u/[^/]+/f/[^/]+$#', $path) && userLevel($cu) < 2) {
+            $prevF = docGet($path);
+            if (!$prevF) {
+                fail(403, 'invalid_argument', 'Upload the file instead.');
+            }
+            foreach (['vf', 'rep', 'exp', 'src', 'hrq'] as $k) {
+                // an update leaves the stored value as it is (the merge below runs on the locked, current record)
+                if ($r === 'set' && property_exists($prevF, $k)) {
+                    $data->$k = $prevF->$k;
+                } else {
+                    unset($data->$k);
                 }
             }
         }

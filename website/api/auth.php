@@ -390,7 +390,7 @@ function mfaEmailSend(array $u): void
     $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     secdb()->prepare('INSERT INTO auth_tokens (h, kind, uid, exp, used, at, data) VALUES (?,?,?,?,?,?,?)')
         ->execute([secMac('mfa_email', $uid . '|' . $code), 'mfa_email', $uid, now() + 600000, 0, now(), '{}']);
-    authMail($u, 'Your StratEdge sign-in code: ' . $code, ['Hi ' . authFirst($u) . ',', 'Your sign-in code is ' . $code . '. It works for 10 minutes.', 'If you did not try to sign in, someone has your password: change it now.']);
+    authMail($u, 'Your StratEdge sign-in code', ['Hi ' . authFirst($u) . ',', 'Your sign-in code is ' . $code . '. It works for 10 minutes.', 'If you did not try to sign in, someone has your password: change it now.']);
 }
 function mfaEmailCheck(string $uid, string $code): bool
 {
@@ -422,7 +422,7 @@ function reauthEmailSend(array $u): void
     $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     secdb()->prepare('INSERT INTO auth_tokens (h, kind, uid, exp, used, at, data) VALUES (?,?,?,?,?,?,?)')
         ->execute([secMac('reauth_email', $uid . '|' . $code), 'reauth_email', $uid, now() + 600000, 0, now(), '{}']);
-    authMail($u, 'Your StratEdge confirmation code: ' . $code, ['Hi ' . authFirst($u) . ',', 'Your code to confirm a change in the portal is ' . $code . '. It works for 10 minutes.', 'If you did not ask for it, someone may be using your signed-in session: sign out everywhere under Sign-in & security and change your password.']);
+    authMail($u, 'Your StratEdge confirmation code', ['Hi ' . authFirst($u) . ',', 'Your code to confirm a change in the portal is ' . $code . '. It works for 10 minutes.', 'If you did not ask for it, someone may be using your signed-in session: sign out everywhere under Sign-in & security and change your password.']);
 }
 function reauthEmailCheck(string $uid, string $code): bool
 {
@@ -467,7 +467,7 @@ function mfaHelpSend(array $u): void
     $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     secdb()->prepare('INSERT INTO auth_tokens (h, kind, uid, exp, used, at, data) VALUES (?,?,?,?,?,?,?)')
         ->execute([secMac('mfa_help', $uid . '|' . $code), 'mfa_help', $uid, now() + 600000, 0, now(), '{}']);
-    authMail($u, 'Your code to ask for a two-step sign-in reset: ' . $code, ['Hi ' . authFirst($u) . ',', 'Someone signed in with your password and asked to reset your two-step sign-in. If that was you, enter ' . $code . ' on the sign-in page (it works for 10 minutes). An administrator will then contact you to confirm it is you before anything changes.', 'If it was not you, someone knows your password: change it now with "Forgot your password?" on the login page, and tell us by replying to this email.']);
+    authMail($u, 'Your code to ask for a two-step sign-in reset', ['Hi ' . authFirst($u) . ',', 'Someone signed in with your password and asked to reset your two-step sign-in. If that was you, enter ' . $code . ' on the sign-in page (it works for 10 minutes). An administrator will then contact you to confirm it is you before anything changes.', 'If it was not you, someone knows your password: change it now with "Forgot your password?" on the login page, and tell us by replying to this email.']);
 }
 function mfaHelpCheck(string $uid, string $code): bool
 {
@@ -939,8 +939,13 @@ function authRoute(string $r, array $b): never
             if (empty($c['totp'])) {
                 fail(400, 'invalid_argument', 'Authenticator apps are switched off for this site.');
             }
-            if (!mfaPending()) {
+            // v83: a pending sign-in may set up an authenticator only when it is an enrolment; a person who already has a
+            // second step must finish signing in first (as for passkeys), or a password alone could replace it
+            $p = mfaPending();
+            if (!$p) {
                 requireRecentAuth();
+            } elseif ($p['need'] !== 'enroll') {
+                fail(400, 'invalid_argument', 'Finish signing in first.');
             }
             $secret = b32enc(random_bytes(20));
             $_SESSION['totp_new'] = ['s' => $secret, 'uid' => (string) $u['id'], 'at' => now()];
@@ -949,6 +954,10 @@ function authRoute(string $r, array $b): never
         case 'mfa_totp_confirm':
             $p = mfaPending();
             $u = mfaPendingUser() ?? requireUser();
+            // v83: never replace the authenticator of a person who is still in the middle of signing in (see mfa_totp_start)
+            if ($p && $p['need'] !== 'enroll') {
+                fail(400, 'invalid_argument', 'Finish signing in first.');
+            }
             $n = $_SESSION['totp_new'] ?? null;
             if (!is_array($n) || $n['uid'] !== (string) $u['id'] || now() - (int) $n['at'] > 900000) {
                 fail(400, 'invalid_argument', 'Start the set-up again (the QR code expired).');

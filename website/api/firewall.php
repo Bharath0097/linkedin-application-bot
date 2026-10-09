@@ -113,8 +113,9 @@ function fwSaveSettings(array $in): array
     $text = fn($k, $max) => mb_substr(trim((string) ($in[$k] ?? $cur[$k])), 0, $max);
     $new = [
         'enabled' => !empty($in['enabled']),
-        'api_per_min' => $num('api_per_min', 30, 5000),
-        'poll_per_min' => $num('poll_per_min', 30, 5000),
+        // v83: never below the floor fwGuard enforces for anonymous traffic, so the saved setting is the one in force
+        'api_per_min' => $num('api_per_min', 600, 5000),
+        'poll_per_min' => $num('poll_per_min', 1200, 5000),
         'form_per_hour' => $num('form_per_hour', 1, 500),
         'strikes' => $num('strikes', 2, 100),
         'ban_min' => $num('ban_min', 5, 1440),
@@ -286,6 +287,7 @@ function fwGuard(string $route, string $method): void
     if (!empty($_SESSION['uid'])) {
         return;
     }
+    // the floor is also applied on save (v83); this covers settings saved before v83
     $c['api_per_min'] = max((int) $c['api_per_min'], 600);
     $c['poll_per_min'] = max((int) $c['poll_per_min'], 1200);
     $poll = $route === 'batch' || $route === 'jobs_tick' || $route === 'me';

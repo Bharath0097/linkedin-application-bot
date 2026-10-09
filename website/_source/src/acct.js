@@ -187,6 +187,8 @@ function ExpenseModal({ x, onClose }) {
       const id = x ? x.id : nid();
       const now = Date.now();
       const st = markPaid ? 'paid' : f.st;
+      // A bill set to Paid from the Status list is dated today too; one already paid keeps its date (bank match, claim)
+      const paidNow = st === 'paid' && (markPaid || !(x && x.st === 'paid' && x.paidOn));
       await (x ? dbMerge : dbSet)(`exp/${id}`, {
         v: f.v.trim(),
         cat: f.cat,
@@ -199,7 +201,8 @@ function ExpenseModal({ x, onClose }) {
         st,
         od: st === 'unpaid' && f.od ? 1 : 0,
         m: f.m,
-        ...(markPaid ? { paidAt: now, paidOn: dkey() } : {}),
+        ...(paidNow ? { paidAt: now, paidOn: dkey() } : {}),
+        ...(st !== 'paid' && x && (x.paidOn || x.paidAt) ? { paidAt: null, paidOn: null } : {}),
         at: x ? x.at : now,
         by: x ? x.by : P.uid,
         byn: x ? x.byn : P.prof ? P.prof.n : '',
@@ -1050,14 +1053,28 @@ function PayrollRuns() {
           u: now,
         });
         // the person's record moves on with the run: PTO balance after this period, garnishment totals paid so far
+        // v83: what each period added is kept per period (mks), so reopening an earlier run takes back exactly its share
+        // even after a later run was finalized, a period is never counted twice, and asOf/lastMk never move backwards
         const patch = {};
-        if (r.s.pto) patch.pto = { ...obj(r.m.r.pto), bal: r.s.pto.bal, asOf: cyc.to, lastMk: mk };
+        const cp = obj(r.m.r.pto);
+        if (r.s.pto && obj(cp.mks)[mk] == null)
+          patch.pto = {
+            ...cp,
+            bal: r.s.pto.bal,
+            asOf: cp.asOf && cp.asOf > cyc.to ? cp.asOf : cyc.to,
+            lastMk: cp.lastMk && cp.lastMk > mk ? cp.lastMk : mk,
+            mks: { ...obj(cp.mks), [mk]: r2(r.s.pto.bal - (+cp.bal || 0)) },
+          };
         if (arr(r.s.garn).length) {
           const paid = {};
           r.s.garn.forEach(g => {
             if (g.id) paid[g.id] = (paid[g.id] || 0) + g.v;
           });
-          patch.garn = arr(r.m.r.garn).map(g => (g && g.id && paid[g.id] ? { ...g, paid: r2((+g.paid || 0) + paid[g.id]), lastMk: mk } : g));
+          patch.garn = arr(r.m.r.garn).map(g =>
+            g && g.id && paid[g.id] && obj(g.mks)[mk] == null
+              ? { ...g, paid: r2((+g.paid || 0) + paid[g.id]), lastMk: g.lastMk && g.lastMk > mk ? g.lastMk : mk, mks: { ...obj(g.mks), [mk]: r2(paid[g.id]) } }
+              : g
+          );
         }
         if (Object.keys(patch).length) await dbMerge(`r/${r.m.id}`, patch);
       }
@@ -1099,14 +1116,21 @@ function PayrollRuns() {
         if (r.saved) {
           await dbDel(`pays/${r.m.id}/items/${mk}`);
           const patch = {};
+          // v83: take back what this period added (mks[mk]); records from before v83 only know their last period (lastMk)
           const cp = obj(r.m.r.pto);
-          if (r.saved.pto && cp.lastMk === mk) patch.pto = { ...cp, bal: Math.round((cp.bal - (+r.saved.pto.accrued || 0)) * 100) / 100, lastMk: '' };
-          if (arr(r.saved.garn).length) {
+          const pAdd = obj(cp.mks)[mk] != null ? +cp.mks[mk] : r.saved.pto && cp.lastMk === mk ? +r.saved.pto.accrued || 0 : null;
+          if (pAdd != null)
+            patch.pto = { ...cp, bal: Math.round(((+cp.bal || 0) - pAdd) * 100) / 100, lastMk: cp.lastMk === mk ? '' : cp.lastMk || '', mks: { ...obj(cp.mks), [mk]: null } };
+          if (arr(r.saved.garn).length || arr(r.m.r.garn).some(g => g && obj(g.mks)[mk] != null)) {
             const back = {};
-            r.saved.garn.forEach(g => {
+            arr(r.saved.garn).forEach(g => {
               if (g.id) back[g.id] = (back[g.id] || 0) + g.v;
             });
-            patch.garn = arr(r.m.r.garn).map(g => (g && g.id && back[g.id] && g.lastMk === mk ? { ...g, paid: r2(Math.max(0, (+g.paid || 0) - back[g.id])), lastMk: '' } : g));
+            patch.garn = arr(r.m.r.garn).map(g => {
+              if (!g || !g.id) return g;
+              const v = obj(g.mks)[mk] != null ? +g.mks[mk] : back[g.id] && g.lastMk === mk ? back[g.id] : 0;
+              return v ? { ...g, paid: r2(Math.max(0, (+g.paid || 0) - v)), lastMk: g.lastMk === mk ? '' : g.lastMk || '', mks: { ...obj(g.mks), [mk]: null } } : g;
+            });
           }
           if (Object.keys(patch).length) await dbMerge(`r/${r.m.id}`, patch);
         }
@@ -1124,41 +1148,63 @@ function PayrollRuns() {
     setBusy('');
   };
   const markPaid = async () => {
+    if (!rows) return; // still loading: wait for the paystubs before marking them
     const d = prompt('Pay date (YYYY-MM-DD)', dkey());
     if (!d) return;
     setBusy('paid');
     try {
       const now = Date.now();
-      for (const r of rows) await dbMerge(`pays/${r.m.id}/items/${mk}`, { st: 'paid', paidOn: d, u: now });
+      // only the paystubs finalized in this run; people added since (or skipped) get no empty "paid" stub
+      const inRun = rows.filter(r => r.saved);
+      const out = rows.filter(r => !r.saved);
+      for (const r of inRun) await dbMerge(`pays/${r.m.id}/items/${mk}`, { st: 'paid', paidOn: d, u: now });
       await dbMerge(`org/acct/runs/${mk}`, { st: 'paid', paidOn: d, u: now });
-      toast('Marked paid.');
+      toast(out.length ? `Marked paid. Not in this run: ${names(out)}. Reopen and finalize again to include them.` : 'Marked paid.');
     } catch (e) {
       toast(errText(e), true);
     }
     setBusy('');
   };
   const emailAll = async () => {
+    if (!rows) return;
     setBusy('mail');
     let n = 0;
-    try {
-      for (const r of rows) {
-        const stub = (await dbGet(`pays/${r.m.id}/items/${mk}`)) || r.s;
+    // only the finalized paystubs are emailed, and one failure no longer stops the people after it
+    const inRun = rows.filter(r => r.saved);
+    const out = rows.filter(r => !r.saved);
+    const failed = [];
+    let lastErr = null;
+    for (const r of inRun) {
+      try {
+        const stub = await dbGet(`pays/${r.m.id}/items/${mk}`);
+        if (!stub) {
+          out.push(r);
+          continue;
+        }
         const bytes = await buildPaystubPdf(stub, org);
         const fd = new FormData();
         fd.append('path', `pays/${r.m.id}/items/${mk}`);
         fd.append('file', new Blob([bytes], { type: 'application/pdf' }), `paystub-${mk}.pdf`);
         const x = await upload('pay_email', fd);
         if (x.mailed) n++;
+      } catch (e) {
+        failed.push(r);
+        lastErr = e;
       }
-      toast(
-        n === rows.length
-          ? `Paystubs emailed to ${n} ${n === 1 ? 'person' : 'people'}.`
-          : `${n} of ${rows.length} emailed; the Sent log on the email page shows why.`,
-        n !== rows.length
-      );
-    } catch (e) {
-      toast(errText(e), true);
     }
+    const total = inRun.length - out.filter(r => r.saved).length;
+    toast(
+      [
+        n === total && !failed.length
+          ? `Paystubs emailed to ${n} ${n === 1 ? 'person' : 'people'}.`
+          : `${n} of ${total} emailed; the Sent log on the email page shows why.`,
+        failed.length ? `Could not send for ${names(failed)}${lastErr ? ' (' + errText(lastErr) + ')' : ''}.` : '',
+        out.length ? `Not in this run: ${names(out)}.` : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      n !== total || failed.length > 0
+    );
     setBusy('');
   };
   const exp = async () => {
@@ -1478,6 +1524,8 @@ function AcctReports() {
   const runs = useCol('org/acct/runs');
   const recur = useCol('org/acct/recur');
   const { S: AS } = useAcctSettings();
+  const P = usePortal();
+  const ps = paySched(P.settings);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const coa = useCoa();
   const today = dkey();
@@ -1504,8 +1552,15 @@ function AcctReports() {
   exps.forEach(x => {
     byCat[x.cat] = (byCat[x.cat] || 0) + (+x.a || 0);
   });
+  // A run counts in the months its key names: twice-a-month (YYYY-MM-1/-2) and weekly (YYYY-MM-DD) keys by their month
+  const runIn = r => {
+    const m = String(r.mk || '').slice(0, 7);
+    return m >= f.a.slice(0, 7) && m <= f.b.slice(0, 7);
+  };
+  const runLabel = mk => (isHalfKey(mk) || isDayKey(mk) ? cycleRange(mk, ps).label : monthLabel(mk));
+  const runsIn = runs.docs.filter(r => (r.totals || {})[f.cur] && runIn(r));
   const payroll = runs.docs
-    .filter(r => r.mk >= f.a.slice(0, 7) && r.mk <= f.b.slice(0, 7))
+    .filter(runIn)
     .reduce(
       (a, r) => {
         const t = (r.totals || {})[f.cur];
@@ -1545,11 +1600,10 @@ function AcctReports() {
             : f.tab === 'ap'
               ? [['Vendor', 'Category', 'Due', 'Amount'], ...ap.map(x => [x.v, x.cat, x.due || '', x.a])]
               : [
-                  ['Month', 'People', 'Gross', 'Taxes withheld', 'Net', 'Cost to company'],
-                  ...runs.docs
-                    .filter(r => (r.totals || {})[f.cur])
+                  ['Period', 'People', 'Gross', 'Taxes withheld', 'Net', 'Cost to company'],
+                  ...runsIn
                     .map(r => [
-                      r.mk,
+                      runLabel(r.mk),
                       r.totals[f.cur].n,
                       r.totals[f.cur].gross,
                       r.totals[f.cur].tax,
@@ -1776,12 +1830,12 @@ function AcctReports() {
               </a>
             </div>
             ${
-              runs.docs.filter(r => (r.totals || {})[f.cur]).length
+              runsIn.length
                 ? html`<div className="tblwrap">
                     <table className="tbl">
                       <thead>
                         <tr>
-                          <th>Month</th>
+                          <th>Period</th>
                           <th className="r">People</th>
                           <th className="r">Gross</th>
                           <th className="r">Taxes withheld</th>
@@ -1791,14 +1845,14 @@ function AcctReports() {
                         </tr>
                       </thead>
                       <tbody>
-                        ${runs.docs
-                          .filter(r => (r.totals || {})[f.cur])
+                        ${runsIn
+                          .slice()
                           .sort((a, b) => b.mk.localeCompare(a.mk))
                           .map(
                             r =>
                               html`<tr key=${r.id}>
                                   <td>
-                                    ${monthLabel(r.mk)}
+                                    ${runLabel(r.mk)}
                                   </td>
                                   <td className="r num">
                                     ${r.totals[f.cur].n}

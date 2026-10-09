@@ -87,7 +87,11 @@ const SCOPES = [
     'org/site/ads' => [['hr', 'acct', 'manager', 'bench', 'grant:ads'], ['hr', 'grant:ads']],
     // v30: immigration dates and compliance tasks are HR's business only; courses, projects and the vault: HR writes, managers read
     'comp' => [['hr', 'grant:hr', 'grant:compliance'], ['hr', 'grant:hr', 'grant:compliance']],
-    'learn' => [['hr', 'grant:hr', 'manager', 'grant:learning'], ['hr', 'grant:hr', 'grant:learning']],
+    // v83: people's progress, attempts and certificates (learn/<uid>/...) are written only by the server (a certificate
+    // written through the data API would pass the public check); courses, assignments and certification settings
+    // (learn/x) stay with HR and the Learning feature
+    'learn' => [['hr', 'grant:hr', 'manager', 'grant:learning'], []],
+    'learn/x' => [['hr', 'grant:hr', 'manager', 'grant:learning'], ['hr', 'grant:hr', 'grant:learning']],
     'pv' => [['hr', 'grant:hr', 'grant:learning'], ['hr', 'grant:hr', 'grant:learning']],
     'proj' => [['hr', 'grant:hr', 'manager', 'grant:learning'], ['hr', 'grant:hr', 'grant:learning']],
     'tl' => [['hr', 'grant:hr', 'bench', 'grant:recruiting'], ['hr', 'grant:hr', 'bench', 'grant:recruiting']],
@@ -2750,7 +2754,7 @@ function tokenAllows(string $path, string $tok): bool
             return false;
         }
         foreach ((array) ($d->signers ?? []) as $s) {
-            if (($s->tok ?? '') === $tok) {
+            if (($s->tok ?? '') !== '' && hash_equals((string) $s->tok, $tok)) {
                 return true;
             }
         }
@@ -2763,17 +2767,33 @@ function tokenAllows(string $path, string $tok): bool
     }
     if ($segs[0] === 'inv') {
         $d = docGet("inv/{$segs[1]}");
-        return $d && ($d->tok ?? '') === $tok;
+        return $d && ($d->tok ?? '') !== '' && hash_equals((string) $d->tok, $tok); // v83: constant-time compare
     }
     if ($segs[0] === 'ats') {
-        // interview panel members open the resume with the token the ATS hands them (ats_my_interviews)
+        // interview panel members open the candidate's resume with the token the ATS hands them (ats_my_interviews)
+        // v83: that file only, signed in, and only while they sit on one of its (not cancelled) interviews
         $d = docGet("ats/{$segs[1]}");
-        return $d && ($d->tok ?? '') !== '' && ($d->tok ?? '') === $tok;
+        $u = currentUser();
+        if (!$d || !$u || (string) ($d->tok ?? '') === '' || !hash_equals((string) $d->tok, $tok) || count($segs) !== 4 || $segs[2] !== 'f' || $segs[3] !== (string) ($d->rid ?? '')) {
+            return false;
+        }
+        foreach ((array) ($d->intvs ?? []) as $iv) {
+            if ($iv instanceof stdClass && empty($iv->cancelled) && in_array((string) $u['id'], array_map('strval', (array) ($iv->who ?? [])), true)) {
+                return true;
+            }
+        }
+        return false;
     }
     if ($segs[0] === 'xc') {
         // v43: an expense claim's receipts, for whoever the claim screens hand its token to (owner, approver, accounting)
+        // v83: and only next to a session that may still see the claim (xcGet's rule): no bearer link without sign-in
+        $me = currentUser();
         $d = docGet("xc/{$segs[1]}");
-        return $d && ($d->tok ?? '') !== '' && ($d->tok ?? '') === $tok;
+        if (!$me || !$d || ($d->tok ?? '') === '' || !hash_equals((string) $d->tok, $tok)) {
+            return false;
+        }
+        require_once __DIR__ . '/claims.php';
+        return (string) ($d->uid ?? '') === (string) $me['id'] || xcIsApprover($me, $d) || xcIsPayer($me) || hasRole($me, 'hr');
     }
     if ($segs[0] === 'im' && count($segs) >= 4 && $segs[2] === 'f') {
         // v45: an immigration case's documents: HR's token opens every file, the person's token only the files they

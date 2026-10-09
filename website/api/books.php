@@ -70,6 +70,78 @@ const BOOKS_LEGACY = [
 ];
 const BOOKS_TYPES = ['asset', 'liability', 'equity', 'income', 'expense'];
 
+/** v83: takes back what a bank line's match wrote: the invoice payment it added (pays[] entries carrying this bank
+ *  line, so manual and card payments stay) or the bill it marked paid. Called before the line is undone, excluded or
+ *  categorized, so one deposit is never counted twice. */
+function booksUnmatch(string $id, stdClass $x): void
+{
+    $m = $x->m ?? null;
+    if (!($m instanceof stdClass)) {
+        return;
+    }
+    $k = (string) ($m->k ?? '');
+    $mid = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) ($m->id ?? '')) ?? '';
+    if ($mid === '') {
+        return;
+    }
+    $now = now();
+    if ($k === 'inv') {
+        $inv = docGet('inv/' . $mid);
+        if (!$inv) {
+            return;
+        }
+        $keep = [];
+        $back = 0.0;
+        $gone = 0;
+        foreach ((array) ($inv->pays ?? []) as $p) {
+            if ($p instanceof stdClass && (string) ($p->bank ?? '') === $id) {
+                $back += (float) ($p->a ?? 0);
+                $gone++;
+                continue;
+            }
+            $keep[] = $p;
+        }
+        if (!$gone) {
+            return;
+        }
+        $paid = round(max(0, (float) ($inv->paid ?? 0) - $back), 2);
+        $inv->pays = $keep;
+        $inv->paid = $paid;
+        if (in_array((string) ($inv->st ?? ''), ['paid', 'part'], true)) {
+            $inv->st = $paid >= (float) ($inv->total ?? 0) - 0.005 && $paid > 0 ? 'paid' : ($paid > 0.005 ? 'part' : (!empty($inv->viewedAt) ? 'viewed' : 'sent'));
+        }
+        $log = array_values((array) ($inv->log ?? []));
+        $log[] = (object) ['t' => $now, 'who' => (string) (currentUser()['name'] ?? ''), 'ev' => 'Bank match undone: ' . money(round($back, 2), (string) ($inv->cur ?? 'USD')) . ' taken back', 'ip' => ''];
+        $inv->log = $log;
+        $inv->u = $now;
+        docSet('inv/' . $mid, $inv);
+        if (!empty($inv->cid)) {
+            try {
+                $pub = docGet('pub/' . $inv->cid . '/inv/' . $mid);
+                if ($pub) {
+                    $pub->paid = $paid;
+                    $pub->st = $inv->st;
+                    $pub->u = $now;
+                    docSet('pub/' . $inv->cid . '/inv/' . $mid, $pub);
+                }
+            } catch (Throwable $e) {
+                // the client copy follows when it can
+            }
+        }
+    } elseif ($k === 'exp') {
+        $exp = docGet('exp/' . $mid);
+        if (!$exp || (string) ($exp->st ?? '') !== 'paid') {
+            return;
+        }
+        $exp->st = 'unpaid';
+        unset($exp->paidOn, $exp->paidAt);
+        if ((string) ($exp->m ?? '') === 'Bank transfer') {
+            unset($exp->m);
+        }
+        $exp->u = $now;
+        docSet('exp/' . $mid, $exp);
+    }
+}
 /** Books staff: accounting and administrators (view-only bookkeepers may read). */
 function booksStaff(bool $write = false): array
 {
@@ -307,6 +379,41 @@ function je(string $id, string $d, string $src, string $ref, string $memo, array
         $clean[] = ['acct' => (string) $l['acct'], 'dr' => round($dr, 2), 'cr' => round($cr, 2), 'memo' => (string) ($l['memo'] ?? ''), 'name' => (string) ($l['name'] ?? '')];
     }
     return ['id' => $id, 'd' => $d, 'src' => $src, 'ref' => $ref, 'memo' => $memo, 'lines' => $clean] + $extra;
+}
+/** v83: bookkeepers kept out of payroll (r.nopay) see every pay run as one unnamed entry, never one per person. */
+function booksNoPay(): bool
+{
+    $u = currentUser();
+    return $u !== null && !hasRole($u, 'admin') && acctLimits($u)['nopay'];
+}
+function booksPayrollRollup(array $entries): array
+{
+    $out = [];
+    $runs = [];
+    foreach ($entries as $e) {
+        if (($e['src'] ?? '') !== 'payroll') {
+            $out[] = $e;
+            continue;
+        }
+        $k = $e['ref'] . "\x1f" . $e['d'] . "\x1f" . (string) ($e['cur'] ?? '');
+        $runs[$k] = $runs[$k] ?? ['e' => $e, 'n' => 0, 'acc' => []];
+        $runs[$k]['n']++;
+        foreach ($e['lines'] as $l) {
+            $runs[$k]['acc'][$l['acct']][$l['memo']] = ($runs[$k]['acc'][$l['acct']][$l['memo']] ?? 0.0) + $l['dr'] - $l['cr'];
+        }
+    }
+    foreach ($runs as $g) {
+        $lines = [];
+        foreach ($g['acc'] as $acct => $byMemo) {
+            foreach ($byMemo as $memo => $v) {
+                $lines[] = ['acct' => (string) $acct, 'dr' => $v > 0 ? $v : 0, 'cr' => $v < 0 ? -$v : 0, 'memo' => (string) $memo, 'name' => ''];
+            }
+        }
+        $e = $g['e'];
+        $out[] = je('payroll-' . $e['ref'] . '-' . $e['d'], $e['d'], 'payroll', $e['ref'], 'Payroll ' . $e['ref'] . ' · ' . $g['n'] . ' paystub' . ($g['n'] === 1 ? '' : 's'), $lines, ['link' => 'pay', 'linkId' => '', 'cur' => (string) ($e['cur'] ?? '')]);
+    }
+    usort($out, fn($a, $b) => strcmp($a['d'], $b['d']) ?: strcmp($a['id'], $b['id']));
+    return $out;
 }
 /**
  * Every journal entry between two dates (inclusive), derived from the records plus manual journals. Dates are
@@ -634,7 +741,9 @@ function booksReport(string $kind, string $from, string $to, array $opt = []): a
                     continue;
                 }
                 $v = $t === 'income' ? $l['cr'] - $l['dr'] : $l['dr'] - $l['cr'];
-                $rows[$l['acct']][$col] = round(($rows[$l['acct']][$col] ?? 0) + $v, 2);
+                if ($col !== 'total') { // without months the column is the total itself: add once, not twice
+                    $rows[$l['acct']][$col] = round(($rows[$l['acct']][$col] ?? 0) + $v, 2);
+                }
                 $rows[$l['acct']]['total'] = round(($rows[$l['acct']]['total'] ?? 0) + $v, 2);
             }
         }
@@ -844,6 +953,9 @@ function booksReport(string $kind, string $from, string $to, array $opt = []): a
     }
     if ($kind === 'gl') {
         $entries = booksEntries($from, $to);
+        if (booksNoPay()) {
+            $entries = booksPayrollRollup($entries); // v83: no per-person pay lines for a bookkeeper kept out of payroll
+        }
         $acct = (string) ($opt['acct'] ?? '');
         $rows = [];
         $run = 0.0;
@@ -1046,6 +1158,34 @@ function booksRoute(string $r, string $method, array $b): never
                     'active' => !isset($it['active']) || !empty($it['active']),
                 ];
             }
+            // v83: an opening balance posts at its date; one in a closed period (old or new date) cannot change. Names,
+            // numbers, new accounts and opening balances dated after the close stay editable.
+            $close = booksSettings()['close'];
+            if ($close !== '') {
+                $start = booksCfg()['start'] ?: '2000-01-01';
+                $eff = fn(array $a): string => round((float) ($a['open'] ?? 0), 2) == 0.0 ? '' : (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($a['openDate'] ?? '')) ? (string) $a['openDate'] : $start);
+                $key = fn(array $a): string => $eff($a) === '' ? '' : json_encode([round((float) ($a['open'] ?? 0), 2), $eff($a), (string) ($a['t'] ?? '')]);
+                $old = [];
+                foreach (booksCoa(false) as $a) {
+                    $old[(string) $a['id']] = $a;
+                }
+                $new = [];
+                foreach ($items as $it) {
+                    $new[(string) $it->id] = (array) $it;
+                }
+                foreach (array_unique(array_merge(array_map('strval', array_keys($old)), array_map('strval', array_keys($new)))) as $aid) {
+                    $o = $old[$aid] ?? [];
+                    $nw = $new[$aid] ?? [];
+                    if ($key($o) === $key($nw)) {
+                        continue;
+                    }
+                    foreach ([$eff($o), $eff($nw)] as $od) {
+                        if ($od !== '' && $od <= $close) {
+                            booksGuard('org/acct/x/coa', (object) ['d' => $od]);
+                        }
+                    }
+                }
+            }
             $doc = docGet('org/acct/x/coa') ?? new stdClass();
             $doc->items = $items;
             $doc->u = now();
@@ -1201,6 +1341,17 @@ function booksRoute(string $r, string $method, array $b): never
             if (!empty($x->recon) && ($done || $act === 'excl')) {
                 fail(423, 'reconciled', 'This line is part of a finished reconciliation, so it stays as it was reconciled.');
             }
+            // v83: a line matched to an invoice or bill is matched once; undo, exclude or categorize first take back the
+            // payment the match recorded (otherwise the deposit was counted twice)
+            $wasK = ($x->m ?? null) instanceof stdClass ? (string) ($x->m->k ?? '') : '';
+            if (in_array($wasK, ['inv', 'exp'], true)) {
+                if ($act === 'match') {
+                    fail(409, 'conflict', 'This line is already matched. Undo the match first.');
+                }
+                if (in_array($act, ['cat', 'excl', 'undo'], true)) {
+                    booksUnmatch($id, $x);
+                }
+            }
             if ($act === 'cat') {
                 $cat = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) ($b['cat'] ?? '')) ?? '';
                 if (!isset(coaIndex()['byId'][$cat])) {
@@ -1227,6 +1378,9 @@ function booksRoute(string $r, string $method, array $b): never
                         fail(404, 'not_found', 'Invoice not found.');
                     }
                     $amt = round((float) ($x->a ?? 0), 2);
+                    if ($amt <= 0 || in_array((string) ($inv->st ?? 'draft'), ['draft', 'void', 'paid'], true)) {
+                        fail(400, 'invalid_argument', 'Only money coming in can be matched, to an invoice that has been sent, is not paid yet and is not voided.');
+                    }
                     $paid = round((float) ($inv->paid ?? 0) + $amt, 2);
                     $st = $paid >= (float) ($inv->total ?? 0) - 0.005 ? 'paid' : 'part';
                     $pays = (array) ($inv->pays ?? []);
@@ -1254,6 +1408,9 @@ function booksRoute(string $r, string $method, array $b): never
                     $exp = docGet('exp/' . $mid);
                     if (!$exp) {
                         fail(404, 'not_found', 'Bill not found.');
+                    }
+                    if ((float) ($x->a ?? 0) >= 0 || (string) ($exp->st ?? '') === 'paid') {
+                        fail(400, 'invalid_argument', 'Only money going out can be matched, to a bill that is not paid yet.');
                     }
                     $exp->st = 'paid';
                     $exp->paidOn = (string) ($x->dt ?? date('Y-m-d'));
@@ -1295,9 +1452,14 @@ function booksRoute(string $r, string $method, array $b): never
             $u = booksStaff(true);
             $rules = (array) (docGet('org/acct/x/rules')->items ?? []);
             $n = 0;
+            $close = booksSettings()['close'];
             foreach (colAll('org/acct/bank') as [$id, $x]) {
                 if (!empty($x->m) || (string) ($x->cat ?? '') !== '' || !empty($x->excl)) {
                     continue;
+                }
+                $dt = (string) ($x->dt ?? '');
+                if ($close !== '' && $dt !== '' && $dt <= $close) {
+                    continue; // v83: a line in a closed period is not categorized (it would post into the closed books)
                 }
                 $hit = booksApplyRules($x, $rules);
                 if ($hit && isset(coaIndex()['byId'][$hit['cat']])) {
@@ -1391,6 +1553,9 @@ function booksRoute(string $r, string $method, array $b): never
             }
             $rid = rid(10);
             $now = now();
+            if (abs($diff) >= 0.005) {
+                booksGuard('org/acct/je/' . $rid, (object) ['d' => $end]); // v83: the adjusting entry is dated at the statement end; closed periods stay closed
+            }
             foreach ($ids as $id) {
                 $x = docGet('org/acct/bank/' . $id);
                 if ($x) {
@@ -1443,7 +1608,7 @@ function booksRoute(string $r, string $method, array $b): never
             if ($kind === 'gl') {
                 $name = 'general-ledger';
                 $lines[] = csvLine(['Date', 'Entry', 'Source', 'Reference', 'Memo', 'Account number', 'Account', 'Name', 'Debit', 'Credit']);
-                foreach (booksEntries($from, $to) as $e) {
+                foreach (booksNoPay() ? booksPayrollRollup(booksEntries($from, $to)) : booksEntries($from, $to) as $e) {
                     foreach ($e['lines'] as $l) {
                         $lines[] = csvLine([$e['d'], $e['id'], $e['src'], $e['ref'], $l['memo'] !== '' ? $l['memo'] : $e['memo'], $idx[$l['acct']]['num'] ?? '', $idx[$l['acct']]['n'] ?? $l['acct'], $l['name'], $l['dr'] ?: '', $l['cr'] ?: '']);
                     }
@@ -1455,7 +1620,7 @@ function booksRoute(string $r, string $method, array $b): never
                 // v83: tabs and line breaks in any text field would add columns or TRNS/SPL rows to the import
                 $t = fn($v) => preg_replace('/[\t\r\n]+/', ' ', (string) $v);
                 $n = 0;
-                foreach (booksEntries($from, $to) as $e) {
+                foreach (booksNoPay() ? booksPayrollRollup(booksEntries($from, $to)) : booksEntries($from, $to) as $e) {
                     $first = true;
                     $date = date('m/d/Y', strtotime($e['d']));
                     foreach ($e['lines'] as $l) {

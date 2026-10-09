@@ -267,9 +267,12 @@ function wsjHints(array $rows): array
             $h[] = 'Has a login on StratEdge\'s own portal (' . (WSJ_ROLE_NAMES[$u['role']] ?? $u['role']) . ((string) $u['status'] !== 'active' ? ', ' . $u['status'] : '') . ').';
         }
         foreach ($runs[$em] ?? [] as $w) {
-            // the workspace made from this very request is not news
+            // the workspace made from this very request is not news once the request says approved; before
+            // that (an automatic approval that stopped half way) the reviewer must see it, not make a second one
             if ($w['from'] !== (string) $id) {
                 $h[] = 'Administrator or contact of the workspace ' . $w['n'] . '.';
+            } elseif (($s->st ?? '') !== 'approved') {
+                $h[] = 'The workspace ' . $w['n'] . ' was already made from this request; approving adopts it.';
             }
         }
         $h = array_values(array_unique($h));
@@ -513,7 +516,15 @@ function wsjRoute(string $r, array $b): never
             if ((int) $row['exp'] < now()) {
                 fail(400, 'bad_link', $bad);
             }
-            tokUse((string) $row['h']);
+            // v83: claim the link atomically: only one click confirms it (and, in automatic mode, makes the
+            // portal); a parallel click of the same link hears where the request is, as a second click does
+            $q = secdb()->prepare('UPDATE auth_tokens SET used = ? WHERE h = ? AND used = 0');
+            $q->execute([now(), (string) $row['h']]);
+            if ($q->rowCount() !== 1) {
+                $s = docGet('ws/signup/' . $id) ?? $s;
+                $st = (string) ($s->st ?? 'new');
+                ok(['ok' => true, 'again' => true, 'st' => $st === 'unverified' ? 'new' : $st, 'co' => (string) $s->co]);
+            }
             $s->st = 'new';
             $s->vAt = now();
             wsjLog($s, (string) $s->n, 'Confirmed the email address');
@@ -605,6 +616,19 @@ function wsjRoute(string $r, array $b): never
             if ($act === 'approve') {
                 if ($st !== 'new') {
                     fail(409, 'invalid_argument', $st === 'unverified' ? 'They have not confirmed their email address yet; approve it once they have (their link works for 48 hours).' : 'This request was decided already.');
+                }
+                // v83: a workspace already made from this request (an automatic approval that stopped half way)
+                // is adopted, not made a second time
+                foreach (wsRegistry(true) as $have => $he) {
+                    if ((string) ($he['signup'] ?? '') === $id && ($he['status'] ?? '') !== 'deleted') {
+                        $s->st = 'approved';
+                        $s->dec = (object) ['at' => now(), 'by' => (string) $u['id'], 'byn' => (string) $u['name'], 'act' => 'approved', 'slug' => (string) $have];
+                        wsjLog($s, (string) $u['name'], 'Approved: the workspace ' . $have . ' had already been made from this request');
+                        docSet('ws/signup/' . $id, $s);
+                        wsjDropTokens($id);
+                        audit('settings', 'Workspace sign-up request approved', $id, ['co' => (string) $s->co, 'slug' => (string) $have], $u);
+                        ok(['req' => wsjOut($id, $s), 'ws' => wsRow((string) $have, $he), 'mailed' => false]);
+                    }
                 }
                 $ae = mb_strtolower(trim((string) ($b['adminEmail'] ?? $s->e)));
                 $mine = $ae === strtolower((string) $s->e);

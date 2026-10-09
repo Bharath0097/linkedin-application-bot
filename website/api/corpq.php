@@ -43,7 +43,7 @@ function cqDb(): PDO
         $p->exec("CREATE TABLE IF NOT EXISTS cq_prof (n INT PRIMARY KEY, data TEXT NOT NULL, st VARCHAR(10) NOT NULL, by_uid VARCHAR(40) NOT NULL, byn VARCHAR(120) NOT NULL DEFAULT '', at BIGINT NOT NULL, apv_at BIGINT NOT NULL DEFAULT 0, apv_by VARCHAR(120) NOT NULL DEFAULT '')");
         $p->exec("CREATE TABLE IF NOT EXISTS cq_doc (id VARCHAR(20) PRIMARY KEY, fam VARCHAR(20) NOT NULL, kind VARCHAR(10) NOT NULL, ti VARCHAR(160) NOT NULL, n INT NOT NULL, fid VARCHAR(40) NOT NULL, fn VARCHAR(200) NOT NULL, fty VARCHAR(100) NOT NULL, sz INT NOT NULL DEFAULT 0, exp VARCHAR(10) NOT NULL DEFAULT '', ast VARCHAR(10) NOT NULL DEFAULT '', note VARCHAR(500) NOT NULL DEFAULT '', cur INT NOT NULL DEFAULT 1, by_uid VARCHAR(40) NOT NULL, byn VARCHAR(120) NOT NULL DEFAULT '', at BIGINT NOT NULL)");
         $p->exec('CREATE INDEX IF NOT EXISTS cq_doc_fam ON cq_doc (fam, n)');
-        $p->exec("CREATE TABLE IF NOT EXISTS cq_pkt (id VARCHAR(20) PRIMARY KEY, cid VARCHAR(40) NOT NULL, st VARCHAR(10) NOT NULL, owner VARCHAR(40) NOT NULL DEFAULT '', to_uids TEXT NOT NULL, due VARCHAR(10) NOT NULL DEFAULT '', dec TEXT NOT NULL, done_at BIGINT NOT NULL DEFAULT 0, at BIGINT NOT NULL, u BIGINT NOT NULL)");
+        $p->exec("CREATE TABLE IF NOT EXISTS cq_pkt (id VARCHAR(20) PRIMARY KEY, cid VARCHAR(40) NOT NULL, st VARCHAR(10) NOT NULL, owner VARCHAR(40) NOT NULL DEFAULT '', to_uids TEXT NOT NULL, due VARCHAR(10) NOT NULL DEFAULT '', `dec` TEXT NOT NULL, done_at BIGINT NOT NULL DEFAULT 0, at BIGINT NOT NULL, u BIGINT NOT NULL)");
         $p->exec('CREATE INDEX IF NOT EXISTS cq_pkt_cid ON cq_pkt (cid)');
         $p->exec("CREATE TABLE IF NOT EXISTS cq_item (id VARCHAR(20) PRIMARY KEY, pkt VARCHAR(20) NOT NULL, kind VARCHAR(10) NOT NULL, ti VARCHAR(160) NOT NULL, note VARCHAR(1000) NOT NULL DEFAULT '', st VARCHAR(10) NOT NULL, doc VARCHAR(20) NOT NULL DEFAULT '', resp VARCHAR(40) NOT NULL DEFAULT '', due VARCHAR(10) NOT NULL DEFAULT '', req_by VARCHAR(40) NOT NULL DEFAULT '', req_side VARCHAR(8) NOT NULL DEFAULT '', sup_at BIGINT NOT NULL DEFAULT 0, rev TEXT NOT NULL, at BIGINT NOT NULL, u BIGINT NOT NULL)");
         $p->exec('CREATE INDEX IF NOT EXISTS cq_item_pkt ON cq_item (pkt)');
@@ -256,11 +256,15 @@ function cqItemRow(string $id): ?array
     $r['rev'] = json_decode((string) $r['rev'], true) ?: [];
     return $r;
 }
-/** The company's people to tell: the packet's chosen contacts, else every contact of the company. */
+/** The company's people to tell: the packet's chosen contacts, else every contact whose role covers supplier documents. */
 function cqClientTo(array $pkt): array
 {
-    $to = array_values(array_intersect((array) $pkt['to_uids'], array_keys(crContacts((string) $pkt['cid']))));
-    return $to ?: array_keys(crContacts((string) $pkt['cid']));
+    // v83: both the chosen list and the fallback follow the contacts' roles (a role without supplier access is not told)
+    require_once __DIR__ . '/corpacc.php';
+    $cid = (string) $pkt['cid'];
+    $all = array_map('strval', array_keys(crContacts($cid)));
+    $to = caFilter($cid, array_values(array_intersect(array_map('strval', (array) $pkt['to_uids']), $all)), 'supplier');
+    return $to ?: caFilter($cid, $all, 'supplier');
 }
 function cqStaffTo(array $pkt, ?array $it = null): array
 {
@@ -450,7 +454,7 @@ function cqRoute(string $r, array $b, array $u, bool $staff, array $myC): never
             $id = rid(8);
             $owner = $str('owner', 40);
             $ow = $owner !== '' ? userRow($owner) : null;
-            $p->prepare("INSERT INTO cq_pkt (id, cid, st, owner, to_uids, due, dec, at, u) VALUES (?,?,'open',?,'[]',?,'{}',?,?)")->execute([$id, $cid, $ow && crStaff($ow) ? $owner : $u['id'], $date('due'), now(), now()]);
+            $p->prepare("INSERT INTO cq_pkt (id, cid, st, owner, to_uids, due, `dec`, at, u) VALUES (?,?,'open',?,'[]',?,'{}',?,?)")->execute([$id, $cid, $ow && crStaff($ow) ? $owner : $u['id'], $date('due'), now(), now()]);
             foreach (array_intersect((array) ($b['items'] ?? []), array_keys(CQ_KINDS)) as $k) {
                 $p->prepare("INSERT INTO cq_item (id, pkt, kind, ti, st, resp, due, req_by, req_side, rev, at, u) VALUES (?,?,?,?,'requested',?,?,?,'staff','{}',?,?)")->execute([rid(8), $id, $k, CQ_KINDS[$k], $ow && crStaff($ow) ? $owner : $u['id'], $date('due'), $u['id'], now(), now()]);
             }
@@ -605,7 +609,7 @@ function cqRoute(string $r, array $b, array $u, bool $staff, array $myC): never
                 fail(400, 'invalid_argument', 'Say why, so StratEdge can follow up.');
             }
             $dec = ['d' => $d, 'n' => $staff ? $str('who', 120) : (string) $u['name'], 'by' => $u['id'], 'side' => $staff ? 'staff' : 'client', 'rec' => $staff ? (string) $u['name'] : '', 'at' => now(), 'note' => $str('msg', 1000)];
-            $p->prepare('UPDATE cq_pkt SET st = ?, dec = ?, u = ? WHERE id = ?')->execute([$d === 'qualified' ? 'qualified' : 'not', json_encode($dec), now(), (string) $pk['id']]);
+            $p->prepare('UPDATE cq_pkt SET st = ?, `dec` = ?, u = ? WHERE id = ?')->execute([$d === 'qualified' ? 'qualified' : 'not', json_encode($dec), now(), (string) $pk['id']]);
             crEv('pkt', (string) $pk['id'], $u, $staff ? 'staff' : 'client', $d, ($d === 'qualified' ? 'StratEdge qualified as a supplier' : 'Not qualified') . ' by ' . $dec['n'] . ($staff ? ' (recorded by ' . $u['name'] . ')' : '') . ($dec['note'] !== '' ? ': ' . $dec['note'] : '') . '.');
             crMail($staff ? cqClientTo($pk) : cqStaffTo($pk), ($d === 'qualified' ? 'Supplier qualification: approved' : 'Supplier qualification: not approved') . ' (' . crCompanyName((string) $pk['cid']) . ')', [($d === 'qualified' ? 'StratEdge is qualified as a supplier of ' : 'StratEdge is not qualified as a supplier of ') . crCompanyName((string) $pk['cid']) . ' (' . $dec['n'] . ').', $dec['note']], 'pkt', (string) $pk['cid']);
             ok(['pkt' => cqPktView(cqPkt((string) $pk['cid']), $staff)]);

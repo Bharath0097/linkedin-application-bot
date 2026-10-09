@@ -104,6 +104,9 @@ function migHttp(string $method, string $url, array $headers = [], $body = null)
         }
     }
     $o[CURLOPT_HTTPHEADER] = $h;
+    if ((string) getenv('SE_EXT_MOCK') === '' && defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+        $o[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS; // v83: every system read here answers on https only (the local stand-in is http)
+    }
     curl_setopt_array($ch, $o);
     $raw = curl_exec($ch);
     $st = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -114,6 +117,20 @@ function migHttp(string $method, string $url, array $headers = [], $body = null)
     }
     $j = json_decode((string) $raw, true);
     return [$st, is_array($j) ? $j : (string) $raw, $hdrs];
+}
+/** v83: a Salesforce address the portal may call ('https://<name>.salesforce.com' and the like, no port, path or
+ *  sign-in part), or ''. The same hosts mig_save accepts for the My Domain address. */
+function migSfBase(string $url): string
+{
+    $p = parse_url($url);
+    if (!is_array($p) || strtolower((string) ($p['scheme'] ?? '')) !== 'https' || isset($p['port']) || isset($p['user']) || isset($p['pass'])) {
+        return '';
+    }
+    $host = strtolower((string) ($p['host'] ?? ''));
+    if (!preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)*\.(salesforce\.com|salesforce\.mil|force\.com|sfcrmproducts\.cn)$/', $host)) {
+        return '';
+    }
+    return 'https://' . $host;
 }
 /** What a refusal says, in a line. */
 function migWhy($r, int $code): string
@@ -342,14 +359,20 @@ function migPage(string $src, string $set, array $c, array &$st): array
             return $rows;
 
         case 'salesforce':
-            if (empty($st['tok'])) {
+            // v83: only Salesforce hosts are called: the typed address (also one saved before the check) and the
+            // token answer's instance_url are not trusted beyond that, and a pull saved earlier is checked again
+            if (empty($st['tok']) || migSfBase((string) ($st['inst'] ?? '')) === '') {
                 $dom = strtolower(trim((string) preg_replace('#^https?://#i', '', (string) ($c['domain'] ?? '')), '/'));
-                [$code, $r] = migHttp('POST', 'https://' . $dom . '/services/oauth2/token', [], ['__form' => ['grant_type' => 'client_credentials', 'client_id' => (string) ($c['id'] ?? ''), 'client_secret' => (string) ($c['secret'] ?? '')]]);
+                $base = migSfBase('https://' . $dom);
+                if ($base === '' || $base !== 'https://' . $dom) {
+                    fail(400, 'invalid_argument', 'Use your Salesforce My Domain address, for example yourcompany.my.salesforce.com.');
+                }
+                [$code, $r] = migHttp('POST', $base . '/services/oauth2/token', [], ['__form' => ['grant_type' => 'client_credentials', 'client_id' => (string) ($c['id'] ?? ''), 'client_secret' => (string) ($c['secret'] ?? '')]]);
                 if ($code !== 200 || !is_array($r) || empty($r['access_token'])) {
                     migFail($src, $r, $code === 200 || $code === 400 ? 401 : $code);
                 }
                 $st['tok'] = (string) $r['access_token'];
-                $st['inst'] = rtrim((string) ($r['instance_url'] ?? ('https://' . $dom)), '/');
+                $st['inst'] = migSfBase((string) ($r['instance_url'] ?? '')) ?: $base;
             }
             $auth = ['Authorization: Bearer ' . $st['tok'], 'Sforce-Query-Options: batchSize=500'];
             if ($cur === '') {
@@ -361,7 +384,7 @@ function migPage(string $src, string $set, array $c, array &$st): array
                 ][$set] . $where . ' ORDER BY LastModifiedDate';
                 $url = $st['inst'] . '/services/data/' . MIG_SF . '/query?q=' . rawurlencode($soql);
             } else {
-                $url = $st['inst'] . (string) $cur;
+                $url = $st['inst'] . '/' . ltrim((string) $cur, '/'); // v83: a next-page path cannot change the host
             }
             [$code, $r] = migHttp('GET', $url, $auth);
             if ($code !== 200 || !is_array($r)) {

@@ -51,7 +51,7 @@ function crDb(): PDO
         $p->exec('CREATE INDEX IF NOT EXISTS cr_req_cid ON cr_req (cid, st)');
         $p->exec("CREATE TABLE IF NOT EXISTS cr_ver (id VARCHAR(20) PRIMARY KEY, req VARCHAR(20) NOT NULL, n INT NOT NULL, data TEXT NOT NULL, by_uid VARCHAR(40) NOT NULL, byn VARCHAR(120) NOT NULL DEFAULT '', at BIGINT NOT NULL, note VARCHAR(500) NOT NULL DEFAULT '', apv_at BIGINT NOT NULL DEFAULT 0, apv_by VARCHAR(500) NOT NULL DEFAULT '')");
         $p->exec('CREATE INDEX IF NOT EXISTS cr_ver_req ON cr_ver (req, n)');
-        $p->exec("CREATE TABLE IF NOT EXISTS cr_prop (id VARCHAR(20) PRIMARY KEY, cid VARCHAR(40) NOT NULL, req VARCHAR(20) NOT NULL DEFAULT '', ti VARCHAR(160) NOT NULL, st VARCHAR(12) NOT NULL, ver INT NOT NULL DEFAULT 0, draft TEXT NOT NULL, owner VARCHAR(40) NOT NULL, to_uids TEXT NOT NULL, viewed_at BIGINT NOT NULL DEFAULT 0, dec TEXT NOT NULL, at BIGINT NOT NULL, u BIGINT NOT NULL)");
+        $p->exec("CREATE TABLE IF NOT EXISTS cr_prop (id VARCHAR(20) PRIMARY KEY, cid VARCHAR(40) NOT NULL, req VARCHAR(20) NOT NULL DEFAULT '', ti VARCHAR(160) NOT NULL, st VARCHAR(12) NOT NULL, ver INT NOT NULL DEFAULT 0, draft TEXT NOT NULL, owner VARCHAR(40) NOT NULL, to_uids TEXT NOT NULL, viewed_at BIGINT NOT NULL DEFAULT 0, `dec` TEXT NOT NULL, at BIGINT NOT NULL, u BIGINT NOT NULL)");
         $p->exec('CREATE INDEX IF NOT EXISTS cr_prop_cid ON cr_prop (cid, st)');
         $p->exec("CREATE TABLE IF NOT EXISTS cr_pver (id VARCHAR(20) PRIMARY KEY, prop VARCHAR(20) NOT NULL, n INT NOT NULL, data TEXT NOT NULL, by_uid VARCHAR(40) NOT NULL, byn VARCHAR(120) NOT NULL DEFAULT '', at BIGINT NOT NULL, note VARCHAR(500) NOT NULL DEFAULT '')");
         $p->exec('CREATE INDEX IF NOT EXISTS cr_pver_prop ON cr_pver (prop, n)');
@@ -235,7 +235,12 @@ function crMayEdit(array $q, array $u, bool $staff): bool
     if ($staff) {
         return in_array($st, ['review', 'questions', 'returned', 'approved', 'active', 'hold'], true) || ($st === 'draft' && (string) $q['by_uid'] === $u['id']);
     }
-    return in_array((string) $q['cid'], clientCids($u['id']), true) && in_array($st, ['draft', 'questions', 'returned', 'approved', 'active', 'hold'], true);
+    if (!in_array((string) $q['cid'], clientCids($u['id']), true) || !in_array($st, ['draft', 'questions', 'returned', 'approved', 'active', 'hold'], true)) {
+        return false;
+    }
+    // v83: only a role that writes requests, within its business units (read-only roles see the brief, not change it)
+    require_once __DIR__ . '/corpacc.php';
+    return caReqOk(caAccess($u, (string) $q['cid']), $q, 'w');
 }
 /** Version 1, made when a draft first leaves its author. */
 function crVerOne(array $q, array $u): void
@@ -728,13 +733,15 @@ function crRoute(string $r, array $b): never
             $isReq = (string) $q['by_uid'] === $u['id'];
             $isAp = isset($aps[$u['id']]) && !$staff;
             $st = (string) $q['st'];
+            // v83: the buttons follow the server's write checks (a read-only role still approves or returns, as an approver)
+            $cw = $staff || caMay(caAccess($u, (string) $q['cid']), 'requests', 'w');
             $can = [
                 'edit' => crMayEdit($q, $u, $staff),
-                'submit' => !$staff && in_array($st, ['draft', 'questions', 'returned'], true) && in_array((string) $q['cid'], $myC, true),
+                'submit' => !$staff && $cw && in_array($st, ['draft', 'questions', 'returned'], true) && in_array((string) $q['cid'], $myC, true),
                 'approve' => $isAp && $st === 'approval' && !isset($q['appr'][$u['id']]) && !isset($q['appr'][(string) ($aps[$u['id']]['for'] ?? '-')]),
                 'confirm' => $staff && ($st === 'review' || ($st === 'draft' && $isReq)), 'ask' => $staff && in_array($st, ['review', 'approval'], true), 'record' => $staff && $st === 'approval',
-                'start' => $staff && $st === 'approved' && (string) $q['vreq'] === '', 'hold' => in_array($st, ['review', 'questions', 'approval', 'returned', 'approved', 'active'], true) && ($staff || $isAp || $isReq),
-                'resume' => $st === 'hold' && ($staff || $isAp || $isReq), 'close' => $staff && in_array($st, CR_OPEN, true) && $st !== 'draft', 'withdraw' => !$staff && $isReq && in_array($st, ['draft', 'review', 'questions', 'approval', 'returned', 'approved'], true),
+                'start' => $staff && $st === 'approved' && (string) $q['vreq'] === '', 'hold' => in_array($st, ['review', 'questions', 'approval', 'returned', 'approved', 'active'], true) && ($staff || (($isAp || $isReq) && $cw)),
+                'resume' => $st === 'hold' && ($staff || (($isAp || $isReq) && $cw)), 'close' => $staff && in_array($st, CR_OPEN, true) && $st !== 'draft', 'withdraw' => !$staff && $cw && $isReq && in_array($st, ['draft', 'review', 'questions', 'approval', 'returned', 'approved'], true) && (string) $q['vreq'] === '',
             ];
             ok([
                 'req' => crReqView($q, $u, $staff) + ['data' => $q['data'], 'appr' => array_values(array_map(fn($k, $v) => ['n' => (string) ($v['n'] ?? $aps[$k]['n'] ?? ''), 'd' => (string) $v['d'], 'at' => (int) $v['at'], 'note' => (string) ($v['note'] ?? '')], array_keys((array) $q['appr']), (array) $q['appr']))],
@@ -769,8 +776,16 @@ function crRoute(string $r, array $b): never
             }
             $q = crReqFor($id, $u);
             $st = (string) $q['st'];
+            // v83: a change needs a role that writes requests, as a new request does
+            if (!$staff && !caMay(caAccess($u, (string) $q['cid']), 'requests', 'w')) {
+                fail(403, 'forbidden', 'Your role at ' . crCompanyName((string) $q['cid']) . ' reads talent requests but does not change them.');
+            }
             if (!crMayEdit($q, $u, $staff)) {
                 fail(409, 'conflict', $st === 'approval' ? 'It is waiting for approval: an approver returns it, or StratEdge asks questions, to change it.' : ($st === 'review' ? 'StratEdge is reviewing it: send a message, or wait for their questions.' : 'This request cannot be changed now.'));
+            }
+            // v83: and the changed request stays within the contact's business units
+            if (!$staff && !caReqOk(caAccess($u, (string) $q['cid']), ['data' => $data], 'w')) {
+                fail(403, 'forbidden', 'Your access covers other business units: ' . implode(', ', caAccess($u, (string) $q['cid'])['units']) . '.');
             }
             if ($data['ti'] === '') {
                 fail(400, 'invalid_argument', 'Name the role.');
@@ -912,7 +927,9 @@ function crRoute(string $r, array $b): never
                     crSetReq($id, ['appr' => $appr]);
                     crEv('req', $id, $u, 'client', 'approve', $u['name'] . ($forUid !== '' ? ' (for ' . $forN . ', delegated)' : '') . ' approved version ' . (int) $q['ver'] . ($msg !== '' ? ': ' . $msg : '') . '.');
                     $q['appr'] = $appr;
-                    if ($rule === 'any' || !array_diff_key($aps, $appr)) {
+                    // a delegate's line stands for the approver who delegated (their approval is recorded under that approver)
+                    $owed = array_filter($aps, fn($x) => (string) ($x['for'] ?? '') === '');
+                    if ($rule === 'any' || !array_diff_key($owed, $appr)) {
                         crApproved($q, $u, implode(', ', array_map(fn($x) => $x['n'], $appr)));
                     }
                     break;
@@ -951,7 +968,7 @@ function crRoute(string $r, array $b): never
                     crEv('req', $id, $u, $side, 'resumed', 'Resumed by ' . $u['name'] . ' (' . strtolower(CR_ST[$back]) . ')' . ($msg !== '' ? ': ' . $msg : '') . '.');
                     break;
                 case 'withdraw':
-                    $need(!$staff && (string) $q['by_uid'] === $u['id'] && in_array($st, ['draft', 'review', 'questions', 'approval', 'returned', 'approved'], true), 'Only the person who wrote it can withdraw a request before sourcing starts.');
+                    $need(!$staff && (string) $q['by_uid'] === $u['id'] && in_array($st, ['draft', 'review', 'questions', 'approval', 'returned', 'approved'], true) && (string) $q['vreq'] === '', 'Only the person who wrote it can withdraw a request before sourcing starts.');
                     crSetReq($id, ['st' => 'cancelled']);
                     crEv('req', $id, $u, 'client', 'withdrawn', 'Withdrawn by ' . $u['name'] . ($msg !== '' ? ': ' . $msg : '') . '.');
                     if ($st !== 'draft') {
@@ -1046,7 +1063,7 @@ function crRoute(string $r, array $b): never
                     fail(400, 'invalid_argument', 'That talent request belongs to another company.');
                 }
                 $id = rid(8);
-                $p->prepare("INSERT INTO cr_prop (id, cid, req, ti, st, ver, draft, owner, to_uids, dec, at, u) VALUES (?,?,?,?,'draft',0,?,?,'[]','{}',?,?)")->execute([$id, $cid, $reqId, $ti, json_encode($data), $u['id'], now(), now()]);
+                $p->prepare("INSERT INTO cr_prop (id, cid, req, ti, st, ver, draft, owner, to_uids, `dec`, at, u) VALUES (?,?,?,?,'draft',0,?,?,'[]','{}',?,?)")->execute([$id, $cid, $reqId, $ti, json_encode($data), $u['id'], now(), now()]);
                 crEv('prop', $id, $u, 'staff', 'created', 'Started by ' . $u['name'] . '.', false);
                 ok(['id' => $id]);
             }
@@ -1089,7 +1106,7 @@ function crRoute(string $r, array $b): never
                     }
                     $n = (int) $q['ver'] + 1;
                     $p->prepare('INSERT INTO cr_pver (id, prop, n, data, by_uid, byn, at, note) VALUES (?,?,?,?,?,?,?,?)')->execute([rid(8), $id, $n, json_encode($d), $u['id'], (string) $u['name'], now(), $msg]);
-                    $p->prepare("UPDATE cr_prop SET st = 'shared', ver = ?, to_uids = ?, viewed_at = 0, dec = '{}', u = ? WHERE id = ?")->execute([$n, json_encode($to), now(), $id]);
+                    $p->prepare("UPDATE cr_prop SET st = 'shared', ver = ?, to_uids = ?, viewed_at = 0, `dec` = '{}', u = ? WHERE id = ?")->execute([$n, json_encode($to), now(), $id]);
                     crEv('prop', $id, $u, 'staff', 'shared', 'Version ' . $n . ' shared with ' . implode(', ', array_map(fn($x) => $contacts[$x]['n'], $to)) . ($msg !== '' ? ': ' . $msg : '') . '.');
                     crMail($to, ($n > 1 ? 'Updated proposal: ' : 'Proposal: ') . $q['ti'], ['StratEdge shared ' . ($n > 1 ? 'version ' . $n . ' of ' : '') . 'the proposal "' . $q['ti'] . '" for ' . $co . '.', $msg !== '' ? $msg : 'Open it to review the scope and prices; you can ask a question, accept or decline it.'], 'prop', $id);
                     break;
@@ -1143,7 +1160,7 @@ function crRoute(string $r, array $b): never
                         fail(400, 'invalid_argument', 'Say why, so StratEdge can follow up.');
                     }
                     $dec = ['d' => $act === 'accept' ? 'accepted' : 'declined', 'n' => $act === 'accept' ? $name : (string) $u['name'], 'by' => $u['id'], 'at' => now(), 'ip' => clientIp(), 'note' => $msg, 'ver' => (int) $q['ver']];
-                    $p->prepare('UPDATE cr_prop SET st = ?, dec = ?, u = ? WHERE id = ?')->execute([$dec['d'], json_encode($dec), now(), $id]);
+                    $p->prepare('UPDATE cr_prop SET st = ?, `dec` = ?, u = ? WHERE id = ?')->execute([$dec['d'], json_encode($dec), now(), $id]);
                     crEv('prop', $id, $u, 'client', $dec['d'], ($act === 'accept' ? 'Version ' . (int) $q['ver'] . ' accepted by ' . $name . ' (typed name; authorized for ' . $co . ')' : 'Declined by ' . $u['name']) . ($msg !== '' ? ': ' . $msg : '') . '.');
                     crMail([(string) $q['owner']], ($act === 'accept' ? 'Accepted: ' : 'Declined: ') . $q['ti'], [$co . ($act === 'accept' ? ' accepted version ' . (int) $q['ver'] . ' of "' . $q['ti'] . '" (' . $name . ').' : ' declined "' . $q['ti'] . '".'), $msg], 'prop', $id);
                     break;

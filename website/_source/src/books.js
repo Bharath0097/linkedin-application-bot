@@ -386,10 +386,10 @@ function BooksReports({ base }) {
   // the data on screen must belong to the tab on screen (the state lags one render behind a tab change)
   const R = d && d._kind === kind ? d : null;
   const exportCsv = async () => {
-    const res = await fetch(API + 'books_export', { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, from: asOfOnly ? '' : range.from, to: range.to }) });
-    if (!res.ok) return toast('Could not export.', true);
     try {
-      await saveDownload(`${kind}-${range.to}.csv`, await res.blob());
+      // v83: through api(), so "Confirm it's you" opens when the export asks for it (books_export is a re-auth route)
+      const blob = await api('books_export', { kind, from: asOfOnly ? '' : range.from, to: range.to }, { blob: true, timeout: 120000 });
+      await saveDownload(`${kind}-${range.to}.csv`, blob);
     } catch (e) {
       if (!e || e.code !== 'declined') toast(errText(e), true);
     }
@@ -554,9 +554,9 @@ function BooksExports() {
   const dl = async (kind, ext) => {
     setBusy(kind);
     try {
-      const res = await fetch(API + 'books_export', { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, from: range.from, to: range.to }) });
-      if (!res.ok) throw { message: 'Could not build the export.' };
-      await saveDownload(`${kind}-${range.from || 'all'}-${range.to}.${ext}`, await res.blob());
+      // v83: through api(), so "Confirm it's you" opens when the export asks for it (books_export is a re-auth route)
+      const blob = await api('books_export', { kind, from: range.from, to: range.to }, { blob: true, timeout: 120000 });
+      await saveDownload(`${kind}-${range.from || 'all'}-${range.to}.${ext}`, blob);
     } catch (e) {
       if (!e || e.code !== 'declined') toast(errText(e), true);
     }
@@ -657,9 +657,11 @@ function BooksSettings({ coa, cfg, onChanged }) {
 }
 
 /* ---- Receipts: documents stored on transactions ---- */
+// v83: files hang off a document (org/acct/x/receipts, like the other books docs); the old base had an odd number of segments, so every upload was refused
+const BOOKS_RCPT = 'org/acct/x/receipts';
 function BooksReceipts() {
   const toast = useToast();
-  const files = useCol('org/acct/receipts/f', 'at:desc');
+  const files = useCol(BOOKS_RCPT + '/f', 'at:desc');
   const bank = useCol('org/acct/bank', 'dt:desc', 300);
   const exp = useCol('exp', 'u:desc', 300);
   const [prog, setProg] = useState(0);
@@ -673,7 +675,7 @@ function BooksReceipts() {
     for (const f of list) {
       try {
         setProg(0.03);
-        await storeFile('org/acct/receipts', f, { c: 'receipt' }, setProg);
+        await storeFile(BOOKS_RCPT, f, { c: 'receipt' }, setProg);
         n++;
       } catch (e) {
         toast(errText(e), true);
@@ -687,7 +689,7 @@ function BooksReceipts() {
     try {
       if (kind === 'bank') await dbMerge(`org/acct/bank/${id}`, { receipt: rec.id, u: Date.now() });
       if (kind === 'exp') await dbMerge(`exp/${id}`, { receipt: rec.id, u: Date.now() });
-      await dbMerge(`org/acct/receipts/f/${rec.id}`, { to: { k: kind, id, n: label } });
+      await dbMerge(`${BOOKS_RCPT}/f/${rec.id}`, { to: { k: kind, id, n: label } });
       toast('Attached.');
       setAttach(null);
     } catch (e) {
@@ -696,7 +698,7 @@ function BooksReceipts() {
   };
   const del = async f => {
     try {
-      await deleteStored('org/acct/receipts', f.id);
+      await deleteStored(BOOKS_RCPT, f.id);
       toast('Removed.');
     } catch (e) {
       toast(errText(e), true);
@@ -710,7 +712,7 @@ function BooksReceipts() {
         files.loading
           ? html`<${Spinner} />`
           : files.docs.length
-            ? html`<div className="tblwrap"><table className="tbl small"><thead><tr><th>File</th><th>Added</th><th>Attached to</th><th /></tr></thead><tbody>${files.docs.map(f => html`<tr key=${f.id}><td><a href=${fileUrl('org/acct/receipts', f.id)} target="_blank" rel="noopener">${f.n}</a><div className="muted">${sizeLabel(f.sz || 0)}</div></td><td>${fmtTs(f.at)}</td><td>${f.to ? html`<${Chip} s="ok">${f.to.k === 'bank' ? 'Bank line' : 'Bill'} · ${f.to.n}<//>` : html`<${Chip} s="warn">not attached<//>`}</td><td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}><a className="btn ghost sm" href=${fileUrl('org/acct/receipts', f.id, true)}><${Icon} n="down" /></a><button className="btn ghost sm" onClick=${() => setAttach(f)}>${f.to ? 'Re-attach' : 'Attach'}</button><button className="btn ghost sm" onClick=${() => confirm('Remove this file?') && del(f)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
+            ? html`<div className="tblwrap"><table className="tbl small"><thead><tr><th>File</th><th>Added</th><th>Attached to</th><th /></tr></thead><tbody>${files.docs.map(f => html`<tr key=${f.id}><td><a href=${fileUrl(BOOKS_RCPT, f.id)} target="_blank" rel="noopener">${f.n}</a><div className="muted">${sizeLabel(f.sz || 0)}</div></td><td>${fmtTs(f.at)}</td><td>${f.to ? html`<${Chip} s="ok">${f.to.k === 'bank' ? 'Bank line' : 'Bill'} · ${f.to.n}<//>` : html`<${Chip} s="warn">not attached<//>`}</td><td className="r"><div className="actions" style=${{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}><a className="btn ghost sm" href=${fileUrl(BOOKS_RCPT, f.id, true)}><${Icon} n="down" /></a><button className="btn ghost sm" onClick=${() => setAttach(f)}>${f.to ? 'Re-attach' : 'Attach'}</button><button className="btn ghost sm" onClick=${() => confirm('Remove this file?') && del(f)}><${Icon} n="trash" /></button></div></td></tr>`)}</tbody></table></div>`
             : html`<${Empty} title="No receipts yet">Upload the first one; photos from a phone work too.<//>`
       }
       ${

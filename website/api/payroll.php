@@ -125,7 +125,7 @@ function ddPayrollPeople(): array
     return $out;
 }
 /** v35: tells the person (with a "this wasn't me" link) and payroll about a new or changed bank account. */
-function ddChangeNotice(string $uid, array $by, bool $staff, array $last4s, int $holdUntil, array $prev, array $before = []): void
+function ddChangeNotice(string $uid, array $by, bool $staff, array $last4s, int $holdUntil, array $prev, array $before = [], bool $removed = false): void
 {
     try {
         require_once __DIR__ . '/auth.php';
@@ -144,15 +144,16 @@ function ddChangeNotice(string $uid, array $by, bool $staff, array $last4s, int 
         authMail(
             $p + ['status' => 'active'],
             'Your direct deposit account was changed',
-            array_values(array_filter(['Hi ' . authFirst($p) . ',', ($staff ? $by['name'] . ' (StratEdge payroll)' : 'You') . ' changed where your pay goes: ' . $accts . ', on ' . gmdate('j M Y H:i') . ' UTC from ' . clientIp() . '.', $meanwhile, 'If you did not make or ask for this change, open the link below right away: it stops the change, signs everyone out of your account and alerts payroll.'])),
+            array_values(array_filter(['Hi ' . authFirst($p) . ',', ($staff ? $by['name'] . ' (StratEdge payroll)' : 'You') . ($removed ? ' removed ' . $accts . ' from your direct deposit' : ' changed where your pay goes: ' . $accts) . ', on ' . gmdate('j M Y H:i') . ' UTC from ' . clientIp() . '.', $meanwhile, 'If you did not make or ask for this change, open the link below right away: it stops the change, signs everyone out of your account and alerts payroll.'])),
             ['This was not me: stop the change', $link]
         );
         $GLOBALS['mailKind'] = 'security';
+        $what = $p['name'] . ($removed ? ' no longer has ' . $accts . ' for pay (removed by ' : ' now has ' . $accts . ' for pay (changed by ') . $by['name'] . ').';
         foreach (ddPayrollPeople() as $r) {
             if ((string) $r['id'] === (string) $by['id']) {
                 continue;
             }
-            sendMail((string) $r['email'], (string) $r['name'], 'Direct deposit changed: ' . $p['name'], $p['name'] . ' now has ' . $accts . ' for pay (changed by ' . $by['name'] . ').' . ($holdUntil > 0 ? ' It is on hold until ' . $when . '; until then pay goes to the previous account. Release the hold early only after you confirm the change with them by phone at a number already on file (not one given in an email).' : ''), emailHtml('Direct deposit changed', [$p['name'] . ' now has ' . $accts . ' for pay (changed by ' . $by['name'] . ').', $holdUntil > 0 ? 'It is on hold until ' . $when . '; until then pay goes to the previous account. Release the hold early only after confirming the change with them by phone, at a number already on file - never one given in an email or chat.' : 'Check with them if this was unexpected.'], ['Open payroll setup', siteUrl() . '#/portal/admin/paysetup']));
+            sendMail((string) $r['email'], (string) $r['name'], 'Direct deposit changed: ' . $p['name'], $what . ($holdUntil > 0 ? ' It is on hold until ' . $when . '; until then pay goes to the previous account. Release the hold early only after you confirm the change with them by phone at a number already on file (not one given in an email).' : ''), emailHtml('Direct deposit changed', [$what, $holdUntil > 0 ? 'It is on hold until ' . $when . '; until then pay goes to the previous account. Release the hold early only after confirming the change with them by phone, at a number already on file - never one given in an email or chat.' : 'Check with them if this was unexpected.'], ['Open payroll setup', siteUrl() . '#/portal/admin/paysetup']));
         }
     } catch (Throwable $e) {
         // a notice never blocks the save
@@ -203,25 +204,43 @@ function nachaBuild(string $mk, bool $prenote, array $u): array
             fail(400, 'invalid_argument', 'ACH settings are incomplete: add the ' . $n . ' under Payroll setup › Direct deposit.');
         }
     }
-    $run = docGet('org/acct/runs/' . $mk);
-    if (!$run || !in_array((string) ($run->st ?? ''), ['final', 'paid'], true)) {
-        fail(400, 'invalid_argument', 'Finalize the payroll run first.');
-    }
-    $payDate = (string) ($run->payDate ?? '');
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payDate)) {
-        $payDate = (string) ($run->paidOn ?? date('Y-m-d'));
-    }
-    // every paystub of this run
-    $s = db()->prepare("SELECT path, data FROM docs WHERE col LIKE 'pays/%/items' AND path LIKE ?");
-    $s->execute(['pays/%/items/' . $mk]);
     $stubs = [];
-    while ($row = $s->fetch()) {
-        if (!preg_match('#^pays/(u_[a-f0-9]+)/items/#', $row['path'], $mm)) {
-            continue;
+    if ($prenote && $mk === 'prenote') {
+        // v83: the standalone prenote (Payroll setup › Direct deposit): every person with a direct deposit account
+        // on file, no run needed; the loop below keeps only the accounts still waiting for their $0 test entry
+        $payDate = date('Y-m-d');
+        $s = db()->prepare("SELECT path FROM docs WHERE col = 'sec/dd/items'");
+        $s->execute();
+        while ($row = $s->fetch()) {
+            if (!preg_match('#^sec/dd/items/(u_[a-f0-9]+)$#', $row['path'], $mm)) {
+                continue;
+            }
+            $p = userRow($mm[1]);
+            $stubs[$mm[1]] = (object) ['n' => (string) ($p['name'] ?? $mm[1]), 'method' => 'Direct deposit', 'net' => 0];
         }
-        $d = json_decode($row['data']);
-        if ($d instanceof stdClass) {
-            $stubs[$mm[1]] = $d;
+        if (!$stubs) {
+            fail(400, 'invalid_argument', 'Nobody has a direct deposit account on file yet.');
+        }
+    } else {
+        $run = docGet('org/acct/runs/' . $mk);
+        if (!$run || !in_array((string) ($run->st ?? ''), ['final', 'paid'], true)) {
+            fail(400, 'invalid_argument', 'Finalize the payroll run first.');
+        }
+        $payDate = (string) ($run->payDate ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $payDate)) {
+            $payDate = (string) ($run->paidOn ?? date('Y-m-d'));
+        }
+        // every paystub of this run
+        $s = db()->prepare("SELECT path, data FROM docs WHERE col LIKE 'pays/%/items' AND path LIKE ?");
+        $s->execute(['pays/%/items/' . $mk]);
+        while ($row = $s->fetch()) {
+            if (!preg_match('#^pays/(u_[a-f0-9]+)/items/#', $row['path'], $mm)) {
+                continue;
+            }
+            $d = json_decode($row['data']);
+            if ($d instanceof stdClass) {
+                $stubs[$mm[1]] = $d;
+            }
         }
     }
     if (!$stubs) {
@@ -608,7 +627,8 @@ function payrollRoute(string $r, string $method, array $b): never
             // working account (the classic payroll-diversion fraud swaps it), and the person is told by email
             require_once __DIR__ . '/guard.php';
             $holdDays = (int) guardCfg()['ddHold'];
-            $hadWorking = (bool) array_filter($old, fn($a) => (int) ($a->holdUntil ?? 0) <= $now) || (!empty($cur->prev) && (int) ($cur->prevUntil ?? 0) > $now);
+            // v83: also once the person has ever had a working account (`had`), so emptying the list first no longer skips the hold
+            $hadWorking = !empty($cur->had) || (bool) array_filter($old, fn($a) => (int) ($a->holdUntil ?? 0) <= $now) || (!empty($cur->prev) && (int) ($cur->prevUntil ?? 0) > $now);
             $changed = [];
             foreach ($in as $a) {
                 if (!is_array($a)) {
@@ -670,16 +690,28 @@ function payrollRoute(string $r, string $method, array $b): never
             if (!$staff && !empty($cur->frozen)) {
                 $doc->frozen = true;
             }
+            // v83: once the person has had a working account, every later new or changed one waits (emptying the list first does not reset this)
+            if ($hadWorking || $accts) {
+                $doc->had = true;
+            }
+            // the accounts that last worked: on file now, kept from a hold in progress, or kept when the list was emptied
+            $working = array_values(array_filter(array_values($old), fn($a) => (int) ($a->holdUntil ?? 0) <= $now))
+                ?: (!empty($cur->prev) && (int) ($cur->prevUntil ?? 0) > $now ? array_values((array) $cur->prev) : array_values(array_filter((array) ($cur->gone ?? []), fn($a) => is_object($a))));
+            if (!$accts && $working) {
+                $doc->gone = $working;
+            }
             $until = max(0, ...array_map(fn($a) => (int) $a->holdUntil, $accts ?: [(object) ['holdUntil' => 0]]));
             if ($until > $now) {
                 // until the hold ends, pay keeps going to the accounts that worked before the change
-                $doc->prev = !empty($cur->prev) && (int) ($cur->prevUntil ?? 0) > $now ? $cur->prev : array_values(array_filter(array_values($old), fn($a) => (int) ($a->holdUntil ?? 0) <= $now));
+                $doc->prev = !empty($cur->prev) && (int) ($cur->prevUntil ?? 0) > $now ? $cur->prev : $working;
                 $doc->prevUntil = $until;
             }
             docSet('sec/dd/items/' . $uid, $doc);
             auditLog('dd', $uid, ($staff ? 'Staff updated' : 'Employee updated') . ' direct deposit accounts', ['n' => count($accts), 'last4' => array_map(fn($a) => $a->last4, $accts), 'heldUntil' => $until > $now ? $until : 0], $u);
-            if ($changed) {
-                ddChangeNotice($uid, $u, $staff, $changed, $until > $now ? $until : 0, (array) ($doc->prev ?? []), array_values($old));
+            // v83: removing every account is a change too (with a "this was not me" link that restores it)
+            $removed = !$accts ? array_values(array_map(fn($a) => (string) ($a->last4 ?? ''), $old)) : [];
+            if ($changed || $removed) {
+                ddChangeNotice($uid, $u, $staff, $changed ?: $removed, $until > $now ? $until : 0, (array) ($doc->prev ?? []), array_values($old) ?: $working, !$changed);
             }
             ok(ddPublic(ddDoc($uid)));
         case 'dd_release':
@@ -812,10 +844,11 @@ function payrollRoute(string $r, string $method, array $b): never
         case 'pay_nacha':
             $u = payrollStaff();
             $mk = str($b, 'mk', 20);
-            if (!preg_match('/^\d{4}-\d{2}(-\d{1,2})?$/', $mk)) {
+            $prenote = !empty($b['prenote']);
+            // v83: mk 'prenote' (with prenote) is the standalone prenote for new accounts, not a pay period
+            if (!($prenote && $mk === 'prenote') && !preg_match('/^\d{4}-\d{2}(-\d{1,2})?$/', $mk)) {
                 fail(400, 'invalid_argument', 'Bad pay period.');
             }
-            $prenote = !empty($b['prenote']);
             [$text, $summary] = nachaBuild($mk, $prenote, $u);
             if (!empty($b['download'])) {
                 header('Content-Type: text/plain; charset=us-ascii');
@@ -898,6 +931,7 @@ function payrollRoute(string $r, string $method, array $b): never
                 'by' => $u['id'],
                 'u' => now(),
             ];
+            booksGuard('org/acct/taxdep/' . $id, $d); // v83: closed periods stay closed (the new date and, for an edit, the old one)
             docSet('org/acct/taxdep/' . $id, $d);
             auditLog('taxdep', $id, 'Tax deposit recorded', ['kind' => $d->kind, 'a' => $d->a, 'period' => $d->period], $u);
             ok(['id' => $id]);
@@ -905,6 +939,7 @@ function payrollRoute(string $r, string $method, array $b): never
             $u = payrollStaff();
             $id = preg_replace('/[^a-z0-9]/', '', (string) ($b['id'] ?? ''));
             if ($id !== '') {
+                booksGuard('org/acct/taxdep/' . $id, docGet('org/acct/taxdep/' . $id)); // v83: a deposit in a closed period stays
                 docDelete('org/acct/taxdep/' . $id);
                 auditLog('taxdep', $id, 'Tax deposit removed', [], $u);
             }

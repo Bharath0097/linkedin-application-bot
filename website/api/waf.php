@@ -161,7 +161,7 @@ const WAF_RULE_NAMES = [
     'inject-jndi' => 'Log4Shell-style lookup (${jndi:…})', 'inject-ssti' => 'Server template injection', 'inject-ssti-math' => 'Template math probe ({{7*7}})', 'inject-php-object' => 'Serialized PHP object', 'inject-xxe' => 'XML external entity',
     'inject-java' => 'Serialized Java object', 'inject-crlf' => 'Header injection (line breaks)', 'nosql-operator' => 'NoSQL operator as a field name ($ne, $where…)', 'nosql-query' => 'NoSQL operator in the address',
     'bot-tool' => 'Attack tool (sqlmap, nikto, nuclei…)', 'bot-script' => 'Script or headless browser on a public form', 'bot-empty' => 'No browser name on a public form',
-    'proto-method' => 'HTTP method the site never uses', 'proto-long-query' => 'Oversized address', 'proto-params' => 'Hundreds of parameters', 'proto-depth' => 'Deeply nested data',
+    'proto-method' => 'HTTP method the site never uses', 'proto-long-query' => 'Oversized address', 'proto-params' => 'Hundreds of parameters', 'proto-depth' => 'Deeply nested data', 'proto-oversize' => 'Request too big to read whole',
     'trap-route' => 'Decoy route only scanners ask for', 'geo-block' => 'Blocked country', 'ai-injection' => 'Prompt injection aimed at StratEdge AI',
     'bhv-probe' => 'Scanning: many refused/probing requests across the site', 'bhv-stuffing' => 'Credential stuffing: many wrong sign-ins from one address', 'proto-unknown' => 'Guessing route names',
 ];
@@ -419,9 +419,10 @@ function wafCollect(string $r, bool $signed = false): array
         $vals[] = ['?', $qs, 'q'];
     }
     if (!in_array($r, WAF_SKIP_BODY, true) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-        $ct = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
-        if (str_contains($ct, 'application/json') || ($ct === '' && !$_POST)) {
-            $b = body();
+        // v83: what the modules read is what is scanned: body() decodes php://input as JSON whatever the Content-Type
+        // says, so a JSON body sent as text/plain (or any type PHP does not parse into $_POST) is read here as well
+        $b = body();
+        if ($b) {
             // the website chat sends the whole conversation back: only what the visitor typed is theirs
             if (($r === 'chat' || str_starts_with($r, 'ai_')) && isset($b['messages']) && is_array($b['messages'])) {
                 $b['messages'] = array_values(array_filter($b['messages'], fn($m) => is_array($m) && ($m['role'] ?? '') === 'user'));
@@ -435,7 +436,8 @@ function wafCollect(string $r, bool $signed = false): array
                 $vals[] = [$p, $x, ''];
             }
             $params += count($o);
-        } else {
+        }
+        if ($_POST || $_FILES) {
             $o = [];
             wafFlatten($_POST, '', $o, $keys, 1, $size, $depth);
             foreach ($o as [$p, $x]) {
@@ -483,7 +485,9 @@ function wafCollect(string $r, bool $signed = false): array
         }
         $vals[] = ['cookie:' . $ck, mb_substr($cv, 0, 4000), 'q'];
     }
-    return ['vals' => $vals, 'keys' => $keys, 'params' => $params, 'depth' => $depth, 'qs' => strlen($qs)];
+    // v83: more than the firewall reads (WAF_MAX_TOTAL characters or 4000 values): what came after the limit was not scanned
+    $cut = $size > WAF_MAX_TOTAL || $params > 4000;
+    return ['vals' => $vals, 'keys' => $keys, 'params' => $params, 'depth' => $depth, 'qs' => strlen($qs), 'cut' => $cut];
 }
 
 /* ---------- decisions ---------- */
@@ -687,6 +691,11 @@ function wafGuard(string $r, string $method): void
         }
         if ($req['depth'] > 32) {
             $add([['proto-depth', 'proto', 5, 'nested ' . $req['depth'] . ' levels']], 'body');
+        }
+        // v83: a visitor's request too big to read whole cannot hide an attack behind padding (signed-in people are
+        // left out: they are never refused for protocol hits and may save large records)
+        if ($req['cut'] && !$signed) {
+            $add([['proto-oversize', 'proto', 10, 'more than the firewall reads']], 'body');
         }
     }
     // a public form posted without any browser name

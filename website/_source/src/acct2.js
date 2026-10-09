@@ -690,9 +690,12 @@ function BankImportPage() {
     const now = Date.now();
     await dbMerge(`org/acct/bank/${row.id}`, { m: { k: 'other', n: what, at: now }, u: now });
   };
+  // v83: through books_line, which also takes back the payment the match recorded on the invoice or bill (a re-match
+  // or a category afterwards no longer counts the same deposit twice)
   const unmatch = async row => {
-    if (!confirm('Forget this match? The invoice or bill keeps its payment; only the link is removed.')) return;
-    await dbMerge(`org/acct/bank/${row.id}`, { m: null, u: Date.now() });
+    if (!confirm('Undo this match? The payment it recorded on the invoice or bill is taken back.')) return;
+    await api('books_line', { id: row.id, act: 'undo' });
+    Sync.kick();
   };
   const del = async row => {
     if (!confirm('Delete this bank row?')) return;

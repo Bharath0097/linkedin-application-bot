@@ -235,8 +235,9 @@ const SEC_KINDS = {
   strike: 'Strikes',
 };
 const SEC_NUM = [
-  ['api_per_min', 'API calls per address per minute'],
-  ['poll_per_min', 'Live-update checks per address per minute'],
+  // v83: the third value is the lowest setting the server accepts (anonymous traffic is never limited below it)
+  ['api_per_min', 'API calls per address per minute (anonymous; at least 600)', 600],
+  ['poll_per_min', 'Live-update checks per address per minute (anonymous; at least 1200)', 1200],
   ['form_per_hour', 'Public form posts per address per hour'],
   ['strikes', 'Strikes in an hour before a ban'],
   ['ban_min', 'Automatic ban length (minutes)'],
@@ -432,7 +433,7 @@ function SecurityPage() {
           )}
         </div>
         <div className="form seccfg">
-          ${SEC_NUM.map(([k, n]) => html`<${Field} key=${k} label=${n}><input type="number" min="0" value=${f[k]} onInput=${num(k)} /><//>`)}
+          ${SEC_NUM.map(([k, n, mn]) => html`<${Field} key=${k} label=${n}><input type="number" min=${mn || 0} value=${f[k]} onInput=${num(k)} /><//>`)}
         </div>
         <div className="form seclists">
           ${SEC_LISTS.map(([k, n, h]) => html`<${Field} key=${k} label=${n} hint=${h}><textarea rows="4" value=${f[k] || ''} onInput=${e => setF({ ...f, [k]: e.target.value })} /><//>`)}
@@ -562,7 +563,7 @@ function WafPanel({ q }) {
         }
         <h3 className="ph" style=${{ marginTop: 8 }}>Busiest attacking addresses</h3>
         <div className="tblwrap"><table className="tbl"><thead><tr><th>Address</th><th className="r">Hits</th><th></th></tr></thead><tbody>
-          ${(b.top || []).map(t => html`<tr key=${t.ip}><td><code>${t.ip}</code>${t.cc ? html` <span className="muted small">${t.cc}</span>` : ''}${t.blocked ? html` <${Chip} s="red">blocked<//>` : t.allowed ? html` <${Chip} s="ok">allowed<//>` : ''}</td><td className="r">${t.n}</td><td className="r"><button className="btn ghost sm" onClick=${() => setLook(t.ip)}>Look</button></td></tr>`)}
+          ${(b.top || []).map(t => html`<tr key=${t.ip}><td><code>${t.ip}</code>${t.cc ? html` <span className="muted small">${t.cc}</span>` : ''}${t.blocked != null ? html` <${Chip} s="red">blocked<//>` : t.allowed ? html` <${Chip} s="ok">allowed<//>` : ''}</td><td className="r">${t.n}</td><td className="r"><button className="btn ghost sm" onClick=${() => setLook(t.ip)}>Look</button></td></tr>`)}
           ${!(b.top || []).length && html`<tr><td colSpan="3" className="muted small">Quiet so far.</td></tr>`}
         </tbody></table></div>
       </section>

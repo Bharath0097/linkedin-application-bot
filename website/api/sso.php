@@ -370,6 +370,12 @@ function ssoCallback(): never
         ]);
         ssoGo('#/portal/mymail?connected=1');
     }
+    // v83: a sign-in opens (or creates) the account with the provider's email, so the provider must vouch for that
+    // address; an unconfirmed one (or a Microsoft tenant's own mail attribute) would open anyone's account
+    if (!ssoEmailVerified($p, is_array($info) ? $info : [], $tok)) {
+        mailLog('sso ' . $p . ' sign-in refused: the provider did not confirm ' . $email);
+        $back('unverified');
+    }
     $as = (string) $st['as'];
     $u = ssoAccount($p, $email, $name, $back);
     // signed in through a particular portal's login: the account must have that portal (same rule as the password login)
@@ -381,6 +387,38 @@ function ssoCallback(): never
         }
     }
     ssoGo(ssoOpen($u, $p, $asKey, (string) $st['next']));
+}
+/** v83: whether the provider vouches for the email it sent (a sign-in links to the account with that address).
+ *  Google and LinkedIn say so in userinfo (email_verified); Microsoft's userinfo has no such claim, so the ID token
+ *  that came with the access token (straight from the token endpoint over TLS, OIDC Core 3.1.3.7) is read: a personal
+ *  Microsoft account, a work account whose email domain the tenant verified (optional claim xms_edov), or an address
+ *  listed in verified_primary_email / verified_secondary_email. */
+function ssoEmailVerified(string $p, array $info, array $tok): bool
+{
+    $yes = fn($v) => $v === true || in_array((string) (is_scalar($v) ? $v : ''), ['true', '1'], true);
+    if ($yes($info['email_verified'] ?? null)) {
+        return true;
+    }
+    if ($p !== 'microsoft') {
+        return false;
+    }
+    $parts = explode('.', is_string($tok['id_token'] ?? null) ? $tok['id_token'] : '');
+    $c = count($parts) === 3 ? json_decode((string) base64_decode(strtr($parts[1], '-_', '+/')), true) : null;
+    if (!is_array($c)) {
+        return false;
+    }
+    $email = strtolower(trim((string) ($info['email'] ?? '')));
+    $idEmail = strtolower(trim((string) (is_scalar($c['email'] ?? null) ? $c['email'] : '')));
+    if ($email === '' || ($idEmail !== '' && $idEmail !== $email)) {
+        return false;
+    }
+    $listed = array_merge((array) ($c['verified_primary_email'] ?? []), (array) ($c['verified_secondary_email'] ?? []));
+    foreach ($listed as $x) {
+        if (is_string($x) && strtolower(trim($x)) === $email) {
+            return true;
+        }
+    }
+    return $yes($c['xms_edov'] ?? null) || (string) (is_scalar($c['tid'] ?? null) ? $c['tid'] : '') === '9188040d-6c67-4c5b-b112-36a304b66dad';
 }
 /** The account behind a verified provider email: found, or created on the spot (screened first). */
 function ssoAccount(string $p, string $email, string $name, callable $back): array
@@ -750,6 +788,9 @@ function gmailSync(array $a): int
 {
     $tok = gmailToken($a);
     $pdo = mymailDb();
+    // v83: only the mailbox of someone who works the requirements desk feeds it
+    require_once __DIR__ . '/vms.php';
+    $toDesk = vmsMayFeed((string) $a['uid']);
     [$code, $list] = ssoHttp(GMAIL_API . 'messages?' . http_build_query(['maxResults' => 40, 'q' => 'newer_than:21d -in:spam -in:trash']), null, ['Authorization: Bearer ' . $tok]);
     if ($code !== 200 || !is_array($list)) {
         fail(400, 'gmail', 'Gmail did not answer: ' . (is_array($list) ? (string) ($list['error']['message'] ?? $code) : $code));
@@ -805,9 +846,10 @@ function gmailSync(array $a): int
             if ($dsn) {
                 mymailBounce($a['uid'], $dsn, $at);
             } else {
-                // vendor requirements that arrive in a person's own Gmail go to the requirements desk too
-                require_once __DIR__ . '/vms.php';
-                vmsMaybeRequirement($fe, $fn, (string) ($h['subject'] ?? ''), $bodyText, 'gmail', (string) ($h['message-id'] ?? ''));
+                // vendor requirements that arrive in a recruiter's own Gmail go to the requirements desk too
+                if ($toDesk) {
+                    vmsMaybeRequirement($fe, $fn, (string) ($h['subject'] ?? ''), $bodyText, 'gmail', (string) ($h['message-id'] ?? ''));
+                }
                 mymailBook($a['uid'], $fe, $fn, $at);
             }
         }
@@ -882,6 +924,9 @@ function msmailSync(array $a): int
     $tok = msmailToken($a);
     mymailXid();
     $pdo = mymailDb();
+    // v83: only the mailbox of someone who works the requirements desk feeds it
+    require_once __DIR__ . '/vms.php';
+    $toDesk = vmsMayFeed((string) $a['uid']);
     $since = gmdate('Y-m-d\TH:i:s\Z', time() - 21 * 86400);
     $n = 0;
     foreach (['inbox' => 'in', 'sentitems' => 'out'] as $folder => $dir) {
@@ -943,8 +988,9 @@ function msmailSync(array $a): int
                 if ($dsn) {
                     mymailBounce($a['uid'], $dsn, $at * 1000);
                 } else {
-                    require_once __DIR__ . '/vms.php';
-                    vmsMaybeRequirement($fe, $fn, $subject, $text, 'microsoft', $msgid);
+                    if ($toDesk) {
+                        vmsMaybeRequirement($fe, $fn, $subject, $text, 'microsoft', $msgid);
+                    }
                     mymailBook($a['uid'], $fe, $fn, $at * 1000);
                 }
             }

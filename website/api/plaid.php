@@ -330,8 +330,8 @@ function plaidWebhook(string $raw): never
         exit('ignored');
     }
     $item = $items[$found];
-    $verified = plaidVerifyWebhook($raw);
-    if ($verified === false) {
+    // v83: fail closed. A missing header, or a key that could not be fetched (null), is not a signature.
+    if (plaidVerifyWebhook($raw) !== true) {
         http_response_code(401);
         exit('signature');
     }
@@ -353,7 +353,7 @@ function plaidWebhook(string $raw): never
     http_response_code(200);
     exit('ok');
 }
-/** Plaid signs webhooks with a JWT (ES256). true = verified, false = bad signature, null = could not check. */
+/** Plaid signs webhooks with a JWT (ES256). true = verified, false = bad signature, null = could not check (callers must reject anything but true). */
 function plaidVerifyWebhook(string $raw): ?bool
 {
     $jwt = (string) ($_SERVER['HTTP_PLAID_VERIFICATION'] ?? '');

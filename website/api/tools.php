@@ -834,7 +834,8 @@ function toolsRoute(string $r, string $method, array $b): never
         case 'mail_unsuppress':
             mailUser();
             $e = strtolower(trim(str($b, 'email', 190)));
-            mdb()->prepare('DELETE FROM mail_suppress WHERE email = ?')->execute([$e]);
+            // v83: privacy erasures and opt-outs only by an administrator; audited
+            mailUnsuppress($e);
             ok(['ok' => true]);
         case 'mail_contacts_cleanup':
             $u = mailUser();

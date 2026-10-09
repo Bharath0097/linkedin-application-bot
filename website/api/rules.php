@@ -259,7 +259,8 @@ function ruleCtOfCand(stdClass $c): string
 function rulesStaff(): array
 {
     $u = requireUser();
-    if (userLevel($u) < 2) {
+    // v83: administrators and HR only; userLevel() >= 2 also let in acct and outside bookkeepers
+    if (!hasRole($u, 'admin') && !hasRole($u, 'hr')) {
         fail(403, 'forbidden', 'Consultant types and job rules are for administrators and HR.');
     }
     return $u;

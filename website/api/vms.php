@@ -803,6 +803,7 @@ function vmsImport(array $me, array $files, array $opts): array
     $byEmail = [];
     $byPhone = [];
     $byName = [];
+    $known = []; // id => [email, last 10 phone digits]: whether a same-name row may be the same person
     foreach (colList('rec/cand/items', null, 'asc', 0) as [$id, $c]) {
         $e = strtolower(trim((string) ($c->e ?? '')));
         $p = preg_replace('/\D+/', '', (string) ($c->ph ?? '')) ?? '';
@@ -816,13 +817,14 @@ function vmsImport(array $me, array $files, array $opts): array
         if ($n !== '') {
             $byName[$n] = (string) $id;
         }
+        $known[(string) $id] = [$e, strlen($p) >= 7 ? substr($p, -10) : ''];
     }
     $added = 0;
     $updated = 0;
     $skipped = 0;
     $failed = [];
     $now = now();
-    $save = function (array $f, ?array $resume) use (&$added, &$updated, &$skipped, &$byEmail, &$byPhone, &$byName, $update, $tags, $byn, $me, $now) {
+    $save = function (array $f, ?array $resume) use (&$added, &$updated, &$skipped, &$byEmail, &$byPhone, &$byName, &$known, $update, $tags, $byn, $me, $now) {
         $e = strtolower(trim((string) ($f['e'] ?? '')));
         $p = preg_replace('/\D+/', '', (string) ($f['ph'] ?? '')) ?? '';
         $n = mb_strtolower(trim((string) ($f['n'] ?? '')));
@@ -830,7 +832,15 @@ function vmsImport(array $me, array $files, array $opts): array
             $skipped++;
             return;
         }
-        $dup = ($e !== '' ? $byEmail[$e] ?? null : null) ?? (strlen($p) >= 7 ? $byPhone[substr($p, -10)] ?? null : null) ?? ($n !== '' ? $byName[$n] ?? null : null);
+        $p10 = strlen($p) >= 7 ? substr($p, -10) : '';
+        $dup = ($e !== '' ? $byEmail[$e] ?? null : null) ?? ($p10 !== '' ? $byPhone[$p10] ?? null : null);
+        if ($dup === null && $n !== '' && isset($byName[$n])) {
+            // the same name is only the same person when the email and phone do not say otherwise
+            [$ce, $cp] = $known[$byName[$n]] ?? ['', ''];
+            if (($e === '' || $ce === '') && ($p10 === '' || $cp === '')) {
+                $dup = $byName[$n];
+            }
+        }
         $doc = array_filter([
             'n' => vmsStr($f['n'] ?? '', 120),
             'e' => vmsStr($e, 190),
@@ -863,6 +873,16 @@ function vmsImport(array $me, array $files, array $opts): array
             $cur->u = $now;
             $cur->un = $byn;
             docSet('rec/cand/items/' . $dup, $cur);
+            // the record may have gained an email or phone: later rows match it by those
+            $ce2 = strtolower(trim((string) ($cur->e ?? '')));
+            $cp2 = preg_replace('/\D+/', '', (string) ($cur->ph ?? '')) ?? '';
+            $known[$dup] = [$ce2, strlen($cp2) >= 7 ? substr($cp2, -10) : ''];
+            if ($ce2 !== '') {
+                $byEmail[$ce2] = $dup;
+            }
+            if (strlen($cp2) >= 7) {
+                $byPhone[substr($cp2, -10)] = $dup;
+            }
             $id = $dup;
             $updated++;
         } else {
@@ -886,6 +906,7 @@ function vmsImport(array $me, array $files, array $opts): array
             if ($n !== '') {
                 $byName[$n] = $id;
             }
+            $known[$id] = [$e, $p10];
             $added++;
         }
         if ($resume) {
@@ -979,6 +1000,17 @@ function vmsStaff(): array
         fail(403, 'forbidden', 'The requirements desk is for StratEdge staff and recruiters.');
     }
     return $u;
+}
+/** v83: whether a person's own mailbox may feed the requirements desk: the same people who work the desk (vmsStaff),
+ *  so a consultant's or a self-registered account's mailbox cannot file requirements in it. */
+function vmsMayFeed(string $uid): bool
+{
+    $row = userRow($uid);
+    if (!$row || ($row['status'] ?? '') !== 'active') {
+        return false;
+    }
+    $u = $row + ['roles' => rolesOf($row)];
+    return featureAllowed($u, 'requirements', userLevel($u) >= 2 || isRecruiter($uid) || isBench($uid));
 }
 function vmsRoute(string $r, string $method, array $b): void
 {

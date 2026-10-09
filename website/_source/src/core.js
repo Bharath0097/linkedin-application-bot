@@ -377,6 +377,10 @@ async function apiSend(route, body, opts) {
       Cap.uid = null;
       Cap.isAdmin = false;
       capNotify();
+      // v83: a session that ended leaves no copies of this person's records in the browser either
+      Sync.subs.clear();
+      clearTimeout(SnapCache.timer);
+      SnapCache.load(null);
       location.hash = '#/login?expired=1';
     }
     throw {
@@ -493,6 +497,14 @@ const SnapCache = {
       this.clearAll();
       return;
     }
+    // v83: whoever used this browser before (a session that timed out) leaves no cached records for the next person
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('se_snap:') && k !== this.keyOf())
+        .forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      /* fine */
+    }
     try {
       const j = JSON.parse(localStorage.getItem(this.keyOf()) || 'null');
       if (j && j.v === 1 && Array.isArray(j.e)) j.e.forEach(([k, x]) => x && x.raw && this.mem.set(k, x));
@@ -509,7 +521,8 @@ const SnapCache = {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.save(), 1500);
   },
-  persistable: k => !/^(doc|col)\|(pays|sec|log)(\/|\||$)|^col\|org\/acct\/runs/.test(k),
+  // v83: the books and bank lines (org/acct, payroll runs included) stay in memory only, like pay and security records
+  persistable: k => !/^(doc|col)\|(pays|sec|log|org\/acct)(\/|\||$)/.test(k),
   save() {
     if (!this.uid) return;
     try {
@@ -1499,7 +1512,10 @@ const toCSV = rows =>
     .map(r =>
       r
         .map(v => {
-          const s = v == null ? '' : String(v);
+          let s = v == null ? '' : String(v);
+          // v83: a cell that starts like a spreadsheet formula (= + - @) would run when the file is opened in Excel or
+          // Sheets: an apostrophe keeps it text. Numbers (also written as text, like "-12.50") stay as they are.
+          if (typeof v !== 'number' && /^(\s*[=+\-@]|[\t\r])/.test(s) &&!/^\s*[+-]?\d+(?:[.,]\d+)*\s*$/.test(s)) s = "'" + s;
           return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
         })
         .join(',')
@@ -2028,7 +2044,10 @@ function computePay(pay, md, mk, leaves, holidays, adjs, opts) {
   } else {
     dayRate = workDays ? amt / workDays : 0;
     hourRate = workDays ? amt / (workDays * hrs) : 0;
-    paidDays = p.lop ? Math.min(workDays, present + (p.pl ? leaveDays : 0)) : workDays;
+    // a company holiday on a scheduled working day is paid: when holidays bring the calendar below the standard days
+    // (20 by default), the shortfall they cause is not an absence
+    const holPaid = Math.max(0, Math.min(days.filter(d => d.h && isWorkDay(d.k, p.days)).length, workDays - calDays));
+    paidDays = p.lop ? Math.min(workDays, present + holPaid + (p.pl ? leaveDays : 0)) : workDays;
     base = p.lop ? dayRate * paidDays : amt;
     otPay = otMult ? (ot / 60) * hourRate * otMult : 0;
   }
@@ -2295,9 +2314,16 @@ const LoadError = ({ error, onRetry, title }) =>
    React removes everything it drew when a component throws, which looks like a blank page. The guard below
    catches that for one page at a time, keeps the menus working, says what happened and offers a reload.
    The details can be copied and sent to whoever looks after the site; they are also noted in storage/error.log. */
+// v83: the page named in a report keeps its path and query keys but not their values, and a signing or invoice link
+// loses its token, so reset links, support keys and the like never reach storage/error.log
+const crashHash = () => {
+  const [p, qs] = (location.hash || '#/').split('?');
+  const path = p.replace(/^(#\/(?:sign|invoice)\/[^/]*)\/.+$/, '$1/…');
+  return qs ? path + '?' + qs.split('&').map(x => x.split('=')[0] + '=…').join('&') : path;
+};
 const crashDetails = (err, info, where) =>
   [
-    `Page: ${location.hash || '#/'}${where ? ' (' + where + ')' : ''}`,
+    `Page: ${crashHash()}${where ? ' (' + where + ')' : ''}`,
     `Build: ${typeof APP_BUILD === 'string' ? APP_BUILD : '-'}`,
     `When: ${new Date().toString()}`,
     `Browser: ${navigator.userAgent}`,

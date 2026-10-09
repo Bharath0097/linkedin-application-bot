@@ -244,7 +244,10 @@ function TaxAccounts() {
   const save = async () => {
     setBusy(true);
     try {
-      await dbMerge('org/acct/x/settings', { ein: f.ein.trim(), stateIds: f.stateIds });
+      // v83: whole replacement objects (an update deep-merges, so a removed state or a cleared rate would stay saved);
+      // the rest of each record is read fresh and kept
+      const curS = (await dbGet('org/acct/x/settings')) || {};
+      await dbSet('org/acct/x/settings', { ...curS, ein: f.ein.trim(), stateIds: f.stateIds });
       const rates = {},
         bases = {};
       Object.entries(f.sutaRates).forEach(([k, v]) => {
@@ -253,7 +256,8 @@ function TaxAccounts() {
       Object.entries(f.sutaBases).forEach(([k, v]) => {
         if (+v > 0) bases[k] = r2(v);
       });
-      await dbMerge('org/acct/x/tax', { us: { sutaRates: rates, sutaBases: bases } });
+      const curT = (await dbGet('org/acct/x/tax')) || {};
+      await dbSet('org/acct/x/tax', { ...curT, us: { ...(curT.us || {}), sutaRates: rates, sutaBases: bases } });
       toast('Tax accounts saved.');
     } catch (e) {
       toast(errText(e), true);
@@ -621,9 +625,13 @@ function TaxFilingsPage() {
       ${
         dep &&
         html`<${Modal} title=${dep.id ? 'Tax deposit' : 'Record a tax deposit'} onClose=${() => setDep(null)} foot=${html`${dep.id && html`<button className="btn ghost danger" onClick=${async () => {
-          await api('taxdep_delete', { id: dep.id });
-          setDep(null);
-          load();
+          try {
+            await api('taxdep_delete', { id: dep.id });
+            setDep(null);
+            load();
+          } catch (e) {
+            toast(errText(e), true); // e.g. a deposit in closed books
+          }
         }}>Remove</button>`}<button className="btn ghost" onClick=${() => setDep(null)}>Cancel</button><button className="btn" disabled=${busy === 'dep'} onClick=${saveDep}>Save</button>`}>
             <div className="form">
               <div className="row3">

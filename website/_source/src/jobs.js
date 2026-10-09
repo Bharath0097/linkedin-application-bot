@@ -118,7 +118,8 @@ const ScoreMeter = ({ n }) =>
 function JobRow({ j, onState, onPublish, onApply, onBotQueue, onBotApply, busy, tailorHref }) {
   const [open, setOpen] = useState(false);
   const chips = [j.portal, j.remote, j.job_type, j.salary].filter(Boolean);
-  const also = (j.also || []).filter(a => a.portal && a.portal !== j.portal).slice(0, 4);
+  // v83: only http(s) board links become href
+  const also = (j.also || []).filter(a => a.portal && a.portal !== j.portal && /^https?:\/\//i.test(a.url || '')).slice(0, 4);
   return html`<div className="match">
       <div style=${{ minWidth: 0 }}>
         <h3>
@@ -398,9 +399,9 @@ function JobsPage() {
                     // v35: one click: queue it approved and open the bot, which runs it once the companion answers
                     try {
                       const r = await api('ab_job_save', { url: x.url, title: x.title, company: x.company || x.portal || 'Employer', location: x.location || '', description: x.description || x.summary || '', approved: true, src: 'match' });
-                      location.hash = '/portal/appbot?run=' + r.job.id;
+                      location.hash = growHref(P, 'appbot') + '?run=' + r.job.id; // stay in the portal in use
                     } catch (e) {
-                      if (/already in your queue/.test(e.message || '')) location.hash = '/portal/appbot';
+                      if (/already in your queue/.test(e.message || '')) location.hash = growHref(P, 'appbot');
                       else toast(errText(e), true);
                     }
                   }} busy=${busy} tailorHref=${x => growHref(P, 'tailor') + '?job=' + x.id} />`)}
@@ -453,7 +454,9 @@ function ApplyJobModal({ job, onClose, onDone }) {
         r.how === 'email'
           ? `Sent to ${r.to}.`
           : r.how === 'careers'
-            ? 'Application sent to StratEdge.'
+            ? r.again
+              ? 'Added to your earlier application.'
+              : 'Application sent to StratEdge.'
             : 'Sent to the StratEdge recruiting team.'
       );
     } catch (e) {
@@ -489,7 +492,9 @@ function ApplyJobModal({ job, onClose, onDone }) {
                               ${done.to}
                             </b>, the contact named in the posting${done.team ? ', with the StratEdge recruiting team in copy' : ''}. Replies go to your email.`
                           : done.how === 'careers'
-                            ? html`<b>Application received.</b> Your resume "${done.resume}" is with StratEdge's recruiting team.`
+                            ? done.again
+                              ? html`<b>You had already applied for this role.</b> We added your resume "${done.resume}" to your application.`
+                              : html`<b>Application received.</b> Your resume "${done.resume}" is with StratEdge's recruiting team.`
                             : html`<b>Sent to the StratEdge recruiting team.</b> They will submit you with your resume "${done.resume}" and keep you posted.${done.team ? '' : ' (No recruiting team address is set up yet; it is listed under Applications for the team.)'}`
                       }
                     </span>

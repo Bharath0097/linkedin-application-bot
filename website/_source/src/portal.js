@@ -2349,6 +2349,8 @@ function Earnings() {
   const pay = P.asg.pay;
   const ready = !!(P.prof && pay && +pay.amt);
   const cyc = cycleRange(mk, ps);
+  /* v83: paySched() returns a schedule object (v28), not the start day; the sentence below reads ps.start. */
+  const ord = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   const md = useCycleAtt(P.uid, cyc, ready);
   if (!P.prof) return html`<${NeedProfile} />`;
   if (!ready) return html`<div className="stack"><${NoPayPlan} /><${MyPaystubs} /></div>`;
@@ -2391,7 +2393,7 @@ function Earnings() {
           </button>
         </div>
         <span className="muted small">
-          ${payLabel(c.p)}${c.p.from ? ', from ' + fmtDate(c.p.from, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}${ps > 1 ? `. Pay period runs from the ${ps}${ps === 26 ? 'th' : ''} to the ${ps - 1}${ps - 1 === 25 ? 'th' : ''}.` : ''}
+          ${payLabel(c.p)}${c.p.from ? ', from ' + fmtDate(c.p.from, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}${ps.freq === 'monthly' && ps.start > 1 ? `. Pay period runs from the ${ord(ps.start)} to the ${ord(ps.start - 1)}.` : ''}
         </span>
         <div className="push">
           <button className="btn ghost" onClick=${exp}>
