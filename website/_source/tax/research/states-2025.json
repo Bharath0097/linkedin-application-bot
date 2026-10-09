@@ -1,0 +1,554 @@
+{
+  "year": 2025,
+  "source": "https://taxfoundation.org/data/all/state/state-income-tax-rates/",
+  "compiled": "2026-10-06",
+  "conventions": "Rates are decimals. Bracket rows are [lowerBound, marginalRate]; the rate applies to state taxable income above lowerBound up to the next row. Amounts in USD. std.kind / exemption.kind: deduction = subtracted from income, credit = subtracted from tax, none = not available. start: federalAGI = state return begins with federal AGI; federalTaxable = begins with federal taxable income (the federal standard/itemized deduction is already reflected, so do not subtract std again); own = state defines its own gross income. Phase-outs are described in notes and the amounts shown are the base/maximum. Local tax rates are typical/indicative, not a per-locality table. Tax Foundation's table (published Feb 2025) was superseded where a state enacted 2025 changes or released final 2025 inflation figures; those states list the state source in crossCheckSources.",
+  "states": {
+    "AL": {
+      "name": "Alabama", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.02], [500, 0.04], [3000, 0.05]], "mfj": [[0, 0.02], [1000, 0.04], [6000, 0.05]]},
+      "std": {"single": 3000, "mfj": 8500, "kind": "deduction", "notes": "Maximum amounts. Phase down for AGI above $25,999: single by $25 per $500 of AGI to a $2,500 floor; MFJ by $175 per $500 to a $5,000 floor."},
+      "exemption": {"single": 1500, "mfj": 3000, "dependent": 1000, "kind": "deduction", "notes": "Dependent exemption $1,000 if AGI <= $50,000; $500 if $50,001-$100,000; $300 above $100,000."},
+      "start": "own",
+      "local": "Occupational (wage) license taxes in some cities/counties, e.g. Birmingham 1%, Bessemer 1%, Gadsden 2%; most localities have none.",
+      "notes": "Federal income tax paid is deductible on the Alabama return. No 2025 rate change.",
+      "verified": true
+    },
+    "AK": {
+      "name": "Alaska", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "AZ": {
+      "name": "Arizona", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.025]], "mfj": [[0, 0.025]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Tied to the federal standard deduction; ADOR's Feb 2026 update gives $15,750/$31,500 for 2025 (Tax Foundation's table showed the pre-OBBBA $15,000/$30,000). Non-itemizers can add 33% of charitable contributions."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 100, "kind": "credit", "notes": "No personal exemption. Dependent credit $100 per dependent under 17 and $25 per dependent 17+; phases out above FAGI $200,000 single / $400,000 MFJ."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Flat 2.5%, unchanged in 2025. HB 4168 (signed June 13, 2026) moved IRC conformity to Jan 1, 2026, with subtractions for the federal tips/overtime deductions from tax year 2025.",
+      "verified": true
+    },
+    "AR": {
+      "name": "Arkansas", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0], [5600, 0.02], [11200, 0.03], [16000, 0.034], [26400, 0.039]], "mfj": [[0, 0], [5600, 0.02], [11200, 0.03], [16000, 0.034], [26400, 0.039]]},
+      "std": {"single": 2470, "mfj": 4940, "kind": "deduction", "notes": "2025 DFA instructions (Tax Foundation listed $2,410/$4,820)."},
+      "exemption": {"single": 29, "mfj": 58, "dependent": 29, "kind": "credit", "notes": "$29 personal tax credit per taxpayer, spouse and dependent."},
+      "start": "own",
+      "local": "None.",
+      "notes": "Brackets are DFA's 2025 regular table for net income up to $94,700 (same for all filing statuses). Above $94,700 a bracket adjustment removes the lower brackets: from $97,801, tax = 3.9% x net income - $89.30 (about 2% on the first $4,700 and 3.9% above). Separate low-income tables give lower tax at low incomes. Top rate 3.9% since 2024, unchanged in 2025.",
+      "verified": true
+    },
+    "CA": {
+      "name": "California", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.01], [11079, 0.02], [26264, 0.04], [41452, 0.06], [57542, 0.08], [72724, 0.093], [371479, 0.103], [445771, 0.113], [742953, 0.123], [1000000, 0.133]],
+        "mfj": [[0, 0.01], [22158, 0.02], [52528, 0.04], [82904, 0.06], [115084, 0.08], [145448, 0.093], [742958, 0.103], [891542, 0.113], [1000000, 0.123], [1485906, 0.133]]
+      },
+      "std": {"single": 5706, "mfj": 11412, "kind": "deduction", "notes": "2025 FTB indexed amounts (Tax Foundation showed 2024 amounts)."},
+      "exemption": {"single": 153, "mfj": 306, "dependent": 475, "kind": "credit", "notes": "Exemption credits are cut by $6 per credit for each $2,500 of federal AGI above $252,203 (single) / $504,411 (MFJ)."},
+      "start": "federalAGI",
+      "local": "None for individuals.",
+      "notes": "2025 FTB brackets (Tax Foundation showed 2024). The rows at $1,000,000 add the 1% Behavioral Health Services Tax on taxable income over $1M (all filing statuses). The CA SDI payroll tax (no wage cap) is withheld separately and not included.",
+      "verified": true
+    },
+    "CO": {
+      "name": "Colorado", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.044]], "mfj": [[0, 0.044]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Federal standard deduction, already included because Colorado starts from federal taxable income (federal 2025: $15,750/$31,500); do not subtract again. If AGI is over $300,000, std/itemized deductions above $12,000 (single) / $16,000 (MFJ) are added back."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": "federalTaxable",
+      "local": "Occupational privilege taxes (flat monthly amounts on employees working in the city): Denver $5.75/mo, Aurora $2/mo, Greenwood Village $2/mo, Sheridan $3/mo, Glendale $5/mo.",
+      "notes": "Rate is back to 4.4% for 2025; the TABOR-triggered 4.25% applied to 2024 only.",
+      "verified": true
+    },
+    "CT": {
+      "name": "Connecticut", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.02], [10000, 0.045], [50000, 0.055], [100000, 0.06], [200000, 0.065], [250000, 0.069], [500000, 0.0699]],
+        "mfj": [[0, 0.02], [20000, 0.045], [100000, 0.055], [200000, 0.06], [400000, 0.065], [500000, 0.069], [1000000, 0.0699]]
+      },
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 15000, "mfj": 24000, "dependent": 0, "kind": "deduction", "notes": "Personal exemption shrinks by $1,000 for each $1,000 of CT AGI above $30,000 (single) / $48,000 (MFJ), reaching zero at $45,000 / $72,000. Personal tax credits of 1%-75% of tax also apply at lower incomes."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Phase-outs: income in the 2% bracket is taxed at 4.5% once CT AGI exceeds $56,500 (single) / $100,500 (MFJ). Benefit recapture adds up to $3,150 (single) / $6,300 (MFJ) above $105,000 / $210,000, so very high earners pay about 6.99% on all income. No 2025 rate change.",
+      "verified": true
+    },
+    "DE": {
+      "name": "Delaware", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0], [2000, 0.022], [5000, 0.039], [10000, 0.048], [20000, 0.052], [25000, 0.0555], [60000, 0.066]],
+        "mfj": [[0, 0], [2000, 0.022], [5000, 0.039], [10000, 0.048], [20000, 0.052], [25000, 0.0555], [60000, 0.066]]
+      },
+      "std": {"single": 3250, "mfj": 6500, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 110, "mfj": 220, "dependent": 110, "kind": "credit", "notes": "$110 personal credit per taxpayer, spouse and dependent."},
+      "start": "federalAGI",
+      "local": "Wilmington 1.25% earned income (wage) tax on residents and on nonresidents working in the city.",
+      "notes": "No 2025 rate change.",
+      "verified": true
+    },
+    "FL": {
+      "name": "Florida", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "GA": {
+      "name": "Georgia", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.0519]], "mfj": [[0, 0.0519]]},
+      "std": {"single": 12000, "mfj": 24000, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 4000, "kind": "deduction", "notes": "No personal exemption since 2024; $4,000 per dependent."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "HB 111 (April 2025) cut the rate from 5.39% to 5.19%, retroactive to Jan 1, 2025. The Tax Foundation table still shows 5.39%.",
+      "verified": true
+    },
+    "HI": {
+      "name": "Hawaii", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.014], [9600, 0.032], [14400, 0.055], [19200, 0.064], [24000, 0.068], [36000, 0.072], [48000, 0.076], [125000, 0.079], [175000, 0.0825], [225000, 0.09], [275000, 0.10], [325000, 0.11]],
+        "mfj": [[0, 0.014], [19200, 0.032], [28800, 0.055], [38400, 0.064], [48000, 0.068], [72000, 0.072], [96000, 0.076], [250000, 0.079], [350000, 0.0825], [450000, 0.09], [550000, 0.10], [650000, 0.11]]
+      },
+      "std": {"single": 4400, "mfj": 8800, "kind": "deduction", "notes": "Doubled for 2025 under Act 46 (2024)."},
+      "exemption": {"single": 1144, "mfj": 2288, "dependent": 1144, "kind": "deduction", "notes": ""},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Act 46 (2024) widened the brackets from 2025, with more bracket and std deduction steps scheduled for later years.",
+      "verified": true
+    },
+    "ID": {
+      "name": "Idaho", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0], [4811, 0.053]], "mfj": [[0, 0], [9622, 0.053]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Equal to the federal amount. Idaho adopted the 2025 federal (OBBBA) changes, including the tips, overtime, car-loan-interest and senior deductions."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": "No personal exemptions. Idaho has a separate child tax credit."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "HB 40 (March 2025) cut the rate from 5.695% to 5.3%, retroactive to Jan 1, 2025. The zero-rate band is indexed: $4,811 single / $9,622 MFJ (Tax Foundation shows the 2024 values $4,673/$9,346 at 5.695%).",
+      "verified": true
+    },
+    "IL": {
+      "name": "Illinois", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.0495]], "mfj": [[0, 0.0495]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 2850, "mfj": 5700, "dependent": 2850, "kind": "deduction", "notes": "Not allowed if AGI exceeds $250,000 (single) / $500,000 (MFJ)."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "No 2025 rate change.",
+      "verified": true
+    },
+    "IN": {
+      "name": "Indiana", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.03]], "mfj": [[0, 0.03]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 1000, "mfj": 2000, "dependent": 1000, "kind": "deduction", "notes": "Each qualifying dependent child gets another $1,500 ($3,000 in the first year a child is claimed)."},
+      "start": "federalAGI",
+      "local": "County income tax on all residents, about 0.5%-3.0% in 2025 (e.g. Marion County/Indianapolis 2.02%).",
+      "notes": "Rate cut from 3.05% to 3.0% for 2025. The IT-40 starting point follows the IRC as in effect on Jan 1, 2023.",
+      "verified": true
+    },
+    "IA": {
+      "name": "Iowa", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.038]], "mfj": [[0, 0.038]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Federal standard deduction, already included because Iowa starts from federal taxable income with rolling IRC conformity (federal 2025: $15,750/$31,500); do not subtract again."},
+      "exemption": {"single": 40, "mfj": 80, "dependent": 40, "kind": "credit", "notes": "$40 exemption credit per taxpayer, spouse and dependent."},
+      "start": "federalTaxable",
+      "local": "School district income surtaxes, levied as a percentage of the Iowa income tax and set by each district.",
+      "notes": "Graduated rates were replaced by a flat 3.8% for 2025.",
+      "verified": true
+    },
+    "KS": {
+      "name": "Kansas", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.052], [23000, 0.0558]], "mfj": [[0, 0.052], [46000, 0.0558]]},
+      "std": {"single": 3605, "mfj": 8240, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 9160, "mfj": 18320, "dependent": 2320, "kind": "deduction", "notes": ""},
+      "start": "federalAGI", "local": "None on wages.",
+      "notes": "Rates unchanged for 2025: the SB 269 revenue-triggered cut was not triggered (KDOR Notice 25-06).",
+      "verified": true
+    },
+    "KY": {
+      "name": "Kentucky", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.04]], "mfj": [[0, 0.04]]},
+      "std": {"single": 3270, "mfj": 6540, "kind": "deduction", "notes": "$3,270 per person. A married-filing-joint return gets only one $3,270. Couples who file 'married filing separately on a combined return' get $3,270 each ($6,540), which most two-earner couples choose."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": "No personal exemptions. Family Size Tax Credit for low incomes; personal tax credits for 65+/blind via Schedule ITC."},
+      "start": "federalAGI",
+      "local": "Occupational license taxes on wages in most cities/counties, typically about 0.5%-2.5% combined (e.g. Louisville Metro about 2.2% for residents, Lexington-Fayette 2.25%), plus some school district taxes.",
+      "notes": "Rate cut from 4.5% to 4.0% for 2025.",
+      "verified": true
+    },
+    "LA": {
+      "name": "Louisiana", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.03]], "mfj": [[0, 0.03]]},
+      "std": {"single": 12500, "mfj": 25000, "kind": "deduction", "notes": "New for 2025; indexed from 2026."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": "Act 11 (2024 3rd Extraordinary Session) repealed the extra $1,000 deductions for dependents, age 65+ and blind."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Graduated 1.85%/3.5%/4.25% replaced by a flat 3% for 2025. The old combined personal exemption-standard deduction was replaced by the std deduction above.",
+      "verified": true
+    },
+    "ME": {
+      "name": "Maine", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.058], [26800, 0.0675], [63450, 0.0715]], "mfj": [[0, 0.058], [53600, 0.0675], [126900, 0.0715]]},
+      "std": {"single": 15000, "mfj": 30000, "kind": "deduction", "notes": "Maine did not adopt the federal OBBBA increase for 2025. The std/itemized deduction phases out above Maine AGI of $100,000 (single) / $200,050 (MFJ)."},
+      "exemption": {"single": 5150, "mfj": 10300, "dependent": 305, "kind": "deduction", "dependentKind": "credit", "notes": "Personal exemption of $5,150 per person (a deduction) phases out above $333,450 (single) / $400,100 (MFJ). The dependent amount is a CREDIT: $305 per dependent, $610 per child under 6, phasing out at high incomes."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Brackets indexed (2025 MRS rate schedules).",
+      "verified": true
+    },
+    "MD": {
+      "name": "Maryland", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.02], [1000, 0.03], [2000, 0.04], [3000, 0.0475], [100000, 0.05], [125000, 0.0525], [150000, 0.055], [250000, 0.0575], [500000, 0.0625], [1000000, 0.065]],
+        "mfj": [[0, 0.02], [1000, 0.03], [2000, 0.04], [3000, 0.0475], [150000, 0.05], [175000, 0.0525], [225000, 0.055], [300000, 0.0575], [600000, 0.0625], [1200000, 0.065]]
+      },
+      "std": {"single": 3350, "mfj": 6700, "kind": "deduction", "notes": "Flat amounts from 2025, replacing the old 15%-of-income standard deduction with a minimum and maximum."},
+      "exemption": {"single": 3200, "mfj": 6400, "dependent": 3200, "kind": "deduction", "notes": "$3,200 per exemption, reduced to $1,600 and then $800 as FAGI rises. It is $0 above $150,000 (single) / $200,000 (MFJ); the phase-out starts at $100,000 / $150,000."},
+      "start": "federalAGI",
+      "local": "County/Baltimore City income tax on residents, 2.25% (Worcester) to 3.30% (Dorchester) in 2025; most counties 3.2%; Anne Arundel and Frederick use graduated local rates. Nonresidents pay a 2.25% special nonresident tax instead.",
+      "notes": "The 2025 Budget Reconciliation and Financing Act (effective tax year 2025) added 6.25% and 6.5% brackets, a flat std deduction, a 2% surtax on net capital gains when FAGI exceeds $350,000, and a 3.3% local rate cap. The Tax Foundation table predates these changes.",
+      "verified": true
+    },
+    "MA": {
+      "name": "Massachusetts", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.05], [1083150, 0.09]], "mfj": [[0, 0.05], [1083150, 0.09]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 4400, "mfj": 8800, "dependent": 1000, "kind": "deduction", "notes": ""},
+      "start": "own", "local": "None.",
+      "notes": "Effectively a flat 5%, plus a 4% surtax (9% total) on income above $1,083,150 (the same threshold for joint filers). Short-term capital gains are taxed at 8.5%. Paid Family and Medical Leave payroll contributions are separate.",
+      "verified": true
+    },
+    "MI": {
+      "name": "Michigan", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.0425]], "mfj": [[0, 0.0425]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 5800, "mfj": 11600, "dependent": 5800, "kind": "deduction", "notes": ""},
+      "start": "federalAGI",
+      "local": "City income tax in 24 cities: most 1% for residents / 0.5% for nonresidents; Detroit 2.4% / 1.2%; Grand Rapids 1.5% / 0.75%.",
+      "notes": "4.25% for 2025 (the 4.05% rate applied to 2023 only).",
+      "verified": true
+    },
+    "MN": {
+      "name": "Minnesota", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0535], [32570, 0.068], [106990, 0.0785], [198630, 0.0985]], "mfj": [[0, 0.0535], [47620, 0.068], [189180, 0.0785], [330410, 0.0985]]},
+      "std": {"single": 14950, "mfj": 29900, "kind": "deduction", "notes": "Reduced for high-AGI filers (above roughly $239,000, by up to 80%)."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 5200, "kind": "deduction", "notes": "No personal exemption; $5,200 per dependent."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "1% surtax on net investment income over $1 million.",
+      "verified": true
+    },
+    "MS": {
+      "name": "Mississippi", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0], [10000, 0.044]], "mfj": [[0, 0], [10000, 0.044]]},
+      "std": {"single": 2300, "mfj": 4600, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 6000, "mfj": 12000, "dependent": 1500, "kind": "deduction", "notes": "Another $1,500 each for 65+ or blind."},
+      "start": "own", "local": "None.",
+      "notes": "Rate cut from 4.7% to 4.4% for 2025, on taxable income over $10,000; 4.0% is scheduled for 2026.",
+      "verified": true
+    },
+    "MO": {
+      "name": "Missouri", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0], [1313, 0.02], [2626, 0.025], [3939, 0.03], [5252, 0.035], [6565, 0.04], [7878, 0.045], [9191, 0.047]],
+        "mfj": [[0, 0], [1313, 0.02], [2626, 0.025], [3939, 0.03], [5252, 0.035], [6565, 0.04], [7878, 0.045], [9191, 0.047]]
+      },
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Equals the federal std deduction (2025 OBBBA amounts per MO DOR). Missouri does NOT allow the federal tips, overtime, car-loan-interest or senior deductions."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": "federalAGI",
+      "local": "1% earnings tax in Kansas City and St. Louis on residents and on nonresidents working there.",
+      "notes": "Top rate cut from 4.8% to 4.7% for 2025. A 100% capital gains subtraction starts in 2025. A limited, AGI-phased deduction for federal income tax paid is allowed.",
+      "verified": true
+    },
+    "MT": {
+      "name": "Montana", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.047], [21100, 0.059]], "mfj": [[0, 0.047], [42200, 0.059]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Federal std deduction (and Schedule 1-A deductions), already included because Montana taxable income begins with federal AGI less federal deductions; do not subtract again."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": "No personal exemptions (a $5,660 subtraction exists for taxpayers 65+)."},
+      "start": "federalTaxable", "local": "None.",
+      "notes": "The start is federal taxable income computed without the QBI deduction. Net long-term capital gains are taxed at 3.0%/4.1%. HB 337 rate changes begin in 2026.",
+      "verified": true
+    },
+    "NE": {
+      "name": "Nebraska", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0246], [4030, 0.0351], [24120, 0.0501], [38870, 0.052]], "mfj": [[0, 0.0246], [8040, 0.0351], [48250, 0.0501], [77730, 0.052]]},
+      "std": {"single": 8600, "mfj": 17200, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 171, "mfj": 342, "dependent": 171, "kind": "credit", "notes": "$171 credit per exemption."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Top rate cut from 5.84% to 5.2% for 2025.",
+      "verified": true
+    },
+    "NV": {
+      "name": "Nevada", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "NH": {
+      "name": "New Hampshire", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "Wages were never taxed. The Interest and Dividends Tax (3% in 2024) was repealed from Jan 1, 2025, so there is no individual income tax for 2025. Source: Tax Foundation; the NH DRA site refused the request (HTTP 403).",
+      "verified": true
+    },
+    "NJ": {
+      "name": "New Jersey", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.014], [20000, 0.0175], [35000, 0.035], [40000, 0.05525], [75000, 0.0637], [500000, 0.0897], [1000000, 0.1075]],
+        "mfj": [[0, 0.014], [20000, 0.0175], [50000, 0.0245], [70000, 0.035], [80000, 0.05525], [150000, 0.0637], [500000, 0.0897], [1000000, 0.1075]]
+      },
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 1000, "mfj": 2000, "dependent": 1500, "kind": "deduction", "notes": ""},
+      "start": "own",
+      "local": "None on individuals (Newark's 1% payroll tax is paid by employers).",
+      "notes": "No 2025 rate change.",
+      "verified": true
+    },
+    "NM": {
+      "name": "New Mexico", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.015], [5500, 0.032], [16500, 0.043], [33500, 0.047], [66500, 0.049], [210000, 0.059]],
+        "mfj": [[0, 0.015], [8000, 0.032], [25000, 0.043], [50000, 0.047], [100000, 0.049], [315000, 0.059]]
+      },
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Equals the federal std deduction (IRC 63), so the 2025 OBBBA amounts apply. The federal tips, overtime and senior deductions do not flow through."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 4000, "kind": "deduction", "notes": "$4,000 deduction for each dependent except one."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "HB 252 (2024) restructured the brackets for tax years from 2025; the top rate stays 5.9%.",
+      "verified": true
+    },
+    "NY": {
+      "name": "New York", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.04], [8500, 0.045], [11700, 0.0525], [13900, 0.055], [80650, 0.06], [215400, 0.0685], [1077550, 0.0965], [5000000, 0.103], [25000000, 0.109]],
+        "mfj": [[0, 0.04], [17150, 0.045], [23600, 0.0525], [27900, 0.055], [161550, 0.06], [323200, 0.0685], [2155350, 0.0965], [5000000, 0.103], [25000000, 0.109]]
+      },
+      "std": {"single": 8000, "mfj": 16050, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 1000, "kind": "deduction", "notes": "No personal exemption; $1,000 per dependent."},
+      "start": "federalAGI",
+      "local": "New York City resident tax 3.078%-3.876%. Yonkers: residents pay a surcharge of 16.75% of net NYS tax; nonresidents pay 0.5% of wages earned there. MCTMT applies to self-employment income in the MTA region.",
+      "notes": "Tax benefit recapture: above NY AGI of $107,650 the benefit of the lower brackets is recaptured, so very high earners pay their top rate on all income. No 2025 rate change; cuts start in 2026.",
+      "verified": true
+    },
+    "NC": {
+      "name": "North Carolina", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.0425]], "mfj": [[0, 0.0425]]},
+      "std": {"single": 12750, "mfj": 25500, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 3000, "kind": "deduction", "notes": "No personal exemption. Child deduction per qualifying child by AGI: MFJ $3,000 up to $40,000, then $500 less per $20,000, $0 above $140,000. Single: $3,000 up to $20,000, then $500 less per $10,000, $0 above $70,000."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Rate cut from 4.5% to 4.25% for 2025; 3.99% from 2026.",
+      "verified": true
+    },
+    "ND": {
+      "name": "North Dakota", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0], [48475, 0.0195], [244825, 0.025]], "mfj": [[0, 0], [80975, 0.0195], [298075, 0.025]]},
+      "std": {"single": 15750, "mfj": 31500, "kind": "deduction", "notes": "Federal std deduction, already included because North Dakota starts from federal taxable income; do not subtract again. Flow-through of the 2025 OBBBA amount assumes ND's automatic IRC conformity and was not separately confirmed with the state."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": "federalTaxable", "local": "None.",
+      "notes": "2025 brackets confirmed in ND's 2025 tax rate schedules.",
+      "verified": true
+    },
+    "OH": {
+      "name": "Ohio", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0], [26050, 0.0275], [100000, 0.03125]], "mfj": [[0, 0], [26050, 0.0275], [100000, 0.03125]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 2400, "mfj": 4800, "dependent": 2400, "kind": "deduction", "notes": "Per exemption by Ohio MAGI: $2,400 up to $40,000; $2,150 for $40,001-$80,000; $1,900 for $80,001-$749,999; $0 at $750,000 or more."},
+      "start": "federalAGI",
+      "local": "Municipal income taxes on wages in most cities, commonly 1%-2.5% (Columbus and Cleveland 2.5%, Cincinnati 1.8%), plus school district income taxes in many districts.",
+      "notes": "HB 96 cut the top rate from 3.5% to 3.125% for 2025 (flat 2.75% from 2026); the Tax Foundation table shows 3.5%. The official table includes a base amount: income over $26,050 pays $342 + 2.75% of the excess, and income over $100,000 pays $2,394.32 + 3.125% of the excess. So the 0% band is lost above $26,050 and the marginal brackets alone understate tax by about $342. The joint filing credit and low-income credits are not modeled.",
+      "verified": true
+    },
+    "OK": {
+      "name": "Oklahoma", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.0025], [1000, 0.0075], [2500, 0.0175], [3750, 0.0275], [4900, 0.0375], [7200, 0.0475]],
+        "mfj": [[0, 0.0025], [2000, 0.0075], [5000, 0.0175], [7500, 0.0275], [9800, 0.0375], [14400, 0.0475]]
+      },
+      "std": {"single": 6350, "mfj": 12700, "kind": "deduction", "notes": ""},
+      "exemption": {"single": 1000, "mfj": 2000, "dependent": 1000, "kind": "deduction", "notes": ""},
+      "start": "federalAGI", "local": "None.",
+      "notes": "No 2025 change. HB 2764 cuts the top rate to 4.5% and consolidates brackets from 2026.",
+      "verified": true
+    },
+    "OR": {
+      "name": "Oregon", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0475], [4400, 0.0675], [11100, 0.0875], [125000, 0.099]], "mfj": [[0, 0.0475], [8800, 0.0675], [22200, 0.0875], [250000, 0.099]]},
+      "std": {"single": 2835, "mfj": 5670, "kind": "deduction", "notes": "Final 2025 DOR amounts (Tax Foundation and the 2025 estimated-tax booklet showed $2,800/$5,600)."},
+      "exemption": {"single": 256, "mfj": 512, "dependent": 256, "kind": "credit", "notes": "$256 credit per exemption; not allowed if federal AGI exceeds $100,000 (single) / $200,000 (joint)."},
+      "start": "federalAGI",
+      "local": "Portland Metro Supportive Housing Services tax: 1% of taxable income above $125,000 (single) / $200,000 (joint). Multnomah County Preschool for All: 1.5% above the same thresholds, plus another 1.5% above $250,000 / $400,000.",
+      "notes": "A subtraction for federal income tax paid (max $8,500) phases out starting at AGI $125,000 (single) / $250,000 (joint). The top bracket thresholds are not indexed. The first-bracket edges ($4,400/$8,800) are derived from DOR's published 2025 chart bases. The statewide transit tax (0.1% of wages) is withheld separately.",
+      "verified": true
+    },
+    "PA": {
+      "name": "Pennsylvania", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.0307]], "mfj": [[0, 0.0307]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": "No personal exemptions; a Tax Forgiveness credit applies at low incomes."},
+      "start": "own",
+      "local": "Local earned income tax (EIT) nearly statewide, typically about 1%-2% combined municipal + school district; Pittsburgh residents 3%. Philadelphia wage tax: residents 3.75% / nonresidents 3.44% until June 30, 2025, then 3.74% / 3.43% from July 1, 2025. Many municipalities also levy a Local Services Tax (up to $52/yr).",
+      "notes": "Income is taxed in eight state-defined classes, not from federal AGI. No 2025 rate change.",
+      "verified": true
+    },
+    "RI": {
+      "name": "Rhode Island", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0375], [79900, 0.0475], [181650, 0.0599]], "mfj": [[0, 0.0375], [79900, 0.0475], [181650, 0.0599]]},
+      "std": {"single": 10900, "mfj": 21800, "kind": "deduction", "notes": "Phases out for modified federal AGI between $254,250 and $283,250 (none above)."},
+      "exemption": {"single": 5100, "mfj": 10200, "dependent": 5100, "kind": "deduction", "notes": "Same $254,250-$283,250 phase-out as the std deduction."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Brackets are the same for all filing statuses (indexed; 2025 values).",
+      "verified": true
+    },
+    "SC": {
+      "name": "South Carolina", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0], [3560, 0.03], [17830, 0.06]], "mfj": [[0, 0], [3560, 0.03], [17830, 0.06]]},
+      "std": {"single": 15000, "mfj": 30000, "kind": "deduction", "notes": "Federal std deduction, embedded because SC starts from federal taxable income. SC conforms to the IRC as of Dec 31, 2024, so the OBBBA increase ($750 single / $1,500 MFJ) and the federal tips/overtime/senior/car-loan deductions must be added back for 2025 (SCDOR IL 26-4)."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 4930, "kind": "deduction", "notes": "No personal exemption. $4,930 per dependent, plus another $4,930 for each dependent under age 6."},
+      "start": "federalTaxable", "local": "None.",
+      "notes": "Top rate cut from 6.2% to 6.0% for 2025; for taxable income of $100,000 or more, tax = 6% x TI - $642. 44% of net capital gains is deductible. A major reform starts in 2026.",
+      "verified": true
+    },
+    "SD": {
+      "name": "South Dakota", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "TN": {
+      "name": "Tennessee", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax; the Hall tax on interest and dividends was fully repealed from 2021.",
+      "verified": true
+    },
+    "TX": {
+      "name": "Texas", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "UT": {
+      "name": "Utah", "taxesWages": true, "type": "flat",
+      "brackets": {"single": [[0, 0.045]], "mfj": [[0, 0.045]]},
+      "std": {"single": 945, "mfj": 1890, "kind": "credit", "notes": "Not a deduction. The taxpayer tax credit is 6% of the federal std deduction ($15,750/$31,500 for 2025) or of federal itemized deductions excluding state income tax. The whole credit (including the dependent part) is reduced by 1.3% of income above $18,213 (single) / $36,426 (MFJ)."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 126.66, "kind": "credit", "notes": "The Utah personal exemption is $2,111 per dependent (none for taxpayer/spouse) and enters the same 6% taxpayer credit: 6% x $2,111 = $126.66 per dependent, before the phase-out."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "HB 106 (2025) cut the rate from 4.55% to 4.5%, retroactive to Jan 1, 2025 (the Tax Foundation table shows 4.55%).",
+      "verified": true
+    },
+    "VT": {
+      "name": "Vermont", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0335], [49400, 0.066], [119700, 0.076], [249700, 0.0875]], "mfj": [[0, 0.0335], [82500, 0.066], [199450, 0.076], [304000, 0.0875]]},
+      "std": {"single": 7650, "mfj": 15300, "kind": "deduction", "notes": "Plus $1,250 for each 65+/blind box. 2025 amounts (Tax Foundation showed 2024)."},
+      "exemption": {"single": 5300, "mfj": 10600, "dependent": 5300, "kind": "deduction", "notes": ""},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Uses the 2025 VT rate schedules (Tax Foundation showed 2024 brackets). Minimum tax: if federal AGI exceeds $150,000, tax is the greater of the regular tax or 3% of AGI (less US obligation interest).",
+      "verified": true
+    },
+    "VA": {
+      "name": "Virginia", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.02], [3000, 0.03], [5000, 0.05], [17000, 0.0575]], "mfj": [[0, 0.02], [3000, 0.03], [5000, 0.05], [17000, 0.0575]]},
+      "std": {"single": 8750, "mfj": 17500, "kind": "deduction", "notes": "Raised for 2025 from $8,500/$17,000. Must be used if the federal std deduction was claimed."},
+      "exemption": {"single": 930, "mfj": 1860, "dependent": 930, "kind": "deduction", "notes": "Another $800 each for 65+ or blind."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "Brackets are not indexed and are the same for all filing statuses.",
+      "verified": true
+    },
+    "WA": {
+      "name": "Washington", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No tax on wages. A capital gains excise tax applies to long-term capital gains above a $278,000 standard deduction (2025; $270,000 in 2024). New tiered rates from tax year 2025: 7% on the first $1M of taxable gains and 9.9% above $1M. Real estate and retirement accounts are exempt. The WA Cares long-term-care premium (0.58% of wages) is a payroll deduction, not income tax.",
+      "verified": true
+    },
+    "WV": {
+      "name": "West Virginia", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.0222], [10000, 0.0296], [25000, 0.0333], [40000, 0.0444], [60000, 0.0482]], "mfj": [[0, 0.0222], [10000, 0.0296], [25000, 0.0333], [40000, 0.0444], [60000, 0.0482]]},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": "No standard deduction."},
+      "exemption": {"single": 2000, "mfj": 4000, "dependent": 2000, "kind": "deduction", "notes": ""},
+      "start": "federalAGI",
+      "local": "None (some cities charge flat weekly city service/user fees).",
+      "notes": "Rates cut about 4% effective Jan 1, 2025 (W. Va. Code 11-21-4i); another cut is scheduled for 2026.",
+      "verified": true
+    },
+    "WI": {
+      "name": "Wisconsin", "taxesWages": true, "type": "graduated",
+      "brackets": {"single": [[0, 0.035], [14680, 0.044], [50480, 0.053], [323290, 0.0765]], "mfj": [[0, 0.035], [19580, 0.044], [67300, 0.053], [431060, 0.0765]]},
+      "std": {"single": 13560, "mfj": 25110, "kind": "deduction", "notes": "Maximum (sliding-scale) amounts that phase out as income rises. Per the Tax Foundation, the phase-out starts at about $19,549 (single) / $28,209 (MFJ) and reaches zero at about $132,549 / $155,169."},
+      "exemption": {"single": 700, "mfj": 1400, "dependent": 700, "kind": "deduction", "notes": "Another $250 for each person 65+."},
+      "start": "federalAGI", "local": "None.",
+      "notes": "2025 Act 15 widened the 4.4% bracket retroactive to Jan 1, 2025 (the Tax Foundation table shows the old $29,370/$39,150 edges). Wisconsin follows the IRC as of Dec 31, 2022.",
+      "verified": true
+    },
+    "WY": {
+      "name": "Wyoming", "taxesWages": false, "type": "none",
+      "brackets": {"single": [], "mfj": []},
+      "std": {"single": 0, "mfj": 0, "kind": "none", "notes": ""},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": null, "local": "None.",
+      "notes": "No individual income tax.",
+      "verified": true
+    },
+    "DC": {
+      "name": "District of Columbia", "taxesWages": true, "type": "graduated",
+      "brackets": {
+        "single": [[0, 0.04], [10000, 0.06], [40000, 0.065], [60000, 0.085], [250000, 0.0925], [500000, 0.0975], [1000000, 0.1075]],
+        "mfj": [[0, 0.04], [10000, 0.06], [40000, 0.065], [60000, 0.085], [250000, 0.0925], [500000, 0.0975], [1000000, 0.1075]]
+      },
+      "std": {"single": 15000, "mfj": 30000, "kind": "deduction", "notes": "DC decoupled from the OBBBA increase and keeps $15,000/$30,000 for 2025. It also disallows the federal tips, overtime and senior deductions for 2025."},
+      "exemption": {"single": 0, "mfj": 0, "dependent": 0, "kind": "none", "notes": ""},
+      "start": "federalAGI", "local": "None (DC itself is the local jurisdiction).",
+      "notes": "Brackets are the same for all filing statuses. No 2025 rate change.",
+      "verified": true
+    }
+  },
+  "crossCheckSources": {
+    "AZ": "https://azdor.gov/sites/default/files/document/IND_Updates-2602.pdf",
+    "AR": "https://www.dfa.arkansas.gov/wp-content/uploads/2025_TaxBrackets.pdf ; https://www.dfa.arkansas.gov/wp-content/uploads/2025_AR1000F_and_AR1000NR_Instructions.pdf",
+    "CA": "https://www.ftb.ca.gov/about-ftb/newsroom/tax-news/2025/10.html ; https://www.ftb.ca.gov/forms/2025/2025-540-instructions.html",
+    "CO": "https://tax.colorado.gov/sites/tax/files/documents/Book104_2025.pdf",
+    "DC": "https://app.cfo.dc.gov/services/fiscal_impact/pdf/spring09/Updated FIS DC Income and Franchise Tax Conformity and Revision.pdf",
+    "GA": "https://dor.georgia.gov/document/document/2025-it-511-individual-income-tax-booklet/download",
+    "HI": "https://tax.hawaii.gov/forms/d_25table-on/d_25table-on_p13/",
+    "ID": "https://tax.idaho.gov/taxes/income-tax/individual-income/individual-income-tax-rate-schedule/ ; https://tax.idaho.gov/wp-content/uploads/forms/EIN00046/EIN00046_03-02-2026.pdf",
+    "IN": "https://www.in.gov/dor/files/NP-Indiana_DOR_shares_changes_for_2025_tax_returns.pdf ; https://www.in.gov/dor/files/2025-county-tax-rates-and-codes.pdf",
+    "IA": "https://revenue.iowa.gov/taxes/tax-guidance/individual-income-tax/1040-expanded-instructions/conformity-irc",
+    "KS": "https://ksrevenue.gov/taxnotices/notice25-06.pdf",
+    "KY": "https://revenue.ky.gov/Forms/740%20Packet%20Instructions.pdf",
+    "LA": "https://dam.ldr.la.gov/taxforms/IT540i-WEB-2025-Revised-7-26.pdf",
+    "ME": "https://www.maine.gov/revenue/sites/maine.gov.revenue/files/inline-files/ind_tax_rate_sched_2025.pdf ; https://www.maine.gov/revenue/sites/maine.gov.revenue/files/inline-files/25_1040me_gen_instr_w_cover_pg.pdf",
+    "MD": "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/legal-publications/alerts/tax-alert-changes-to-standard-and-itemized-deductions-and-to-state-and-local-income-tax-rates-from-the-2025-legislative-session.pdf ; https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/legal-publications/facts/Withholding-Tax-Facts-2025.pdf",
+    "MN": "https://www.revenue.state.mn.us/minnesota-income-tax-rates-and-brackets",
+    "MS": "https://www.dor.ms.gov/individual/tax-rates",
+    "MO": "https://dor.mo.gov/taxation/individual/tax-types/income/year-changes/",
+    "MT": "https://revenue.mt.gov/taxes/tax-tables-and-deductions/2025",
+    "NE": "https://revenue.nebraska.gov/sites/default/files/doc/tax-forms/2025/2025_Tax_Calculation_Schedule.pdf",
+    "NM": "https://www.nmlegis.gov/Sessions/24%20Regular/firs/HB0252.PDF ; https://www.nmlegis.gov/handouts/ZFFSS%20073125%20Item%202%20NMTRI-MTC%20Tax%20impacts.pdf",
+    "NY": "https://www.tax.ny.gov/pdf/current_forms/it/it201i.pdf",
+    "NC": "https://www.ncdor.gov/taxes-forms/tax-rate-schedules ; https://www.ncdor.gov/2025-d-401-individual-income-tax-instructions/open",
+    "ND": "https://www.tax.nd.gov/sites/www/files/documents/forms/individual/2025-iit/tax-tables-2025.pdf",
+    "OH": "https://tax.ohio.gov/individual/resources/annual-tax-rates",
+    "OR": "https://www.oregon.gov/dor/forms/FormsPubs/form-or-40-n_or-40-p-inst_101-048-1_2025.pdf ; https://www.oregon.gov/dor/forms/FormsPubs/form-or-40-inst_101-040-1_2025.pdf",
+    "PA": "https://www.phila.gov/services/payments-assistance-taxes/business-taxes/wage-tax-employers/",
+    "SC": "https://dor.sc.gov/sites/dor/files/forms/SC1040TT_2025.pdf ; https://dor.sc.gov/sites/dor/files/forms/IITPacket_2025.pdf ; https://www.dor.sc.gov/sites/dor/files/policies/IL26-4(revised).pdf",
+    "UT": "https://files.tax.utah.gov/tax/train/webinars/2026-01-15-presentation.pdf",
+    "VT": "https://tax.vermont.gov/sites/tax/files/documents/TaxRateSched-2025.pdf ; https://tax.vermont.gov/sites/tax/files/documents/Income-Booklet-2025.pdf",
+    "VA": "https://www.tax.virginia.gov/news/new-virginia-tax-laws-july-1-2025",
+    "WA": "https://dor.wa.gov/taxes-rates/other-taxes/capital-gains-tax ; https://dor.wa.gov/forms-publications/publications-subject/special-notices/new-tiered-rates-washingtons-capital-gains-tax",
+    "WV": "https://code.wvlegislature.gov/11-21-4i/",
+    "WI": "https://www.revenue.wi.gov/Documents/2025-Tax-Update-Three-Slides.pdf ; https://www.revenue.wi.gov/TaxForms2025/2025-Form1-Inst.pdf"
+  },
+  "unverified": []
+}

@@ -1,0 +1,175 @@
+<?php
+// What Edge, the website assistant, knows about StratEdge. Edit freely: plain text facts, plus
+// keyword-matched answers used when no AI key is configured (and as a safety net if the AI service is down).
+return [
+    'facts' => <<<TXT
+    StratEdge IT Consulting Inc. is an IT staffing and technology consulting firm founded in 2024, based at 1553 Route 27, Suite 1000, Somerset, NJ 08873. Phone +1 (302) 434-8889. Email info@stratedgeitconsulting.com. Office hours Monday to Friday, 9 AM to 7 PM Eastern. LinkedIn: linkedin.com/company/stratedge-it-consulting-inc.
+    Staffing: contract, corp-to-corp (C2C), W2, 1099, contract-to-hire and direct-hire placements, plus SOW-based project teams. Works directly with end clients and as a subcontractor to prime vendors. Roles: network engineering, SAP functional and technical, front-end and React, Java, Python and .NET engineering, cloud and DevOps, healthcare IT, finance and accounting. Network of over 100,000 professionals. Places consultants across the US, onsite, hybrid or remote.
+    Services: staffing services; web development; app development (iOS, Android, cross-platform, watch and TV); software development and SaaS; digital marketing (SEO, social, paid); UI/UX design; IT consultancy (strategy, architecture, vendor selection, project management); ERP/CRM including SAP; DevOps (CI/CD, AWS, Azure, GCP, Kubernetes, monitoring); healthcare IT (EHR/EMR, HIPAA-compliant telemedicine, remote patient monitoring, healthcare CRM, patient portals, HL7 and FHIR); clinical SaaS development.
+    Pricing: rates depend on the role, location, duration and engagement model. Quotes come after a short consultation; the consultation is free. Never quote specific prices.
+    Website portals: one Log in page with Consultant, Employee, Client, Student and staff portal choices. Consultant portal: resumes, matched jobs, applications, time, pay and documents. Employee portal: attendance, timesheets, tasks, email and campaigns, plus recruiting tools including Jobs & matches, Requirements desk, Vendors & clients, consultant submissions and the Bench desk. There is no separate recruiting login: employees use the Employee login. HR portal: onboarding, document verification, policies, payroll, leave and recruiting reports. Client portal: timesheet approvals, consultants, staffing requirements and hours. Admin portal: approvals, team, clients, reports and system controls.
+    Invoices: StratEdge emails invoices as PDFs with a secure online link; clients also see their invoices in the client portal. E-signatures: StratEdge sends offer letters, agreements, NDAs and vendor paperwork for signature by email, no account needed; the signer reviews and signs electronically in their portal under Sign documents, and the signed copy with an audit trail is kept in the admin portal.
+    Getting access: click Log in, then Create account, choose consultant or client contact, fill in the profile; StratEdge approves access, usually within one business day. Forgotten password: contact StratEdge HR at info@stratedgeitconsulting.com for a reset.
+    Timesheets: consultants submit by week (Monday to Sunday) with hours per project per day, optionally attach the client-signed sheet; the client manager approves in the client portal, then StratEdge gives final approval; invoicing is based on approved hours.
+    Careers: open roles are on the Careers page with an Apply button; a resume can also be emailed to info@stratedgeitconsulting.com.
+    Clients and employers can request talent through the Request talent page or the Contact page; the team replies by email or phone.
+    TXT
+    ,
+    'intents' => [
+        [
+            'keys' => ['service', 'services', 'offer', 'what do you do', 'capabilit'],
+            'a' =>
+                'We do two things: staffing and technology delivery. Staffing covers contract, C2C, W2, 1099, contract-to-hire and direct-hire placements across IT and non-IT roles. Delivery covers web and app development, custom software and SaaS, UI/UX, IT consulting, ERP/CRM including SAP, DevOps, healthcare IT and clinical SaaS. Which one can I tell you more about?',
+        ],
+        [
+            'keys' => [
+                'staff',
+                'consultant',
+                'contractor',
+                'c2c',
+                'corp to corp',
+                'w2',
+                '1099',
+                'placement',
+                'hire',
+                'recruit',
+                'talent',
+            ],
+            'a' =>
+                'Our staffing team places consultants on contract, corp-to-corp, W2, 1099, contract-to-hire and direct-hire terms, and can field whole SOW project teams. We cover network engineering, SAP, front-end, Java/Python/.NET, cloud and DevOps, healthcare IT, and finance and accounting, drawing on a network of over 100,000 professionals. To start, use the Request talent page or call +1 (302) 434-8889.',
+        ],
+        [
+            'keys' => ['price', 'pricing', 'cost', 'rate', 'rates', 'quote', 'how much', 'fee'],
+            'a' =>
+                "Rates depend on the role, location, duration and engagement model, so we don't publish a price list. The consultation is free: send the role details through the Request talent or Contact page and you'll get a quote back from the team.",
+        ],
+        [
+            'keys' => [
+                'contact',
+                'phone',
+                'call',
+                'email',
+                'reach',
+                'address',
+                'located',
+                'location',
+                'office',
+                'where are you',
+                'hours',
+                'open',
+            ],
+            'a' =>
+                'You can reach StratEdge at +1 (302) 434-8889 or info@stratedgeitconsulting.com, Monday to Friday, 9 AM to 7 PM Eastern. The office is at 1553 Route 27, Suite 1000, Somerset, NJ 08873.',
+        ],
+        [
+            'keys' => [
+                'login',
+                'log in',
+                'sign in',
+                'signin',
+                'account',
+                'register',
+                'password',
+                'portal access',
+                'create account',
+            ],
+            'a' =>
+                'Click Log in at the top of the page and choose the Consultant, Employee or Client login. New here? Choose Create account, pick consultant or client contact, and fill in your profile; StratEdge approves access, usually within one business day. Forgot your password? Email info@stratedgeitconsulting.com and HR will reset it.',
+        ],
+        [
+            'keys' => ['timesheet', 'time sheet', 'hours', 'submit', 'approve', 'approval', 'clock'],
+            'a' =>
+                'Consultants clock in and out in the employee portal and submit a weekly timesheet (Monday to Sunday) with hours per project, attaching the client-signed sheet if the client uses one. The client manager approves it in the client portal, then StratEdge gives final approval, and invoicing follows the approved hours.',
+        ],
+        [
+            'keys' => ['client portal', 'employer', 'manager', 'requirement', 'candidate', 'my consultants'],
+            'a' =>
+                "The client portal is for the managers our consultants work with: approve or return timesheets, see who is on site and the hours they've clocked, post staffing requirements, review the candidates we share, and export hours. Log in and choose Client portal, or create an account as a client contact.",
+        ],
+        [
+            'keys' => ['job', 'jobs', 'career', 'careers', 'apply', 'opening', 'vacanc', 'resume', 'cv'],
+            'a' =>
+                "Open roles are listed on the Careers page, each with an Apply button that takes your resume. If nothing fits right now, send a general application from the same page or email your resume to info@stratedgeitconsulting.com and we'll match you as roles open.",
+        ],
+        [
+            'keys' => [
+                'healthcare',
+                'hipaa',
+                'hl7',
+                'fhir',
+                'ehr',
+                'emr',
+                'telemedicine',
+                'clinical',
+                'hospital',
+                'patient',
+            ],
+            'a' =>
+                'Our healthcare IT work covers EHR and EMR implementation, HIPAA-compliant telemedicine apps, remote patient monitoring and IoMT integration, healthcare CRM and patient engagement, custom medical portals and scheduling, and clinical SaaS platforms, built to HIPAA, HL7 and FHIR standards.',
+        ],
+        [
+            'keys' => ['sap', 'erp', 'crm', 'salesforce', 'dynamics'],
+            'a' =>
+                'We implement, configure and support ERP and CRM platforms, including SAP, with data migration and integrations, and we staff SAP functional and technical consultants (PP, QM, MM, FICO and more) for client teams.',
+        ],
+        [
+            'keys' => [
+                'web',
+                'website',
+                'app',
+                'mobile',
+                'ios',
+                'android',
+                'software',
+                'saas',
+                'develop',
+                'build',
+            ],
+            'a' =>
+                "Our delivery team builds SEO-friendly websites, iOS and Android apps, cross-platform and TV/watch apps, custom business software and SaaS products, with APIs, integrations, QA and ongoing support. Tell us what you're planning through the Contact page and we'll scope it with you.",
+        ],
+        [
+            'keys' => ['devops', 'cloud', 'aws', 'azure', 'gcp', 'kubernetes', 'ci/cd', 'infrastructure'],
+            'a' =>
+                'DevOps and cloud: CI/CD pipelines, infrastructure on AWS, Azure and GCP, containers and Kubernetes, and monitoring with incident response. We also place cloud and DevOps engineers on contract.',
+        ],
+        [
+            'keys' => ['marketing', 'seo', 'social media', 'ads', 'campaign'],
+            'a' =>
+                'Digital marketing covers search engine optimization, social media marketing, paid search and social campaigns, and content with analytics you can act on.',
+        ],
+        [
+            'keys' => ['design', 'ui', 'ux', 'prototype', 'wireframe'],
+            'a' =>
+                'UI/UX design: user research, wireframes and prototypes, design systems and usability testing, so screens are designed around how people actually work before anything is built.',
+        ],
+        [
+            'keys' => ['consult', 'strategy', 'roadmap', 'architecture', 'advice'],
+            'a' =>
+                'IT consultancy means independent guidance on strategy and roadmaps, architecture reviews, vendor and tool selection, and project management, so technology spending maps to business results.',
+        ],
+        [
+            'keys' => ['vendor', 'prime', 'subcontract', 'msa', 'partner', 'empanel'],
+            'a' =>
+                'We work directly with end clients and as a subcontractor to prime vendors and staffing partners, with the paperwork handled by our team. Email info@stratedgeitconsulting.com to start a vendor conversation.',
+        ],
+        [
+            'keys' => ['about', 'who are you', 'company', 'founded', 'history', 'team'],
+            'a' =>
+                'StratEdge IT Consulting Inc. was founded in 2024 and is based in Somerset, New Jersey. We place IT and business professionals with end clients and prime vendors, and our delivery team builds web, mobile, cloud, ERP/CRM and healthcare systems.',
+        ],
+        [
+            'keys' => ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'thanks', 'thank you'],
+            'a' =>
+                "Hello! I'm StratEdge AI. Ask me about our services, staffing, the portals, careers, or how to reach the team.",
+        ],
+    ],
+    'default' =>
+        "I'm not sure about that one. The quickest way to get an answer is the team: +1 (302) 434-8889 or info@stratedgeitconsulting.com, Monday to Friday, 9 AM to 7 PM Eastern. I can also help with our services, staffing, the portals, timesheets or careers.",
+    'suggestions' => [
+        'What services do you offer?',
+        'How do I submit a timesheet?',
+        'How do I request talent?',
+        'How do I get portal access?',
+    ],
+];

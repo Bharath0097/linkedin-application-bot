@@ -1,0 +1,16 @@
+# v34: only the API entry point (index.php) answers web requests. Every other file in this folder (the modules,
+# config.php, the password list, manifest.json, .user.ini) is read by index.php itself and refused to browsers,
+# including any module added in a later version.
+<IfModule mod_authz_core.c>
+  Require all denied
+  <Files "index.php">
+    Require all granted
+  </Files>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order deny,allow
+  Deny from all
+  <Files "index.php">
+    Allow from all
+  </Files>
+</IfModule>

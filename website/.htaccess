@@ -1,0 +1,138 @@
+Options -Indexes
+AddDefaultCharset UTF-8
+# v33: the portal installs as an app (manifest + service worker)
+AddType application/manifest+json .webmanifest
+# v36.3: the ID checks read text in the browser with WebAssembly
+AddType application/wasm .wasm
+# The site is index.html; a leftover index.php from an older site in the same folder must not be served first.
+DirectoryIndex index.html index.php
+
+# v34: HTTPS only. Plain http:// addresses are sent to https:// (permanently). The local test server, certificate
+# checks (/.well-known/) and sites behind Cloudflare or another proxy that already speaks HTTPS are left alone.
+# If the site ever shows "too many redirects" after an upload, delete these lines and tell your developer.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+  RewriteCond %{HTTP:CF-Visitor} !https [NC]
+  RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?$ [NC]
+  RewriteCond %{REQUEST_URI} !/\.well-known/
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# The page shell must always be fetched fresh so updates take effect; versioned js/css can be cached.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|woff2|png)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+  # app.js, member.js, staff.js, tax.js, work.js and styles.css are only ever requested with ?v=<build>, so a browser
+  # may keep them for good.
+  <FilesMatch "^(app\.js|site2\.js|member\.js|staff\.js|staff2\.js|tax\.js|work\.js|styles\.css|compat\.js|react\.production\.min\.js|react-dom\.production\.min\.js|htm\.umd\.js)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # the service worker and the boot script are checked on every visit so app updates arrive at once
+  <FilesMatch "^(sw|boot)\.js$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css)$">
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+</IfModule>
+
+# Compression is left to the web server (LiteSpeed and Apache's mod_deflate both do it on the fly, see below).
+# Earlier versions shipped .gz copies and a rewrite rule that served them; LiteSpeed then compressed the already
+# compressed file a second time (brotli on top of gzip) while the header still said "gzip", and browsers could not
+# decode the scripts at all - the site stayed on "Loading...". Never bring that rule back.
+
+# Internal files that should never be served: the setup notes and the editable source folder.
+<FilesMatch "^(README\.txt|build\.py)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
+# v34: database copies, backups, logs, keys, shell scripts, settings and editor leftovers are never served either
+<FilesMatch "(\.(sql|sqlite|sqlite3|db|bak|old|orig|swp|log|ini|sh|env|key|pem|crt|tar|gz|tgz|7z|rar|seb)|~)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# Compress text files on the way out (Apache: mod_deflate / mod_brotli; LiteSpeed compresses on its own and ignores
+# these). Cuts the script size by about 75%.
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/css text/plain application/javascript text/javascript application/json image/svg+xml
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript text/javascript application/json image/svg+xml
+</IfModule>
+
+# Security headers: no framing by other sites, no MIME sniffing, a strict referrer and location only for this site.
+# v34: HTTPS remembered for a year (browsers ignore it on plain http), the server's PHP version not announced, popups
+# kept apart from this window, and the page's own rules (Content-Security-Policy) in index.html plus framing here.
+<IfModule mod_headers.c>
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  # v36.1: this site's own pages may ask for the microphone (practice calls) and the camera (ID checks); the browser
+  # still asks the person first, and no other site embedded here can use them
+  Header always set Permissions-Policy "geolocation=(self), camera=(self), microphone=(self), payment=(), usb=(), browsing-topics=(), interest-cohort=()"
+  Header always set Strict-Transport-Security "max-age=31536000"
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  # v62: this site's files (scripts, styles, fonts, pictures) are for this site and its company portals only: another
+  # site cannot embed or hot-link them; Flash-era cross-domain policy files are refused
+  Header always set Cross-Origin-Resource-Policy "same-site"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+  Header always unset X-Powered-By
+  Header unset X-Powered-By
+  <FilesMatch "\.html$">
+    Header always set Content-Security-Policy "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; upgrade-insecure-requests"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # v37 StratEdge Workspaces: another company's portal at /w/<name>/ is this same site (api/ws.php tells the
+  # companies apart by the address, each with its own data folder under storage/ws). /w/<name> gets its closing
+  # slash; everything under it is served from the site's own files, and the rules below still apply to them.
+  RewriteRule ^w/([a-z0-9-]{1,30})$ %{REQUEST_URI}/ [R=301,L]
+  RewriteRule ^w/[a-z0-9-]{1,30}/$ index.html [L]
+  RewriteRule ^w/[a-z0-9-]{1,30}/(.+)$ $1 [L]
+  # Scanner trap: this site has no WordPress, phpMyAdmin or .env file, so anything asking for them is a bot.
+  # The request is logged under Admin > Security and the address is blocked for a day.
+  # v78: the list of decoys scanners probe for was widened (config backups, admin panels, cloud keys, shells).
+  RewriteRule ^(wp-login\.php|wp-admin|wp-content|wp-includes|wordpress|wp-config|xmlrpc\.php|phpmyadmin|phpMyAdmin|pma|myadmin|mysql|dbadmin|adminer\.php|phpunit|vendor/phpunit|eval-stdin\.php|\.env|\.env\.|\.git|\.svn|\.aws|\.ssh|cgi-bin|admin\.php|setup\.php|install\.php|shell\.php|cmd\.php|c99\.php|r57\.php|wso\.php|alfa\.php|config\.php\.bak|backup\.sql|database\.sql|dump\.sql|\.DS_Store|composer\.(json|lock)|\.aws/credentials|aws\.yml|credentials\.json|id_rsa|\.htpasswd)(/.*)?$ api/index.php?r=trap&p=$1 [L,QSA,NC]
+  # v78: an edge filter that turns away the clearest attacks in the query string before any PHP runs (a lightweight
+  # first line in front of the full firewall in api/waf.php; these never appear in the site's own requests). The flags
+  # [NC] (any case) and the %-escapes catch simple evasions; thorough decoding and scoring happen in api/waf.php.
+  RewriteCond %{QUERY_STRING} (?:\.\./){2,}                                                   [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:^|[?&=])(?:/etc/passwd|/etc/shadow|/proc/self/environ)       [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:union[\s/*]+(?:all[\s/*]+)?select|information_schema|/\*!\d)  [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:<script|%3cscript|javascript:|%00|\x00)                       [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:\$\{jndi:|\$\{lower:|\$\{upper:)                              [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:(?:php|data|expect|zip|phar|file):(?://|/[a-z]))              [NC,OR]
+  RewriteCond %{QUERY_STRING} (?:169\.254\.169\.254|gopher://|dict://)                         [NC]
+  RewriteRule ^(?!api/index\.php$) api/index.php?r=trap&p=qs [L,QSA]
+  # v78: a handful of attack tools announce themselves in the User-Agent; refuse them outright
+  RewriteCond %{HTTP_USER_AGENT} (?:sqlmap|nikto|nmap|masscan|zgrab|acunetix|netsparker|nuclei|nessus|openvas|wpscan|dirbuster|gobuster|ffuf|wfuzz|havij|commix|xsstrike|hydra|zmeu|morfeus|arachni|w3af|skipfish) [NC]
+  RewriteRule ^(?!api/index\.php$) api/index.php?r=trap&p=ua [L,QSA]
+  # v34: security.txt (RFC 9116): how to report a vulnerability, written from Security center > Settings
+  RewriteRule ^(\.well-known/)?security\.txt$ api/index.php?r=security_txt [L,NC]
+  # v34: the application bot's local development helpers are for a computer, not the website
+  RewriteRule ^(start\.py|dev-server\.cjs|package\.json)$ - [R=404,L,NC]
+  # v35: the Application bot lives in the portal now; the old separate workspace address opens it there
+  RewriteRule ^application-bot/?(index\.html)?$ index.html#/portal/appbot [R=302,L,NE]
+  # v34: hidden files and folders (.git, .svn, editor and system files) are never served; /.well-known/ stays open
+  RewriteRule (^|/)\.(?!well-known(/|$)) - [F]
+  # v34: no PHP runs in this site except the API entry point and the two share pages, so a file dropped anywhere
+  # else (a web shell from a hacked plugin, a stray upload) cannot run
+  RewriteRule ^(?!api/index\.php$|job\.php$|cert\.php$).+\.(php[0-9]?|phtml|phar|pht|phps|inc)$ - [F,NC]
+</IfModule>

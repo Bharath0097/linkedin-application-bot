@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Practice application · StratEdge Application Bot</title><script src="practice.js" defer></script>
+<style>
+body{margin:0;background:#f4f7fa;font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#101b35}
+main{max-width:620px;margin:40px auto;padding:0 18px}
+.brand{font-weight:800;color:#2B3993;text-decoration:none;display:inline-block;margin-bottom:16px}
+.panel{background:#fff;border:1px solid #dce3ec;border-radius:16px;padding:26px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;color:#0E849A}
+h1{margin:6px 0 4px;font-size:26px}
+.status{background:#eef6f8;border-radius:10px;padding:10px 12px;margin:14px 0;font-size:14px}
+label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
+input,select{width:100%;box-sizing:border-box;border:1px solid #c9d3e0;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{margin-top:20px;width:100%;border:0;border-radius:10px;padding:13px;background:#2B3993;color:#fff;font:700 16px system-ui,Arial,sans-serif;cursor:pointer}
+.done h2{color:#1d7a46;margin:0 0 6px}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+</style></head><body><main><a class="brand" href="../#/portal/appbot">StratEdge · Application bot</a><section class="panel"><div class="eyebrow">PRACTICE · NO EMPLOYER</div><h1>Network Security Engineer</h1><p style="margin:0">Practice application</p><div class="status">This form never sends your details anywhere. Its confirmation lets you watch the companion fill a form and report a result.</div>
+<form id="application-form" data-applypilot-test="true"><label for="full-name">Full name *</label><input id="full-name" name="fullName" autocomplete="name" required><div class="grid"><div><label for="first-name">First name *</label><input id="first-name" name="firstName" autocomplete="given-name" required></div><div><label for="last-name">Last name *</label><input id="last-name" name="lastName" autocomplete="family-name" required></div></div><label for="email">Email address *</label><input id="email" name="email" type="email" autocomplete="email" required><label for="phone">Phone number *</label><input id="phone" name="phone" type="tel" autocomplete="tel" required><label for="auth">Are you authorized to work in the United States? *</label><select id="auth" name="workAuthorization" required><option value="">Choose</option><option>Yes</option><option>No</option></select><label for="sponsor">Do you require visa sponsorship? *</label><select id="sponsor" name="sponsorship" required><option value="">Choose</option><option>Yes</option><option>No</option></select><label for="resume">Résumé (optional for this test)</label><input id="resume" name="resume" type="file" accept=".pdf,.docx"><button type="submit">Submit application</button></form>
+<div id="test-confirmation" class="done" hidden role="status"><h2>Application submitted successfully</h2><p>Your practice application was received. Test only: no employer was contacted.</p><p><a href="../#/portal/appbot">Back to the Application bot</a></p></div></section></main></body></html>

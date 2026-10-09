@@ -1,0 +1,2010 @@
+/* ================= v38 look "Glass": frosted glass over a soft aurora, glossy bubbles, rounder shapes.
+   Everything here applies only with <html data-look="glass"> (the starting look since v38). "Classic" in the
+   Appearance menu sets data-look="classic", and then none of these rules apply and the v27 look is unchanged.
+   The portals, the portal chooser, the loading screens and the sign-in pages get it; the public website keeps its
+   look. Windows, messages and menus are drawn at the page root, so they follow data-area, which the app sets to
+   "app" on portal pages and "auth" on the sign-in pages.
+   Text colors were checked against the brightest point of the aurora (4.5 : 1 for text, 3 : 1 for large text);
+   white text only sits on button colors that keep 4.5 : 1 at every point of their gradient. ================= */
+
+/* ---------- in both looks: the Appearance menu and quick jump (v38) ---------- */
+.lookwrap {
+  position: relative;
+  display: inline-flex;
+}
+.lookpop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 70;
+  width: 336px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 96px);
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  text-align: left;
+  animation: fade 0.15s ease-out;
+}
+.lookh {
+  font-size: 16px;
+  font-weight: 800;
+}
+.looklbl {
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.lookopts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.lookopt {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lookopt:hover {
+  border-color: var(--line-2);
+}
+.lookopt.on {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--indigo) 18%, transparent);
+}
+.lookopt b {
+  display: block;
+  font-size: 14px;
+}
+.lookopt small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-3);
+}
+.lookswatch {
+  position: relative;
+  display: block;
+  height: 58px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lookswatch i,
+.lookswatch b,
+.lookswatch em {
+  position: absolute;
+  display: block;
+}
+.lookswatch i {
+  left: 6px;
+  top: 6px;
+  bottom: 6px;
+  width: 22px;
+  border-radius: 8px;
+}
+.lookswatch b {
+  left: 34px;
+  right: 6px;
+  top: 6px;
+  height: 26px;
+  border-radius: 8px;
+}
+.lookswatch em {
+  right: 8px;
+  bottom: 7px;
+  width: 30px;
+  height: 11px;
+  border-radius: 99px;
+}
+.lookswatch.glass {
+  background:
+    radial-gradient(60px 50px at 0% 0%, rgba(123, 97, 255, 0.5), transparent 70%),
+    radial-gradient(70px 50px at 100% 100%, rgba(255, 112, 166, 0.4), transparent 70%),
+    radial-gradient(60px 50px at 100% 0%, rgba(0, 180, 166, 0.4), transparent 70%),
+    #eef0ff;
+}
+.lookswatch.glass i,
+.lookswatch.glass b {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+}
+.lookswatch.glass em {
+  background: linear-gradient(135deg, #6c4ef2, #2f62c8);
+}
+.lookswatch.classic {
+  background: #f4f7f9;
+  border: 1px solid #dce3ec;
+}
+.lookswatch.classic i {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  border-radius: 0;
+  background: #0d173a;
+}
+.lookswatch.classic b {
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #dce3ec;
+}
+.lookswatch.classic em {
+  border-radius: 4px;
+  background: #2b3993;
+}
+.lookpop .seg {
+  margin: 0;
+}
+.lookmodes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.lookmodes button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lookmodes .ico {
+  width: 16px;
+  height: 16px;
+}
+.lookadmin {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.lookadmin .seg {
+  width: fit-content;
+}
+.lookpop p {
+  margin: 0;
+}
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 650 12px/1.4 var(--font);
+  text-align: center;
+}
+.jump {
+  display: grid;
+  gap: 12px;
+}
+.jumpin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink-3);
+}
+.jumpin:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
+}
+.modal .jumpin input,
+.jumpin input {
+  flex: 1;
+  min-height: 50px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 17px;
+}
+.modal .jumpin input:focus,
+.jumpin input:focus {
+  box-shadow: none;
+  background: transparent;
+}
+.jumplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: min(52vh, 440px);
+  overflow: auto;
+}
+.jumplist li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.jumplist li.on {
+  background: var(--indigo-bg);
+}
+.jumplist li.jumpnone {
+  display: block;
+  cursor: default;
+}
+.jumpico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--indigo-ink);
+}
+.jumpico .ico {
+  width: 18px;
+  height: 18px;
+}
+.jumpt {
+  min-width: 0;
+}
+.jumpt b {
+  display: block;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jumpt small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.jumplist .jumpgo {
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+}
+.jumplist li.on .jumpgo {
+  opacity: 0.7;
+}
+.jumpkeys {
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .app .ptop .push .jumpbtn {
+    display: none;
+  }
+  .lookpop {
+    position: fixed;
+    right: 12px;
+    top: var(--lookpop-top, calc(76px + env(safe-area-inset-top, 0px)));
+  }
+}
+
+/* Sign-in providers: one box per address the portal opens at (v38), the one in use marked */
+.ssoaddr {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.ssoaddr.here {
+  border-color: color-mix(in srgb, var(--teal) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 14%, transparent);
+}
+.ssoaddr-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.ssoaddr .linkrow {
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+}
+@media (max-width: 900px) {
+  .ssoaddr .linkrow {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+/* the chosen chip button inside the portals ("Applies to me" under Compliance) used the website's --navy, which the
+   portals do not have: its white text sat on nothing. It takes the portal's button color */
+.app .chipbtn.on,
+.modal .chipbtn.on {
+  background: var(--navy, var(--btn));
+  border-color: var(--navy, var(--btn));
+  color: #fff;
+}
+.app .chipbtn:hover,
+.modal .chipbtn:hover {
+  border-color: var(--navy, var(--btn));
+}
+.app .chipbtn,
+.modal .chipbtn {
+  background: var(--surface);
+}
+:root[data-look='glass'] .app .chipbtn.on,
+:root[data-look='glass'][data-area='app'] .modal .chipbtn.on {
+  background: var(--g-grad);
+  border-color: transparent;
+  color: var(--g-on);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), var(--g-glow);
+}
+
+/* the clock card's "location shared" state used the website's green, which the portals do not have */
+.app .locstat.ok {
+  background: var(--ok-bg, var(--teal-bg));
+  color: var(--ok-ink, var(--teal-ink));
+}
+.app .locstat.ok .ico {
+  color: var(--ok-ink, var(--teal-ink));
+}
+
+/* a matched job with many buttons squeezed its title into a narrow sliver (one word per line, the buttons drawn over
+   it): the buttons now take at most about half the card and wrap onto more lines; on a narrow screen they go below */
+.match {
+  grid-template-columns: minmax(0, 1fr) fit-content(48%);
+}
+@media (max-width: 760px) {
+  .match {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .match > .stack {
+    align-items: flex-start !important;
+  }
+  .match > .stack .actions {
+    justify-content: flex-start !important;
+  }
+}
+
+/* a count shown as .muted inside a filled button (for example "Everyone 16") took the grey muted color, unreadable on
+   the button's color; it follows the button's own text color */
+.btn:not(.ghost):not(.soft):not(.link):not(.danger) .muted {
+  color: inherit;
+  opacity: 0.9;
+}
+
+/* a job board that is switched on for a closed job was shown faded (60% opacity), too faint to read; it is drawn with
+   a dashed outline instead */
+.jbp.on.idle {
+  opacity: 1;
+  background: transparent;
+  border: 1px dashed currentColor;
+  font-weight: 500;
+}
+
+/* the amber "upload incomplete" bar at the top of the portal: centered and fully on screen (on a phone it used to start
+   off the left edge, hiding its text) */
+.app > .stale {
+  left: auto;
+  transform: none;
+  justify-self: center;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+}
+
+/* the public website is always light, so its header keeps the dark-text logo when the device is in dark mode
+   (before v38 the white logo showed there, invisible on the white header) */
+:root .site .logo-l {
+  display: block;
+}
+:root .site .logo-d {
+  display: none;
+}
+
+/* ---------- tokens ---------- */
+/* (the sign-in pages sit inside the public website, which is always light, so they keep the light glass in dark mode) */
+:root[data-look='glass'] {
+  --g-c1: 123, 97, 255; /* violet */
+  --g-c2: 0, 180, 166; /* teal */
+  --g-c3: 255, 112, 166; /* pink */
+  --g-c4: 67, 97, 238; /* blue */
+}
+:root[data-look='glass'],
+:root[data-look='glass'] .login {
+  --g-base: #f4f6ff;
+  --g-glass: rgba(255, 255, 255, 0.62);
+  --g-glass-hi: rgba(255, 255, 255, 0.84);
+  --g-glass-lo: rgba(255, 255, 255, 0.4);
+  --g-tint: rgba(226, 231, 252, 0.62);
+  --g-solid: rgba(255, 255, 255, 0.95);
+  --g-opaque: #ffffff;
+  --g-rim: rgba(255, 255, 255, 0.8);
+  --g-line: rgba(31, 42, 104, 0.11);
+  --g-line-2: rgba(31, 42, 104, 0.2);
+  --g-ink-2: #46546f;
+  --g-ink-3: #525f78;
+  --g-accent: #5b3fd6; /* links and active text on glass (4.6 : 1 at the aurora's brightest point) */
+  --g-pri: #6c4ef2; /* icons, focus rings, ticks */
+  --g-ico: #4b55c9; /* menu icons */
+  --g-grp: #5a48c4; /* menu group names */
+  --g-ink-on: #2c2a8f; /* the chosen menu item or tab */
+  --g-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(31, 42, 104, 0.05), 0 18px 40px -26px rgba(39, 45, 120, 0.45);
+  --g-shadow-hi: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 4px rgba(31, 42, 104, 0.06), 0 28px 56px -26px rgba(39, 45, 120, 0.55);
+  --g-grad: linear-gradient(135deg, #6c4ef2 0%, #4459e0 52%, #2f62c8 100%);
+  --g-on: #ffffff; /* text on --g-grad */
+  --g-grad-go: linear-gradient(135deg, #0a8178 0%, #08716a 100%);
+  --g-grad-danger: linear-gradient(135deg, #c4372a 0%, #a3321f 100%);
+  --g-grad-text: linear-gradient(120deg, #5236c9 0%, #3651d4 55%, #036663 100%);
+  --g-glow: 0 12px 26px -14px rgba(76, 89, 224, 0.85);
+  --g-ring: 0 0 0 4px rgba(108, 78, 242, 0.2);
+  --g-blur: blur(22px) saturate(170%);
+  --g-r: 24px;
+  --g-r-sm: 14px;
+  --g-b1: rgba(var(--g-c1), 0.26);
+  --g-b2: rgba(var(--g-c2), 0.2);
+  --g-b3: rgba(var(--g-c3), 0.17);
+  --g-b4: rgba(var(--g-c4), 0.15);
+  --g-floor: linear-gradient(160deg, #f1f2ff 0%, #f6f7ff 46%, #eefbf9 100%);
+  --g-gloss: rgba(255, 255, 255, 0.95);
+  --g-gloss-2: rgba(255, 255, 255, 0.4);
+  --g-hl: rgba(255, 255, 255, 0.85);
+  --g-field: rgba(255, 255, 255, 0.74);
+  --g-field-on: #ffffff;
+  --g-field-line: rgba(31, 42, 104, 0.16);
+  --g-field-ring: rgba(108, 78, 242, 0.6);
+  --g-bub: 0.34;
+  --g-bub-2: 0.12;
+  --g-sky:
+    radial-gradient(46vw 40vw at 0% 0%, var(--g-b1), transparent 70%),
+    radial-gradient(42vw 38vw at 100% 6%, var(--g-b2), transparent 70%),
+    radial-gradient(48vw 40vw at 82% 100%, var(--g-b3), transparent 70%),
+    radial-gradient(40vw 36vw at 22% 92%, var(--g-b4), transparent 70%),
+    var(--g-floor);
+}
+:root[data-look='glass'][data-theme='dark'] {
+  --g-base: #0b1022;
+  --g-glass: rgba(24, 32, 62, 0.62);
+  --g-glass-hi: rgba(46, 56, 98, 0.78);
+  --g-glass-lo: rgba(24, 32, 62, 0.42);
+  --g-tint: rgba(44, 54, 96, 0.55);
+  --g-solid: rgba(19, 26, 50, 0.96);
+  --g-opaque: #141b33;
+  --g-rim: rgba(255, 255, 255, 0.1);
+  --g-line: rgba(255, 255, 255, 0.08);
+  --g-line-2: rgba(255, 255, 255, 0.16);
+  --g-ink-2: #b2bed3;
+  --g-ink-3: #96a5c0;
+  --g-accent: #c3b5ff;
+  --g-pri: #c9bcff;
+  --g-ico: #a9b4ff;
+  --g-grp: #b9abff;
+  --g-ink-on: #ffffff;
+  --g-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.3), 0 20px 44px -24px rgba(0, 0, 0, 0.75);
+  --g-shadow-hi: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 2px 4px rgba(0, 0, 0, 0.35), 0 30px 60px -24px rgba(0, 0, 0, 0.85);
+  --g-grad-text: linear-gradient(120deg, #c9bcff 0%, #a7b7ff 50%, #7fe3da 100%);
+  --g-glow: 0 12px 28px -14px rgba(108, 78, 242, 0.9);
+  --g-ring: 0 0 0 4px rgba(155, 135, 255, 0.28);
+  --g-b1: rgba(var(--g-c1), 0.22);
+  --g-b3: rgba(var(--g-c3), 0.12);
+  --g-b4: rgba(var(--g-c4), 0.16);
+  --g-floor: linear-gradient(160deg, #0c1024 0%, #0a0f20 50%, #08131c 100%);
+  --g-gloss: rgba(255, 255, 255, 0.38);
+  --g-gloss-2: rgba(255, 255, 255, 0.12);
+  --g-hl: rgba(255, 255, 255, 0.06);
+  --g-field: rgba(8, 12, 28, 0.42);
+  --g-field-on: rgba(8, 12, 28, 0.62);
+  --g-field-line: rgba(255, 255, 255, 0.12);
+  --g-field-ring: rgba(178, 160, 255, 0.7);
+  --g-bub: 0.55;
+  --g-bub-2: 0.2;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) {
+    --g-base: #0b1022;
+    --g-glass: rgba(24, 32, 62, 0.62);
+    --g-glass-hi: rgba(46, 56, 98, 0.78);
+    --g-glass-lo: rgba(24, 32, 62, 0.42);
+    --g-tint: rgba(44, 54, 96, 0.55);
+    --g-solid: rgba(19, 26, 50, 0.96);
+    --g-opaque: #141b33;
+    --g-rim: rgba(255, 255, 255, 0.1);
+    --g-line: rgba(255, 255, 255, 0.08);
+    --g-line-2: rgba(255, 255, 255, 0.16);
+    --g-ink-2: #b2bed3;
+    --g-ink-3: #96a5c0;
+    --g-accent: #c3b5ff;
+    --g-pri: #c9bcff;
+    --g-ico: #a9b4ff;
+    --g-grp: #b9abff;
+    --g-ink-on: #ffffff;
+    --g-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.3), 0 20px 44px -24px rgba(0, 0, 0, 0.75);
+    --g-shadow-hi: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 2px 4px rgba(0, 0, 0, 0.35), 0 30px 60px -24px rgba(0, 0, 0, 0.85);
+    --g-grad-text: linear-gradient(120deg, #c9bcff 0%, #a7b7ff 50%, #7fe3da 100%);
+    --g-glow: 0 12px 28px -14px rgba(108, 78, 242, 0.9);
+    --g-ring: 0 0 0 4px rgba(155, 135, 255, 0.28);
+    --g-b1: rgba(var(--g-c1), 0.22);
+    --g-b3: rgba(var(--g-c3), 0.12);
+    --g-b4: rgba(var(--g-c4), 0.16);
+    --g-floor: linear-gradient(160deg, #0c1024 0%, #0a0f20 50%, #08131c 100%);
+    --g-gloss: rgba(255, 255, 255, 0.38);
+    --g-gloss-2: rgba(255, 255, 255, 0.12);
+    --g-hl: rgba(255, 255, 255, 0.06);
+    --g-field: rgba(8, 12, 28, 0.42);
+    --g-field-on: rgba(8, 12, 28, 0.62);
+    --g-field-line: rgba(255, 255, 255, 0.12);
+    --g-field-ring: rgba(178, 160, 255, 0.7);
+    --g-bub: 0.55;
+    --g-bub-2: 0.2;
+  }
+}
+
+/* Inside the glass areas the page's own colors become glass: every card, table, field and list that was drawn on
+   white is now drawn on frosted white, so the whole portal changes without touching each page. --paper stays (it
+   is also the text color on dark chips). */
+:root[data-look='glass'] .app .content,
+:root[data-look='glass'] .gate,
+:root[data-look='glass'] .login {
+  --surface: var(--g-glass);
+  --surface-2: var(--g-tint);
+  --line: var(--g-line);
+  --line-2: var(--g-line-2);
+  --ink-2: var(--g-ink-2);
+  --ink-3: var(--g-ink-3);
+  --radius: var(--g-r);
+  --lift: var(--g-shadow);
+  --lift-hi: var(--g-shadow-hi);
+}
+:root[data-look='glass']:not([data-theme='dark']) .app .content,
+:root[data-look='glass']:not([data-theme='dark']) .gate,
+:root[data-look='glass'] .login {
+  --teal-ink: #036663;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .content,
+  :root[data-look='glass']:not([data-theme='light']) .gate {
+    --teal-ink: #5bdad2;
+  }
+}
+/* layers that cover other content (menus, suggestions, sticky bars) stay solid so what is under them never shows
+   through their text */
+:root[data-look='glass'] .app .content :is(.dd-menu, .atsaddrsugg, .chatmentions, .chatreactpick, .chatmsg-tools, .mbulk, .couter, .exhead, .impsticky),
+:root[data-look='glass'] .app .content select option {
+  --surface: var(--g-opaque);
+}
+:root[data-look='glass'] .app .content select option {
+  background-color: var(--g-opaque);
+  color: var(--ink);
+}
+/* shapes that paint the card's color to cut a hole (the security score ring) need it solid */
+:root[data-look='glass'] .app .content .trring {
+  --surface: var(--g-opaque);
+}
+
+/* ---------- the sky behind the portals: a still aurora on its own layer (scrolling stays smooth) ---------- */
+:root[data-look='glass'] .app,
+:root[data-look='glass'] .gate {
+  position: relative;
+  isolation: isolate;
+  background: var(--g-base);
+}
+:root[data-look='glass'] .app::before,
+:root[data-look='glass'] .gate::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--g-sky);
+}
+/* two soft light bubbles drifting very slowly behind the glass (not on phones, never with reduced motion) */
+:root[data-look='glass'] .app::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  width: 38vw;
+  height: 38vw;
+  right: 8vw;
+  top: 18vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.55), rgba(var(--g-c1), 0.12) 45%, transparent 70%);
+  filter: blur(8px);
+  opacity: 0.7;
+}
+:root[data-look='glass'][data-theme='dark'] .app::after {
+  background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.06), rgba(var(--g-c1), 0.14) 45%, transparent 70%);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app::after {
+    background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.06), rgba(var(--g-c1), 0.14) 45%, transparent 70%);
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 901px) {
+  :root[data-look='glass'] .app::after {
+    animation: g-drift 38s ease-in-out infinite alternate;
+  }
+}
+@keyframes g-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-14vw, 22vh, 0) scale(1.18);
+  }
+}
+
+/* ---------- sidebar: a floating glass panel ---------- */
+:root[data-look='glass'] .app > .side {
+  margin: 14px 0 14px 14px;
+  top: 14px;
+  height: calc(100vh - 28px);
+  height: calc(100dvh - 28px);
+  border-radius: 30px;
+  color: #26304f;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18) 60%, rgba(255, 255, 255, 0.34)),
+    var(--g-glass);
+  border: 1px solid var(--g-rim);
+  box-shadow: var(--g-shadow);
+  scrollbar-color: rgba(31, 42, 104, 0.22) transparent;
+}
+:root[data-look='glass'] .app > .side .brand .logo-l {
+  display: block;
+}
+:root[data-look='glass'] .app > .side .brand .logo-d {
+  display: none;
+}
+:root[data-look='glass'] .app > .side .brand img {
+  filter: none;
+}
+:root[data-look='glass'] .app > .side > .plabel,
+:root[data-look='glass'] .app > .side .pswitch {
+  border-radius: 20px;
+  background: var(--g-grad);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -10px 18px -10px rgba(16, 12, 80, 0.35),
+    var(--g-glow);
+}
+:root[data-look='glass'] .app > .side .navfind {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  border-color: var(--g-rim);
+  color: var(--g-ink-3);
+}
+:root[data-look='glass'] .app > .side .navfind:focus-within {
+  border-color: var(--g-field-ring);
+  box-shadow: var(--g-ring);
+}
+:root[data-look='glass'] .app > .side .navfind input {
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+:root[data-look='glass'] .app > .side .navfind input::placeholder {
+  color: var(--g-ink-3);
+}
+:root[data-look='glass'] .app > .side .grp {
+  color: var(--g-grp);
+}
+:root[data-look='glass'] .app > .side nav a {
+  color: #2b3556;
+  border-radius: 16px;
+  padding-left: 14px;
+}
+:root[data-look='glass'] .app > .side nav a .ico {
+  opacity: 0.9;
+  color: var(--g-ico);
+}
+:root[data-look='glass'] .app > .side nav a:hover {
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink);
+}
+:root[data-look='glass'] .app > .side nav a.on {
+  background: var(--g-glass-hi);
+  color: var(--g-ink-on);
+  font-weight: 700;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+    0 12px 24px -16px rgba(39, 45, 120, 0.6);
+}
+:root[data-look='glass'] .app > .side nav a.on::before {
+  left: 5px;
+  top: 50%;
+  bottom: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: var(--g-grad);
+  box-shadow: 0 0 10px rgba(108, 78, 242, 0.85);
+}
+:root[data-look='glass'] .app > .side nav a.on .ico {
+  color: var(--g-pri);
+}
+:root[data-look='glass'] .app > .side nav a .badge {
+  background: rgba(255, 196, 76, 0.32);
+  color: #6e4300;
+}
+:root[data-look='glass'] .app > .side nav a.on .badge {
+  background: var(--g-grad);
+  color: var(--g-on);
+}
+:root[data-look='glass'] .app > .side .me {
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: var(--g-rim);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 var(--g-hl);
+}
+:root[data-look='glass'] .app > .side .me b {
+  color: var(--ink);
+}
+:root[data-look='glass'] .app > .side .me span,
+:root[data-look='glass'] .app > .side .ver,
+:root[data-look='glass'] .app > .side .muted {
+  color: var(--g-ink-3);
+}
+:root[data-look='glass'] .app > .side .ver {
+  border-top-color: var(--g-line);
+}
+:root[data-look='glass'] .app > .side .me img {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(108, 78, 242, 0.35);
+}
+:root[data-look='glass'] .app > .side .me .btn.ghost,
+:root[data-look='glass'] .app > .side .installbtn {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--g-rim);
+}
+/* dark: the same panel in smoked glass */
+:root[data-look='glass'][data-theme='dark'] .app > .side {
+  color: #dfe5f3;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 60%, rgba(255, 255, 255, 0.04)),
+    var(--g-glass);
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side .brand .logo-l {
+  display: none;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side .brand .logo-d {
+  display: block;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side .navfind,
+:root[data-look='glass'][data-theme='dark'] .app > .side .me,
+:root[data-look='glass'][data-theme='dark'] .app > .side .me .btn.ghost,
+:root[data-look='glass'][data-theme='dark'] .app > .side .installbtn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side .grp {
+  color: var(--g-grp);
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a {
+  color: #d4dbec;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a .ico {
+  color: var(--g-ico);
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a.on {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 12px 24px -16px rgba(0, 0, 0, 0.8);
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a.on .ico {
+  color: var(--g-pri);
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side nav a .badge {
+  background: rgba(255, 196, 76, 0.2);
+  color: #ffd98a;
+}
+:root[data-look='glass'][data-theme='dark'] .app > .side .me img {
+  box-shadow: 0 0 0 2px #141b33, 0 0 0 4px rgba(155, 135, 255, 0.45);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app > .side {
+    color: #dfe5f3;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 60%, rgba(255, 255, 255, 0.04)),
+      var(--g-glass);
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .brand .logo-l {
+    display: none;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .brand .logo-d {
+    display: block;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .navfind,
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .me,
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .me .btn.ghost,
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .installbtn {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ink);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .grp {
+    color: var(--g-grp);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a {
+    color: #d4dbec;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a .ico {
+    color: var(--g-ico);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #fff;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a.on {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 12px 24px -16px rgba(0, 0, 0, 0.8);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a.on .ico {
+    color: var(--g-pri);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side nav a .badge {
+    background: rgba(255, 196, 76, 0.2);
+    color: #ffd98a;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app > .side .me img {
+    box-shadow: 0 0 0 2px #141b33, 0 0 0 4px rgba(155, 135, 255, 0.45);
+  }
+}
+
+/* ---------- top bar: floating frosted glass (the frost is on its own layer, so windows opened from the bar are not
+   boxed in by it) ---------- */
+:root[data-look='glass'] .app .ptop {
+  margin: 14px 18px 0;
+  top: 14px;
+  border: 1px solid var(--g-rim);
+  border-radius: 24px;
+  padding: 8px 12px 8px 24px;
+  background: transparent;
+  box-shadow: var(--g-shadow);
+}
+:root[data-look='glass'] .app .ptop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--g-glass);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+}
+:root[data-look='glass'] .app .ptop::after {
+  display: none;
+}
+:root[data-look='glass'] .app .ptop .crumb {
+  background: var(--g-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-look='glass'] .app .ptop .push .btn.ghost {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  border-color: var(--g-rim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:root[data-look='glass'] .app .ptop .push .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.92);
+}
+:root[data-look='glass'][data-theme='dark'] .app .ptop .push .btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+:root[data-look='glass'][data-theme='dark'] .app .ptop .push .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .ptop .push .btn.ghost {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app .ptop .push .btn.ghost:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+:root[data-look='glass'] .app > .stale {
+  top: 10px;
+  margin: 10px 12px 0;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: color-mix(in srgb, var(--amber-bg) 90%, transparent);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-shadow-hi);
+}
+
+/* ---------- panels, cards and numbers ---------- */
+:root[data-look='glass'] .app .panel,
+:root[data-look='glass'] .app .clock,
+:root[data-look='glass'] .app .tcard,
+:root[data-look='glass'] .app .job {
+  border-color: var(--g-rim);
+  box-shadow: var(--g-shadow);
+}
+:root[data-look='glass'] .app .panel {
+  border-radius: var(--g-r);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 120px), var(--surface);
+}
+:root[data-look='glass'] .app .panel .panel {
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 var(--g-hl);
+}
+:root[data-look='glass'] .app .tcard,
+:root[data-look='glass'] .app .job,
+:root[data-look='glass'] .app .clock {
+  border-radius: var(--g-r);
+}
+:root[data-look='glass'][data-theme='dark'] .app .panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 120px), var(--surface);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 120px), var(--surface);
+  }
+}
+:root[data-look='glass'] .app .hello h2,
+:root[data-look='glass'] .app .stat b,
+:root[data-look='glass'] .app .kitstats b,
+:root[data-look='glass'] .app .kpis b {
+  background: var(--g-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* number tiles: glass bubbles, each with a glossy sphere in its corner */
+:root[data-look='glass'] .app .kpis a,
+:root[data-look='glass'] .app .kpis a:last-child {
+  border-radius: var(--g-r);
+  background: var(--surface);
+  border: 1px solid var(--g-rim);
+  box-shadow: var(--g-shadow);
+}
+:root[data-look='glass'] .app .kpis a > * {
+  position: relative;
+  z-index: 1;
+}
+:root[data-look='glass'] .app .kpis a::before {
+  top: -34px;
+  right: -26px;
+  left: auto;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 32%, var(--g-gloss) 0 6%, var(--g-gloss-2) 18%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(var(--g-c1), var(--g-bub)), rgba(var(--g-c1), var(--g-bub-2)) 62%, transparent 72%);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+:root[data-look='glass'] .app .kpis a:nth-child(3n + 2)::before {
+  background:
+    radial-gradient(circle at 34% 32%, var(--g-gloss) 0 6%, var(--g-gloss-2) 18%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(var(--g-c2), var(--g-bub)), rgba(var(--g-c2), var(--g-bub-2)) 62%, transparent 72%);
+}
+:root[data-look='glass'] .app .kpis a:nth-child(3n + 3)::before {
+  background:
+    radial-gradient(circle at 34% 32%, var(--g-gloss) 0 6%, var(--g-gloss-2) 18%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(var(--g-c3), var(--g-bub)), rgba(var(--g-c3), var(--g-bub-2)) 62%, transparent 72%);
+}
+:root[data-look='glass'] .app .kpis a.k-ok::before {
+  background:
+    radial-gradient(circle at 34% 32%, var(--g-gloss) 0 6%, var(--g-gloss-2) 18%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, var(--g-bub)), rgba(16, 185, 129, var(--g-bub-2)) 62%, transparent 72%);
+}
+:root[data-look='glass'] .app .kpis a.k-warn::before {
+  background:
+    radial-gradient(circle at 34% 32%, var(--g-gloss) 0 6%, var(--g-gloss-2) 18%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.4), rgba(239, 68, 68, 0.14) 62%, transparent 72%);
+}
+:root[data-look='glass'] .app .kpis a:hover {
+  background: var(--g-glass-hi);
+  box-shadow: var(--g-shadow-hi);
+}
+:root[data-look='glass'] .app .kpis a:hover::before {
+  transform: translate(-6px, 6px) scale(1.08);
+}
+:root[data-look='glass'][data-theme='dark'] .app .kpis a:hover {
+  background: var(--g-glass-hi);
+}
+:root[data-look='glass'] .app .empty {
+  border-radius: 20px;
+  border: 1px dashed var(--g-line-2);
+  background:
+    radial-gradient(circle at 1px 1px, rgba(31, 42, 104, 0.08) 1px, transparent 1.6px) 0 0 / 18px 18px,
+    var(--g-glass-lo);
+}
+
+/* ---------- tabs, segments, chips, badges ---------- */
+:root[data-look='glass'] :is(.app, .gate, .login-card) .tabs,
+:root[data-look='glass'][data-area='app'] .modal .tabs {
+  width: max-content;
+  max-width: 100%;
+  padding: 5px;
+  gap: 4px;
+  border: 1px solid var(--g-rim);
+  border-radius: 20px;
+  background: var(--g-glass-lo);
+  box-shadow: inset 0 1px 0 var(--g-hl), 0 10px 26px -22px rgba(39, 45, 120, 0.5);
+}
+:root[data-look='glass'] :is(.app, .gate, .login-card) .tabs button,
+:root[data-look='glass'][data-area='app'] .modal .tabs button {
+  margin: 0;
+  border: 0;
+  border-radius: 15px;
+  padding: 8px 14px;
+  background-image: none;
+}
+:root[data-look='glass'] :is(.app, .gate, .login-card) .tabs button:hover:not(.on),
+:root[data-look='glass'][data-area='app'] .modal .tabs button:hover:not(.on) {
+  background: rgba(255, 255, 255, 0.5);
+}
+:root[data-look='glass'] :is(.app, .gate, .login-card) .tabs button.on,
+:root[data-look='glass'][data-area='app'] .modal .tabs button.on {
+  background: var(--g-opaque);
+  color: var(--g-ink-on);
+  box-shadow:
+    0 8px 18px -12px rgba(39, 45, 120, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+}
+:root[data-look='glass'][data-theme='dark'] :is(.app, .gate) .tabs button.on,
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal .tabs button.on {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+:root[data-look='glass'][data-theme='dark'] :is(.app, .gate) .tabs button:hover:not(.on) {
+  background: rgba(255, 255, 255, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .tabs button.on,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal .tabs button.on {
+    background: rgba(255, 255, 255, 0.13);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app .tabs button:hover:not(.on) {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+:root[data-look='glass'] :is(.app, .gate) .seg,
+:root[data-look='glass'][data-area='app'] .modal .seg {
+  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-glass-lo);
+}
+:root[data-look='glass'] :is(.app, .gate) .seg button,
+:root[data-look='glass'][data-area='app'] .modal .seg button {
+  border-radius: 12px;
+}
+:root[data-look='glass'] :is(.app, .gate) .seg button.on,
+:root[data-look='glass'][data-area='app'] .modal .seg button.on {
+  background: var(--g-opaque);
+  box-shadow: 0 6px 14px -10px rgba(39, 45, 120, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+}
+:root[data-look='glass'][data-theme='dark'] :is(.app, .gate) .seg button.on,
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal .seg button.on {
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .seg button.on,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal .seg button.on {
+    background: rgba(255, 255, 255, 0.13);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+}
+:root[data-look='glass'] .app .chip,
+:root[data-look='glass'][data-area='app'] .modal .chip {
+  box-shadow: inset 0 1px 0 var(--g-hl);
+}
+:root[data-look='glass'] .app .badge {
+  box-shadow: inset 0 1px 0 var(--g-hl);
+}
+
+/* ---------- tables ---------- */
+:root[data-look='glass'] .app .tbl th {
+  background: rgba(255, 255, 255, 0.34);
+  color: var(--g-ink-3);
+}
+:root[data-look='glass'] .app .tbl tbody tr:hover > td {
+  background: rgba(255, 255, 255, 0.5);
+}
+:root[data-look='glass'] .app .tbl tr.click:hover td {
+  background: rgba(var(--g-c1), 0.08);
+}
+:root[data-look='glass'][data-theme='dark'] .app .tbl th {
+  background: rgba(255, 255, 255, 0.04);
+}
+:root[data-look='glass'][data-theme='dark'] .app .tbl tbody tr:hover > td {
+  background: rgba(255, 255, 255, 0.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .tbl th {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app .tbl tbody tr:hover > td {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* ---------- buttons: glossy bubbles ---------- */
+:root[data-look='glass'] .app .btn,
+:root[data-look='glass'] .gate .btn,
+:root[data-look='glass'] .login-card .btn,
+:root[data-look='glass'][data-area='app'] .modal .btn,
+:root[data-look='glass'][data-area='app'] .toast .btn {
+  border-radius: 999px;
+}
+:root[data-look='glass'] .app .btn.icon,
+:root[data-look='glass'][data-area='app'] .modal .btn.icon {
+  border-radius: 50%;
+}
+:root[data-look='glass'] .app .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon):not(.gsiwait),
+:root[data-look='glass'] .gate .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon),
+:root[data-look='glass'] .login-card .btn:not(.ghost):not(.soft):not(.danger):not(.link):not(.icon):not(.ssobtn),
+:root[data-look='glass'][data-area='app'] .modal .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon) {
+  color: var(--g-on);
+  background: var(--g-grad);
+  background-image: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.3) 50%, transparent 62%), var(--g-grad);
+  background-size: 260% 100%, 100% 100%;
+  background-position: 130% 0, 0 0;
+  background-repeat: no-repeat;
+  transition:
+    background-position 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.15s,
+    box-shadow 0.15s,
+    transform 0.12s;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -8px 14px -10px rgba(16, 12, 80, 0.45),
+    var(--g-glow);
+}
+:root[data-look='glass'] .app .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon):not(.gsiwait):hover,
+:root[data-look='glass'] .gate .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon):hover,
+:root[data-look='glass'] .login-card .btn:not(.ghost):not(.soft):not(.danger):not(.link):not(.icon):not(.ssobtn):hover,
+:root[data-look='glass'][data-area='app'] .modal .btn:not(.ghost):not(.soft):not(.link):not(.danger):not(.ssobtn):not(.go):not(.icon):hover {
+  background-image: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.3) 50%, transparent 62%), var(--g-grad);
+  background-position: -30% 0, 0 0;
+  filter: brightness(1.06) saturate(1.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -8px 14px -10px rgba(16, 12, 80, 0.45),
+    0 16px 30px -14px rgba(76, 89, 224, 0.9);
+}
+:root[data-look='glass'] .app .btn.go,
+:root[data-look='glass'] .gate .btn.go,
+:root[data-look='glass'][data-area='app'] .modal .btn.go {
+  color: #fff;
+  background: var(--g-grad-go);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -8px 14px -10px rgba(0, 40, 36, 0.5),
+    0 12px 26px -14px rgba(8, 113, 106, 0.85);
+}
+:root[data-look='glass'] .app .btn.go:hover,
+:root[data-look='glass'][data-area='app'] .modal .btn.go:hover {
+  background: var(--g-grad-go);
+  filter: brightness(1.08);
+}
+:root[data-look='glass'] .app .btn.ghost,
+:root[data-look='glass'] .gate .btn.ghost,
+:root[data-look='glass'] .login-card .btn.ghost,
+:root[data-look='glass'][data-area='app'] .modal .btn.ghost {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: var(--g-rim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px -14px rgba(39, 45, 120, 0.6);
+}
+:root[data-look='glass'] .app .btn.ghost:hover,
+:root[data-look='glass'] .gate .btn.ghost:hover,
+:root[data-look='glass'] .login-card .btn.ghost:hover,
+:root[data-look='glass'][data-area='app'] .modal .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(108, 78, 242, 0.35);
+}
+:root[data-look='glass'] .app .btn.soft,
+:root[data-look='glass'][data-area='app'] .modal .btn.soft {
+  background: var(--g-tint);
+  border-color: var(--g-rim);
+}
+:root[data-look='glass'] .app .btn.danger,
+:root[data-look='glass'][data-area='app'] .modal .btn.danger {
+  border-color: rgba(163, 50, 31, 0.18);
+  box-shadow: inset 0 1px 0 var(--g-hl);
+}
+:root[data-look='glass'] .app .btn.link,
+:root[data-look='glass'][data-area='app'] .modal .btn.link {
+  border-radius: 6px;
+  color: var(--g-accent);
+}
+:root[data-look='glass'][data-theme='dark'] .app .btn.ghost,
+:root[data-look='glass'][data-theme='dark'] .gate .btn.ghost,
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal .btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+:root[data-look='glass'][data-theme='dark'] .app .btn.ghost:hover,
+:root[data-look='glass'][data-theme='dark'] .gate .btn.ghost:hover,
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .btn.ghost,
+  :root[data-look='glass']:not([data-theme='light']) .gate .btn.ghost,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal .btn.ghost {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app .btn.ghost:hover,
+  :root[data-look='glass']:not([data-theme='light']) .gate .btn.ghost:hover,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal .btn.ghost:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ---------- fields (kept at low specificity so a page's own field styles still win) ---------- */
+:root[data-look='glass'] :is(.app, .gate, .login-card) :is(input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])), select, textarea),
+:root[data-look='glass'][data-area='app'] .modal :is(input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])), select, textarea) {
+  border-radius: 14px;
+  background-color: var(--g-field);
+  border-color: var(--g-field-line);
+  box-shadow: inset 0 1px 2px rgba(31, 42, 104, 0.06);
+}
+:root[data-look='glass'] :is(.app, .gate, .login-card) :is(input, select, textarea):focus,
+:root[data-look='glass'][data-area='app'] .modal :is(input, select, textarea):focus {
+  background-color: var(--g-field-on);
+  border-color: var(--g-field-ring);
+  box-shadow: var(--g-ring);
+}
+:root[data-look='glass'] :is(.app, .gate, .login-card, .modal) :is(input[type='checkbox'], input[type='radio']) {
+  accent-color: var(--g-pri);
+}
+
+/* ---------- notes: tinted glass with a glowing dot instead of a side bar ---------- */
+:root[data-look='glass'] .app .note,
+:root[data-look='glass'][data-area='app'] .modal .note {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-left-width: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+:root[data-look='glass'] .app .note.info,
+:root[data-look='glass'] .app .note.ok,
+:root[data-look='glass'] .app .note.amber,
+:root[data-look='glass'] .app .note.red {
+  border-left: 1px solid rgba(255, 255, 255, 0.6);
+}
+:root[data-look='glass'][data-theme='dark'] .app .note,
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal .note {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .note,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal .note {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+}
+
+/* ---------- windows, messages and menus (drawn at the page root) ---------- */
+:root[data-look='glass'][data-area='app'] .overlay,
+:root[data-look='glass'][data-area='auth'] .overlay {
+  background: rgba(20, 22, 60, 0.38);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  backdrop-filter: blur(8px) saturate(140%);
+}
+:root[data-look='glass'][data-area='app'] .modal,
+:root[data-look='glass'][data-area='auth'] .modal {
+  --surface: var(--g-solid);
+  --surface-2: var(--g-tint);
+  --line: var(--g-line);
+  --line-2: var(--g-line-2);
+  --ink-2: var(--g-ink-2);
+  --ink-3: var(--g-ink-3);
+  border-radius: 28px;
+  background:
+    radial-gradient(420px 160px at 0% 0%, rgba(var(--g-c1), 0.1), transparent 70%),
+    radial-gradient(360px 140px at 100% 0%, rgba(var(--g-c2), 0.08), transparent 70%),
+    var(--g-solid);
+  border: 1px solid var(--g-rim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 40px 90px -30px rgba(20, 22, 60, 0.55);
+}
+:root[data-look='glass'][data-area='app'] .modal .mh,
+:root[data-look='glass'][data-area='auth'] .modal .mh {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom-color: var(--g-line);
+}
+:root[data-look='glass'][data-area='app'] .modal .mh::after,
+:root[data-look='glass'][data-area='auth'] .modal .mh::after {
+  background: var(--g-grad);
+  height: 3px;
+  width: 56px;
+  border-radius: 3px;
+}
+:root[data-look='glass'][data-area='app'] .modal .mf,
+:root[data-look='glass'][data-area='auth'] .modal .mf {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top-color: var(--g-line);
+}
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal,
+:root[data-look='glass'][data-theme='dark'][data-area='auth'] .modal {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+}
+:root[data-look='glass'][data-theme='dark'][data-area='app'] .modal :is(.mh, .mf),
+:root[data-look='glass'][data-theme='dark'][data-area='auth'] .modal :is(.mh, .mf) {
+  background: rgba(19, 26, 50, 0.78);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal,
+  :root[data-look='glass']:not([data-theme='light'])[data-area='auth'] .modal {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+  }
+  :root[data-look='glass']:not([data-theme='light'])[data-area='app'] .modal :is(.mh, .mf),
+  :root[data-look='glass']:not([data-theme='light'])[data-area='auth'] .modal :is(.mh, .mf) {
+    background: rgba(19, 26, 50, 0.78);
+  }
+}
+@media (max-width: 640px) {
+  :root[data-look='glass'][data-area='app'] .modal,
+  :root[data-look='glass'][data-area='auth'] .modal {
+    border-radius: 26px 26px 0 0;
+  }
+}
+:root[data-look='glass'][data-area='app'] .toast,
+:root[data-look='glass'][data-area='auth'] .toast {
+  border-radius: 18px;
+  color: #fff;
+  background: rgba(22, 26, 64, 0.86);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 22px 48px -20px rgba(20, 22, 60, 0.7);
+}
+:root[data-look='glass'][data-area='app'] .toast.bad,
+:root[data-look='glass'][data-area='auth'] .toast.bad {
+  background: rgba(150, 38, 24, 0.92);
+}
+:root[data-look='glass'] .app .dd-menu {
+  border-radius: 18px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-solid);
+  box-shadow: var(--g-shadow-hi);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+}
+:root[data-look='glass'] .app .dd-menu a {
+  border-radius: 12px;
+}
+
+/* ---------- phone: a floating glass tab bar ---------- */
+@media (max-width: 900px) {
+  :root[data-look='glass'] .app .ptop {
+    margin: 10px 10px 0;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    padding: 6px 8px 6px 14px;
+    border-radius: 22px;
+  }
+  :root[data-look='glass'] .app .tabbar {
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 6px;
+    border-radius: 26px;
+    border: 1px solid var(--g-rim);
+    background: color-mix(in srgb, var(--g-opaque) 80%, transparent);
+    -webkit-backdrop-filter: var(--g-blur);
+    backdrop-filter: var(--g-blur);
+    box-shadow: var(--g-shadow-hi);
+  }
+  :root[data-look='glass'] .app .tabbar a,
+  :root[data-look='glass'] .app .tabbar button {
+    border-radius: 20px;
+  }
+  :root[data-look='glass'] .app .tabbar .on {
+    color: var(--g-ink-on);
+    background: var(--g-glass-hi);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.95), 0 8px 18px -12px rgba(39, 45, 120, 0.6);
+  }
+  :root[data-look='glass'] .app .tabbar .on .ico {
+    background: none;
+    color: var(--g-pri);
+  }
+  :root[data-look='glass'][data-theme='dark'] .app .tabbar .on {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+  :root[data-look='glass'][data-theme='dark'] .app .tabbar .on .ico {
+    color: var(--g-pri);
+  }
+  :root[data-look='glass'] .app .content {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  }
+  :root[data-look='glass'][data-area='app'] .toasts {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (max-width: 900px) and (prefers-color-scheme: dark) {
+  :root[data-look='glass']:not([data-theme='light']) .app .tabbar .on {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+  :root[data-look='glass']:not([data-theme='light']) .app .tabbar .on .ico {
+    color: var(--g-pri);
+  }
+}
+/* the phone's "More" window shows the same menu as the sidebar */
+:root[data-look='glass'][data-area='app'] .modal .side nav a {
+  border-radius: 14px;
+}
+:root[data-look='glass'][data-area='app'] .modal .side nav a.on {
+  background: var(--g-tint);
+  color: var(--g-ink-on);
+}
+
+/* ---------- loading screens, profile set-up and the portal chooser ---------- */
+:root[data-look='glass'] .gate .card {
+  border-radius: 30px;
+  background:
+    radial-gradient(520px 200px at 0% 0%, rgba(var(--g-c1), 0.1), transparent 70%),
+    var(--g-glass);
+  border: 1px solid var(--g-rim);
+  box-shadow: var(--g-shadow-hi);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+}
+:root[data-look='glass'] .gate .card::before {
+  display: none;
+}
+:root[data-look='glass'] .gate.hub h1,
+:root[data-look='glass'] .gate .card h1 {
+  background: var(--g-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
+  max-width: 100%;
+}
+:root[data-look='glass'] .gate.hub .who {
+  border-radius: 20px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-glass-lo);
+}
+:root[data-look='glass'] .hubcard {
+  border-radius: 22px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-glass);
+  box-shadow: var(--g-shadow);
+}
+:root[data-look='glass'] .hubcard:hover,
+:root[data-look='glass'] .hubcard:focus-visible {
+  background: var(--g-glass-hi);
+  border-color: rgba(108, 78, 242, 0.4);
+  box-shadow: var(--g-shadow-hi), var(--g-ring);
+}
+:root[data-look='glass'] .hubcard.hint {
+  border-color: rgba(108, 78, 242, 0.5);
+  box-shadow: var(--g-shadow), var(--g-ring);
+}
+:root[data-look='glass'] .hubicon {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.75) 0 8%, rgba(255, 255, 255, 0.18) 26%, transparent 46%),
+    var(--g-grad);
+  box-shadow: inset 0 -6px 12px -6px rgba(16, 12, 80, 0.5), var(--g-glow);
+}
+:root[data-look='glass'] .hubgo {
+  color: var(--g-accent);
+}
+:root[data-look='glass'] .gate .loading {
+  padding: 22px 26px;
+  border-radius: 999px;
+  background: var(--g-glass);
+  border: 1px solid var(--g-rim);
+  box-shadow: var(--g-shadow);
+}
+
+/* ---------- the spinner: a glossy ring ---------- */
+:root[data-look='glass'] .app .spin,
+:root[data-look='glass'] .gate .spin,
+:root[data-look='glass'][data-area='app'] .modal .spin {
+  border: 0;
+  background:
+    radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px)) content-box,
+    conic-gradient(from 0deg, rgba(108, 78, 242, 0) 0deg, #6c4ef2 200deg, #2f9bd8 300deg, #0a8178 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+}
+
+/* ---------- sign-in pages: an aurora blade with floating bubbles and a frosted card ---------- */
+:root[data-look='glass'] .login {
+  position: relative;
+  isolation: isolate;
+  background: var(--g-sky);
+}
+:root[data-look='glass'] .login .blade {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.14) 1px, transparent 1.6px) 0 0 / 22px 22px,
+    radial-gradient(70% 60% at 85% 8%, rgba(255, 255, 255, 0.24), transparent 62%),
+    radial-gradient(60% 60% at 0% 100%, rgba(0, 180, 166, 0.55), transparent 62%),
+    radial-gradient(50% 50% at 100% 100%, rgba(255, 112, 166, 0.4), transparent 62%),
+    linear-gradient(140deg, #5b3fd6 0%, #4459e0 50%, #2f62c8 100%);
+}
+:root[data-look='glass'] .login.staff .blade {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.1) 1px, transparent 1.6px) 0 0 / 22px 22px,
+    radial-gradient(70% 60% at 85% 8%, rgba(155, 135, 255, 0.3), transparent 62%),
+    radial-gradient(60% 60% at 0% 100%, rgba(0, 180, 166, 0.32), transparent 62%),
+    linear-gradient(140deg, #120f3a 0%, #2a2385 55%, #4459e0 100%);
+}
+/* the blade's rings become two glossy bubbles */
+:root[data-look='glass'] .login .blade::before {
+  right: -10%;
+  bottom: -16%;
+  width: 46%;
+  border: 0;
+  background:
+    radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.7) 0 5%, rgba(255, 255, 255, 0.2) 22%, transparent 46%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05) 64%, rgba(255, 255, 255, 0.16) 70%, transparent 71%);
+}
+:root[data-look='glass'] .login .blade::after {
+  right: 12%;
+  top: 8%;
+  width: 16%;
+  border: 0;
+  background:
+    radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.8) 0 6%, rgba(255, 255, 255, 0.22) 24%, transparent 48%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 64%, rgba(255, 255, 255, 0.2) 70%, transparent 71%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-look='glass'] .login .blade::before {
+    animation: g-float 14s ease-in-out infinite alternate;
+  }
+  :root[data-look='glass'] .login .blade::after {
+    animation: g-float 10s ease-in-out -4s infinite alternate-reverse;
+  }
+}
+@keyframes g-float {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-12px, -18px, 0);
+  }
+}
+:root[data-look='glass'] .login .blade li {
+  border-radius: 18px;
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 10px 24px -16px rgba(10, 8, 60, 0.6);
+}
+:root[data-look='glass'] .login .blade li::before {
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.14) 60%);
+}
+:root[data-look='glass'] .login-card {
+  border-radius: 30px;
+  border: 1px solid var(--g-rim);
+  background:
+    radial-gradient(420px 180px at 0% 0%, rgba(var(--g-c1), 0.1), transparent 70%),
+    var(--g-glass);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-shadow-hi);
+}
+:root[data-look='glass'] .login-card::before {
+  display: none;
+}
+:root[data-look='glass'] .login-card h2 {
+  background: var(--g-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-look='glass'] .login-card .seg.logins {
+  border-radius: 18px;
+  border-color: var(--g-rim);
+  background: var(--g-glass-lo);
+}
+:root[data-look='glass'] .login-card .seg.logins a {
+  border-radius: 14px;
+}
+:root[data-look='glass'] .login-card .seg.logins a.on {
+  background: var(--g-opaque);
+}
+:root[data-look='glass'] .login-card .stafflogins a.on {
+  background: var(--g-grad);
+}
+:root[data-look='glass'] .login-card .refused {
+  border-radius: 16px;
+}
+
+/* ---------- a company workspace in its own color (core.js wsBrandApply works out the shades) ----------
+   --ws-accent fills buttons and the portal label, with --ws-on (white, or dark for a bright color) as their text;
+   --ws-ink is the color deepened for text and icons on light glass; --g-c1 (set inline) tints the bubbles and the sky */
+:root[data-look='glass'][data-ws-accent],
+:root[data-look='glass'][data-ws-accent] .login {
+  --g-grad: linear-gradient(135deg, var(--ws-accent) 0%, var(--ws-accent-2) 100%);
+  --g-on: var(--ws-on);
+  --g-glow: 0 12px 26px -14px var(--ws-accent);
+  --g-ring: 0 0 0 4px color-mix(in srgb, var(--ws-accent) 24%, transparent);
+  --g-field-ring: color-mix(in srgb, var(--ws-ink) 60%, transparent);
+  --g-accent: var(--ws-ink);
+  --g-pri: var(--ws-ink);
+  --g-ico: var(--ws-ink);
+  --g-grp: var(--ws-ink);
+  --g-ink-on: color-mix(in srgb, var(--ws-ink) 82%, #0b1022);
+  --g-grad-text: linear-gradient(120deg, color-mix(in srgb, var(--ws-ink) 82%, #0b1022) 0%, var(--ws-ink) 100%);
+}
+/* on dark glass the company's color is lightened for text and icons */
+:root[data-look='glass'][data-ws-accent][data-theme='dark'] {
+  --g-accent: color-mix(in srgb, var(--ws-accent) 40%, #fff);
+  --g-pri: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+  --g-ico: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+  --g-grp: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+  --g-ink-on: #ffffff;
+  --g-field-ring: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+  --g-grad-text: linear-gradient(120deg, #ffffff 0%, color-mix(in srgb, var(--ws-accent) 40%, #fff) 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look='glass'][data-ws-accent]:not([data-theme='light']) {
+    --g-accent: color-mix(in srgb, var(--ws-accent) 40%, #fff);
+    --g-pri: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+    --g-ico: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+    --g-grp: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+    --g-ink-on: #ffffff;
+    --g-field-ring: color-mix(in srgb, var(--ws-accent) 45%, #fff);
+    --g-grad-text: linear-gradient(120deg, #ffffff 0%, color-mix(in srgb, var(--ws-accent) 40%, #fff) 100%);
+  }
+}
+/* the company's name where it has no logo: in its color, deepened (light) or lightened (dark) to stay readable */
+:root[data-look='glass'][data-ws-accent] .app :is(.side .brand, .ptop .mlogo) .wslogo-t {
+  color: var(--g-accent) !important;
+}
+/* text and marks drawn on the company's color */
+:root[data-look='glass'] .app > .side > .plabel,
+:root[data-look='glass'] .app > .side .pswitch,
+:root[data-look='glass'] .app > .side .pswitch .plabel,
+:root[data-look='glass'] .app > .side nav a.on .badge,
+:root[data-look='glass'] .hubicon,
+:root[data-look='glass'][data-area='app'] .jumpico,
+:root[data-look='glass'] .app .askai-msg.user,
+:root[data-look='glass'] .login-card .stafflogins a.on {
+  color: var(--g-on);
+}
+:root[data-look='glass'] .app > .side .pswitch::after {
+  border-color: var(--g-on);
+}
+
+/* ---------- keyboard focus: a soft glowing ring ---------- */
+:root[data-look='glass'] .app :is(a, button, summary, [tabindex]):focus-visible,
+:root[data-look='glass'] .gate :is(a, button):focus-visible,
+:root[data-look='glass'][data-area='app'] .modal :is(a, button, summary):focus-visible {
+  outline: 2px solid var(--g-pri);
+  outline-offset: 2px;
+}
+
+/* ---------- motion: gentle lifts (none with reduced motion) ---------- */
+:root[data-look='glass'] .app .kpis a,
+:root[data-look='glass'] .hubcard,
+:root[data-look='glass'] .app .tcard,
+:root[data-look='glass'] .app .job {
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.22s,
+    background-color 0.22s;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-look='glass'] .app::after,
+  :root[data-look='glass'] .login .blade::before,
+  :root[data-look='glass'] .login .blade::after {
+    animation: none;
+  }
+  :root[data-look='glass'] .app .kpis a:hover::before {
+    transform: none;
+  }
+}
+
+/* ---------- fallbacks ---------- */
+/* no frosted glass in this browser: the layers that float over content become nearly solid */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :root[data-look='glass'] .app .ptop::before,
+  :root[data-look='glass'] .app .tabbar,
+  :root[data-look='glass'] .gate .card,
+  :root[data-look='glass'] .login-card {
+    background: var(--g-solid);
+  }
+}
+/* the device asks for less see-through: solid surfaces, same shapes */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-look='glass'] .app .content,
+  :root[data-look='glass'] .gate,
+  :root[data-look='glass'] .login {
+    --surface: var(--g-opaque);
+  }
+  :root[data-look='glass'] .app > .side,
+  :root[data-look='glass'] .app .ptop::before,
+  :root[data-look='glass'] .app .tabbar,
+  :root[data-look='glass'] .gate .card,
+  :root[data-look='glass'] .login-card,
+  :root[data-look='glass'] :is(.app, .gate, .login-card) .tabs,
+  :root[data-look='glass'] .hubcard {
+    background: var(--g-opaque);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* more contrast: solid surfaces and visible edges */
+@media (prefers-contrast: more) {
+  :root[data-look='glass'] .app .content,
+  :root[data-look='glass'] .gate,
+  :root[data-look='glass'] .login {
+    --surface: var(--g-opaque);
+    --line: var(--g-line-2);
+  }
+  :root[data-look='glass'] .app .panel,
+  :root[data-look='glass'] .app .kpis a,
+  :root[data-look='glass'] .app > .side,
+  :root[data-look='glass'] .app .ptop {
+    border-color: var(--g-line-2);
+  }
+}
+/* the system's high-contrast colors: no painted text or glass */
+@media (forced-colors: active) {
+  :root[data-look='glass'] .app .kpis b,
+  :root[data-look='glass'] .app .hello h2,
+  :root[data-look='glass'] .app .stat b,
+  :root[data-look='glass'] .app .kitstats b,
+  :root[data-look='glass'] .app .ptop .crumb,
+  :root[data-look='glass'] .gate h1,
+  :root[data-look='glass'] .login-card h2 {
+    background: none;
+    color: CanvasText;
+  }
+  :root[data-look='glass'] .app::before,
+  :root[data-look='glass'] .app::after,
+  :root[data-look='glass'] .app .kpis a::before {
+    display: none;
+  }
+}
+
+/* ---------- the Appearance menu and quick jump in glass ---------- */
+:root[data-look='glass'] .app .lookpop {
+  border-radius: 24px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-solid);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-shadow-hi);
+}
+:root[data-look='glass'] .app .lookopt {
+  border-radius: 18px;
+  background: var(--g-glass-lo);
+}
+:root[data-look='glass'] .app .lookopt.on {
+  border-color: var(--g-pri);
+  box-shadow: var(--g-ring);
+}
+:root[data-look='glass'] .app .lookpop .seg {
+  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-glass-lo);
+}
+:root[data-look='glass'] .app .lookpop .seg button {
+  border-radius: 12px;
+}
+:root[data-look='glass'] .app .lookpop .seg button.on {
+  background: var(--g-opaque);
+  box-shadow: 0 6px 14px -10px rgba(39, 45, 120, 0.6), inset 0 0 0 1px var(--g-hl);
+}
+:root[data-look='glass'][data-area='app'] .jumpin {
+  border-radius: 18px;
+  background: var(--g-field);
+  border-color: var(--g-field-line);
+}
+:root[data-look='glass'][data-area='app'] .jumpin:focus-within {
+  border-color: var(--g-field-ring);
+  box-shadow: var(--g-ring);
+}
+:root[data-look='glass'][data-area='app'] .jumplist li {
+  border-radius: 16px;
+}
+:root[data-look='glass'][data-area='app'] .jumplist li.on {
+  background: rgba(var(--g-c1), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--g-c1), 0.18);
+}
+:root[data-look='glass'][data-area='app'] .jumpico {
+  border-radius: 50%;
+  color: var(--g-on);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.7) 0 8%, rgba(255, 255, 255, 0.16) 28%, transparent 48%),
+    var(--g-grad);
+  box-shadow: inset 0 -5px 10px -6px rgba(16, 12, 80, 0.5);
+}
+:root[data-look='glass'][data-area='app'] .modal .jumpin input,
+:root[data-look='glass'][data-area='app'] .modal .jumpin input:focus {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---------- StratEdge AI and the help assistant: a frosted side panel with bubble messages ---------- */
+:root[data-look='glass'] .app .askai {
+  border-radius: 28px;
+  border: 1px solid var(--g-rim);
+  background: var(--g-solid);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: inset 0 1px 0 var(--g-hl), 0 34px 80px -30px rgba(20, 22, 60, 0.55);
+}
+:root[data-look='glass'] .app .askai-head {
+  border-bottom-color: var(--g-line);
+  background: linear-gradient(180deg, rgba(var(--g-c1), 0.12), transparent);
+}
+:root[data-look='glass'] .app .helpbot .askai-head {
+  background: linear-gradient(180deg, rgba(var(--g-c2), 0.14), transparent);
+}
+:root[data-look='glass'] .app .askai-msg {
+  border-radius: 18px;
+}
+:root[data-look='glass'] .app .askai-msg.user {
+  background: var(--g-grad);
+  border-bottom-right-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 8px 18px -12px rgba(76, 89, 224, 0.8);
+}
+:root[data-look='glass'] .app .askai-msg.assistant {
+  background: var(--g-tint);
+  border-color: var(--g-rim);
+  border-bottom-left-radius: 6px;
+}
+:root[data-look='glass'] .app .askai-starters .chip {
+  border-color: var(--g-rim);
+  background: var(--g-tint);
+}
+
+/* ---------- thin tinted scrollbars on portal pages ---------- */
+:root[data-look='glass'][data-area='app'] {
+  scrollbar-color: rgba(var(--g-c1), 0.35) transparent;
+}
+:root[data-look='glass'] .app .content :is(.tblwrap, .jumplist, .askai-body),
+:root[data-look='glass'][data-area='app'] .modal {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--g-c1), 0.35) transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-look='glass'] .btn {
+    transition: none !important;
+  }
+}
+
+/* ---------- clock in / out: big glossy bubbles (the clock-in teal deepened so white text keeps 4.5 : 1) ---------- */
+:root[data-look='glass'] .app .punch {
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 -10px 18px -12px rgba(0, 0, 0, 0.35);
+}
+:root[data-look='glass'] .app .punch.in {
+  color: #fff;
+  background: var(--g-grad-go);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -10px 18px -12px rgba(0, 40, 36, 0.5), 0 16px 30px -16px rgba(8, 113, 106, 0.85);
+}
+:root[data-look='glass'] .app .punch.in:hover {
+  background: var(--g-grad-go);
+  filter: brightness(1.08);
+}
+:root[data-look='glass'] .app .punch.out {
+  background: linear-gradient(135deg, #24305e 0%, #101b35 100%);
+  color: #fff;
+}
+:root[data-look='glass'] .app .punch.brk {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+/* weekend days on the timesheet were dimmed with opacity, below 4.5 : 1 on glass: lighter weight instead */
+:root[data-look='glass'] .app .days label.we {
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* ---------- matched jobs: glass cards ---------- */
+:root[data-look='glass'] .app .match {
+  border-radius: var(--g-r);
+  border-color: var(--g-rim);
+  box-shadow: var(--g-shadow);
+}
+
+/* v38.1 Import with preview: the current step and the chosen kind take the look's accent */
+:root[data-look='glass'] .app .content :is(.impsteps li.now span, .imptarget.on .imptic) {
+  background: var(--g-grad);
+  color: var(--g-on);
+}
+:root[data-look='glass'] .app .content .imptarget {
+  background: var(--g-tint, var(--surface));
+}
+:root[data-look='glass'] .app .content .imptarget.on {
+  border-color: var(--g-accent);
+  box-shadow: 0 0 0 1px var(--g-accent), var(--g-glow, none);
+}
+:root[data-look='glass'] .app .content .impsteps li.now {
+  color: var(--g-accent);
+}
+
+/* ---------- v39: the phone panel, an incoming call and the call bar (drawn at the page root, above windows) ---------- */
+:root[data-look='glass'][data-area='app'] .phonepanel,
+:root[data-look='glass'][data-area='app'] .phbar,
+:root[data-look='glass'][data-area='app'] .phring {
+  --surface: var(--g-solid);
+  --surface-2: var(--g-tint);
+  --line: var(--g-line);
+  --line-2: var(--g-line-2);
+  --ink-2: var(--g-ink-2);
+  --ink-3: var(--g-ink-3);
+  border: 1px solid var(--g-rim);
+  background: var(--g-solid);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: inset 0 1px 0 var(--g-hl), 0 34px 80px -30px rgba(20, 22, 60, 0.55);
+}
+:root[data-look='glass'][data-area='app'] .phonepanel {
+  border-radius: 28px;
+}
+:root[data-look='glass'][data-area='app'] .phbar,
+:root[data-look='glass'][data-area='app'] .phring {
+  border-radius: 24px;
+}
+:root[data-look='glass'][data-area='app'] .phonepanel .askai-head {
+  border-bottom-color: var(--g-line);
+  background: linear-gradient(180deg, rgba(var(--g-c2), 0.14), transparent);
+}
+:root[data-look='glass'][data-area='app'] .phkeys .btn {
+  border-radius: 18px;
+  border-color: var(--g-line);
+  background: var(--g-tint);
+}
+:root[data-look='glass'][data-area='app'] .phmsg.out .phmsg-b {
+  background: var(--g-grad);
+  color: #fff;
+}
+@media (max-width: 720px) {
+  :root[data-look='glass'][data-area='app'] .phonepanel {
+    border-radius: 0;
+  }
+}
