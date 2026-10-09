@@ -633,6 +633,17 @@ switch ($r) {
         }
         // Feature switches on a Team card (r/{id}.ft) are given and taken away by administrators only.
         $cu = currentUser();
+        // v83: the client's decision on a timesheet (cd) is the client's: a consultant's own mirror keeps the stored one,
+        // and every change by them is a new version (so an earlier decision no longer applies)
+        if (preg_match('#^pub/([^/]+)/ts/#', $path, $pm) && userLevel($cu) < 2 && !in_array($pm[1], clientCids((string) $cu['id']), true)) {
+            $prevTs = docGet($path);
+            if ($prevTs && isset($prevTs->cd)) {
+                $data->cd = $prevTs->cd;
+            } else {
+                unset($data->cd);
+            }
+            $data->u = now();
+        }
         if (preg_match('#^r/[^/]+$#', $path) && !hasRole($cu, 'admin') && property_exists($data, 'ft')) {
             $prev = docGet($path);
             if ($prev && isset($prev->ft)) {
@@ -657,6 +668,19 @@ switch ($r) {
             }
             if ($on($was) !== $on($will)) {
                 requireRecentAuth();
+            }
+        }
+        // v83: per-person feature access (fa) and the bookkeeper limits (books, nopay, ext) change only through
+        // admin_feature_access and admin_books_access (administrators, "Confirm it's you", audit log); a plain record
+        // write keeps whatever is saved, and a replace (set) cannot drop them either
+        if (preg_match('#^r/[^/]+$#', $path)) {
+            $prevCtl = docGet($path);
+            foreach (['fa', 'books', 'nopay', 'ext'] as $k) {
+                if ($prevCtl && property_exists($prevCtl, $k)) {
+                    $data->$k = $prevCtl->$k;
+                } else {
+                    unset($data->$k);
+                }
             }
         }
         if ($r === 'update') {
@@ -687,6 +711,10 @@ switch ($r) {
             fail(400, 'invalid_argument', 'Bad path.');
         }
         if (!can($path, 'w')) {
+            fail(403, 'invalid_argument', 'You can\'t delete this record.');
+        }
+        // v83: a Team card (r/{id}) holds feature access and books limits; only an administrator removes one
+        if (preg_match('#^r/[^/]+$#', $path) && !hasRole(currentUser(), 'admin')) {
             fail(403, 'invalid_argument', 'You can\'t delete this record.');
         }
         if (financialPath($path)) {

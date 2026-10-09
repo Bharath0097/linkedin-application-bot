@@ -207,6 +207,22 @@ function cxProviderUrlProblem(string $prov, string $url): string
     }
     return '';
 }
+/** v83: the provider's sign-in goes only to the provider's own API host. A resume link (from an answer, or stored on
+ *  a record) may point anywhere, and is then fetched without credentials. */
+function cxApiHostOf(array $api, string $url): bool
+{
+    $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+    if ($host === '') {
+        return false;
+    }
+    $hosts = [strtolower((string) (parse_url((string) $api['base'], PHP_URL_HOST) ?? ''))];
+    foreach ($api['ops'] as $o) {
+        if (preg_match('#^https?://#i', (string) $o['path'])) {
+            $hosts[] = strtolower((string) (parse_url((string) $o['path'], PHP_URL_HOST) ?? ''));
+        }
+    }
+    return in_array($host, array_filter($hosts), true);
+}
 /** One HTTP request: [code, body, headers, ms, error]. Answers over 8 MB are cut. */
 function cxHttp(string $method, string $url, array $headers, ?string $body, int $timeout = 25): array
 {
@@ -939,7 +955,7 @@ function cxAttachResume(string $prov, string $cid, string $url, string $name): s
         return '';
     }
     $api = cxApi($prov);
-    [$h] = cxAuth($prov, $api);
+    [$h] = cxApiHostOf($api, $url) ? cxAuth($prov, $api) : [[]]; // v83: credentials only to the provider's API host
     [$code, $body, $rh] = cxHttp('GET', $url, $h, null, 30);
     if ($code !== 200 || strlen($body) < 100 || strlen($body) > (int) cfg('max_upload_mb') * 1048576) {
         return '';

@@ -43,6 +43,7 @@ const RULES = [
     ['ads', 'admin', 'admin'],
     ['sec', 'admin', 'admin'],
     ['vms', 'interact', 'interact'],
+    ['vms/dice', 'interact', 'admin'], // v83: cached Dice search results are written by the server (vms_dice_import trusts them)
     ['org/vms', 'admin', 'admin'],
     ['org/box', 'interact', 'interact'],
     ['org/mkt', 'interact', 'interact'],
@@ -894,6 +895,17 @@ function myCids(string $uid): array
     }
     return array_values(array_unique($out));
 }
+/** v83: the client workspaces a person is a CONTACT of (one of the company's people in the client portal): a client
+ *  contact's own and added workspaces, or the workspaces added to someone given the Client portal under Roles & access.
+ *  A consultant, employee or student placed at a client (r/{uid}.cid from Admin > Team) works there but is not a contact. */
+function clientCids(string $uid): array
+{
+    if (portalOf($uid) === 'employer') {
+        return myCids($uid);
+    }
+    $row = userRow($uid);
+    return $row && in_array('client', accessOf($row)['portals'], true) ? accessOf($row)['cids'] : [];
+}
 function ruleFor(string $path, ?string $uid): array
 {
     $segs = $path === '' ? [] : explode('/', $path);
@@ -1026,8 +1038,17 @@ function isBench(string $uid): bool
 {
     $row = userRow($uid);
     if (!$row || ($row['status'] ?? '') !== 'active') return false;
+    $u = $row + ['roles' => rolesOf($row)];
+    // v83: staff roles are given by an administrator; anyone else is an employee only once Team > "Approve access"
+    // made their record active (a new sign-up with no approved profile has none of the recruiting workspace)
+    if (userLevel($u) < 2 && !hasRole($u, 'manager')) {
+        $d = myR($uid);
+        if (!$d || ($d->st ?? '') !== 'active' || in_array($d->role ?? '', ['employer', 'consultant', 'ext', 'student'], true)) {
+            return featureAllowed($u, 'bench_sales', false);
+        }
+    }
     $employee = in_array('employee', portalsOf($row), true);
-    return featureAllowed($row + ['roles' => rolesOf($row)], 'bench_sales', $employee);
+    return featureAllowed($u, 'bench_sales', $employee);
 }
 /**
  * What is on the server versus what this version expects: the build stamps of index.html and js/app.js, the version
@@ -1175,6 +1196,12 @@ function can(string $path, string $mode): bool
         $segs = explode('/', $path);
         if (count($segs) < 2 || $uid === null || !in_array($segs[1], myCids($uid), true)) {
             return false;
+        }
+        // v83: someone placed at the client who is not one of its contacts (a consultant): only their own timesheet,
+        // attendance and live-status mirrors
+        if (!in_array($segs[1], clientCids($uid), true)) {
+            $seg3 = (string) ($segs[3] ?? '');
+            return count($segs) === 4 && (($segs[2] === 'live' && $seg3 === $uid) || (in_array($segs[2], ['ts', 'att'], true) && str_starts_with($seg3, $uid . '_')));
         }
         // v64: and only the areas the contact's role covers (invoices, timesheets, consultants and attendance)
         $area = ['inv' => 'invoices', 'ts' => 'timesheets', 'roster' => 'consultants', 'live' => 'consultants'][(string) ($segs[2] ?? '')] ?? '';

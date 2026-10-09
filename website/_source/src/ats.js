@@ -777,7 +777,8 @@ function OfferPanel({ c, job, pub, S, onChanged, onHire }) {
   const sigSt = sig.data && sig.data.st;
   useEffect(() => {
     // the signature request finished: the offer follows it
-    if (o.st === 'sent' && sigSt === 'done') dbMerge(`ats/${c.id}`, { offer: { ...o, st: 'accepted', acceptedAt: Date.now() }, u: Date.now(), log: [...(c.log || []), { t: Date.now(), who: 'E-sign', ev: 'Offer accepted (signed)' }] }).catch(() => {});
+    // v83: the sig_ signing route marks a finished request 'completed' (there is no 'done' status)
+    if (o.st === 'sent' && sigSt === 'completed') dbMerge(`ats/${c.id}`, { offer: { ...o, st: 'accepted', acceptedAt: Date.now() }, u: Date.now(), log: [...(c.log || []), { t: Date.now(), who: 'E-sign', ev: 'Offer accepted (signed)' }] }).catch(() => {});
   }, [sigSt]);
   const money = v => (v ? fmtMoney(+v, f.cur) + (f.per === 'hour' ? '/hr' : f.per === 'year' ? '/yr' : '/' + f.per) : '—');
   return html`<div className="stack">
@@ -806,7 +807,7 @@ function OfferPanel({ c, job, pub, S, onChanged, onHire }) {
           <button className="btn" disabled=${!!busy || (!!f.approver && o.st !== 'approved' && o.st !== 'sent' && o.st !== 'accepted')} onClick=${send}>${busy === 'send' ? 'Sending…' : 'Send for e-signature'}</button>
           ${o.st !== 'accepted' && html`<button className="btn ghost" disabled=${!!busy} onClick=${() => save({ st: 'accepted', acceptedAt: Date.now() }, 'Offer accepted (recorded by hand)')}>Mark accepted</button>`}
           ${o.st !== 'declined' && o.st && html`<button className="btn ghost" disabled=${!!busy} onClick=${() => save({ st: 'declined', declinedAt: Date.now() }, 'Offer declined')}>Mark declined</button>`}
-          ${o.st === 'accepted' && html`<button className="btn go" onClick=${onHire}><${Icon} n="check" />Hire and onboard</button>`}
+          ${o.st === 'accepted' && kindOf(job, c.st) !== 'hired' && html`<button className="btn go" onClick=${onHire}><${Icon} n="check" />Hire and onboard</button>`}
         </div>
       </div>
       ${preview != null && html`<${Modal} wide title="Offer letter" onClose=${() => setPreview(null)} foot=${html`<button className="btn ghost" onClick=${() => setPreview(null)}>Close</button><button className="btn" disabled=${!!busy} onClick=${send}>Send for e-signature</button>`}><textarea value=${preview} onInput=${e => setPreview(e.target.value)} style=${{ minHeight: 420, width: '100%', fontFamily: 'inherit' }} /><p className="muted small">Edit the text here before sending; the template lives under Settings › Offer letter.</p><//>`}
@@ -1647,10 +1648,9 @@ function CandidatesTab({ docs, jobsMap, S, jobId, onOpen, bulk, pool, onMail }) 
     .filter(c => (!src || c.src === src) && (!tag || (c.tags || []).includes(tag)) && test(candText(c)))
     .sort((a, b) => (sort === 'score' ? ((b.score && b.score.v) || 0) - ((a.score && a.score.v) || 0) : sort === 'at' ? b.at - a.at : sort === 'n' ? String(a.n).localeCompare(String(b.n)) : (b.u || 0) - (a.u || 0)));
   const exportCsv = async () => {
-    const res = await fetch(API + 'ats_export', { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' }, body: JSON.stringify({ job: jobId || '' }) });
-    if (!res.ok) return toast('Could not export.', true);
+    // v83: through api() so the 'Confirm it's you' re-auth (ats_export is a re-auth route) runs and retries
     try {
-      await saveDownload('candidates.csv', await res.blob());
+      await saveDownload('candidates.csv', await api('ats_export', { job: jobId || '' }, { blob: true }));
     } catch (e) {
       if (!e || e.code !== 'declined') toast(errText(e), true);
     }

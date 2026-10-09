@@ -452,9 +452,26 @@ function phIdent(string $uid): string
 {
     return (string) preg_replace('/[^A-Za-z0-9_]/', '_', $uid);
 }
+/** v83: the browser's identity on Twilio. In a company workspace running on StratEdge's central Twilio app it carries
+ *  the workspace's name (hex), so StratEdge's phw_out can hand the call to the workspace. */
+function phClientId(string $uid): string
+{
+    $s = function_exists('wsSlug') ? wsSlug() : '';
+    return $s !== '' && phCfg()['central'] ? 'ws_' . bin2hex($s) . '__' . phIdent($uid) : phIdent($uid);
+}
+/** The person behind a Twilio "client:" address ('' for a phone number, or another workspace's browser). */
 function phUidOf(string $from): string
 {
-    return str_starts_with($from, 'client:') ? substr($from, 7) : '';
+    if (!str_starts_with($from, 'client:')) {
+        return '';
+    }
+    $id = substr($from, 7);
+    if (preg_match('/^ws_([0-9a-f]{2,60})__(.+)$/', $id, $m)) {
+        // v83: a workspace browser on the central app: only that workspace's own site knows the person
+        $s = function_exists('wsSlug') ? wsSlug() : '';
+        return $s !== '' && hex2bin($m[1]) === $s ? $m[2] : '';
+    }
+    return $id;
 }
 /** The form fields Twilio posted, exactly as sent (PHP's own parsing changes some names). */
 function phParams(): array
@@ -1802,7 +1819,13 @@ function phRoute(string $r, array $b): never
             $u = phUser(); $c = phCfg(true);
             if ($c['provider'] === 'twilio') fail(400, 'invalid_argument', 'Twilio calls use the native browser phone.');
             if ($c['provider'] === 'custom' && $c['providerCallPath'] === '') fail(409, 'not_ready', 'Add the provider call endpoint under Phone setup first.');
-            $to = phE164(str($b, 'to', 40), $c['region']); if ($to === '') fail(400, 'invalid_argument', 'Enter a valid phone number.');
+            // v83: the same toll-fraud rules as the Twilio browser call (phw_out): no emergency numbers, only the allowed
+            // destinations (no premium or Caribbean numbers), and the per-person hourly limit, shared with phw_out
+            $toRaw = str($b, 'to', 40);
+            if (phIsEmergency($toRaw) && $c['e911'] !== 'allow') fail(400, 'invalid_argument', 'This phone cannot call emergency services. Dial from a mobile phone or a desk phone.');
+            $to = phE164($toRaw, $c['region']); if ($to === '') fail(400, 'invalid_argument', 'Enter a valid phone number.');
+            $why = phDestOk($to, $c); if ($why !== '') fail(400, 'invalid_argument', $why);
+            if (throttleHit('phout:' . $u['id'], $c['perHour'], 3600)) fail(429, 'rate_limited', 'You have made the most calls allowed in an hour. Try again later.');
             $j = $c['provider'] === 'vitel' ? phVitelCall($c, $to) : phProviderRequest($c, $c['providerCallPath'], ['to'=>$to,'from'=>$c['providerFrom'],'reference'=>mb_substr((string)($b['ref']??''),0,80),'user'=>(string)$u['id']]);
             $id='c'.rid(8); $sid=(string)($j['id']??$j['sid']??$j['call_id']??'');
             phDb()->prepare("INSERT INTO ph_calls (id,sid,at,dir,num,other,od,uid,st,secs,rec,rsecs,vm,ref,tx,sum,note,data) VALUES (?,?,?,?,?,?,?,?,?,0,'',0,0,?,'','','',?)")->execute([$id,$sid,now(),'out',$c['providerFrom'],$to,phOd($to),$u['id'],'calling',mb_substr((string)($b['ref']??''),0,80),json_encode(['provider'=>$c['provider'],'response'=>$j],JSON_UNESCAPED_SLASHES)]);
@@ -2105,6 +2128,18 @@ function phRoute(string $r, array $b): never
         case 'ph_cfg':
             $u = phAdmin();
             $c = phCfg();
+            if ($c['central']) {
+                // v83: StratEdge's inherited setup runs the phone here but is never shown in a workspace (README v82):
+                // only what the "Who can use the phone" page needs (no account/key/app ids, ring lists or staff names)
+                $c = [
+                    'provider' => $c['provider'],
+                    'providerLabel' => $c['providerLabel'],
+                    'providerFrom' => $c['providerFrom'],
+                    'ok' => $c['ok'],
+                    'central' => true,
+                    'numbers' => array_values(array_map(fn($n) => ['n' => (string) ($n['n'] ?? ''), 'label' => (string) ($n['label'] ?? ''), 'on' => true, 'sms' => !empty($n['sms'])], array_filter($c['numbers'], fn($n) => !empty($n['on']) && phOwner($n) === ''))),
+                ];
+            }
             $people = [];
             foreach (db()->query("SELECT id, name, email, role FROM users WHERE status = 'active' ORDER BY name") as $p) {
                 if (phEligible((string) $p['id'])) {

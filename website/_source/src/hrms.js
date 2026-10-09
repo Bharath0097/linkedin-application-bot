@@ -47,6 +47,7 @@ function hrRecFields(cfg) {
     { k: 'doj', n: 'Date of joining', t: 'date' },
     { k: 'type', n: 'Employment type', t: 'select', o: HR_TYPES },
     { k: 'st', n: 'Status', t: 'select', o: HR_ST },
+    { k: 'exit', n: 'Exit date', t: 'date', hint: 'Set automatically when the status changes to Exited.' },
     { k: 'loc', n: 'Work location', ph: 'e.g. Somerset, NJ or Hyderabad' },
     { k: 'mode', n: 'Work mode', t: 'select', o: ['Office', 'Hybrid', 'Remote'] },
     { k: 'emg', n: 'Emergency contact', ph: 'Name, relation, phone' },
@@ -97,7 +98,7 @@ function HRMSPage({ q }) {
       ${tab === 'leave' && html`<${HRLeave} staff=${staff} cfg=${cfg} />`}
       ${tab === 'assets' && html`<${KitList} col="hrms/main/assets" fields=${HR_ASSET} cols=${['n', 'kind', 'tag', 'uid', 'out', 'cond']} title="Assets" noun="Asset" empty="No assets recorded" defaults=${{ cond: 'Good' }} />`}
       ${tab === 'reviews' && html`<${KitList} col="hrms/main/rev" fields=${HR_REVIEW} cols=${['uid', 'cyc', 'rating', 'rev', 'st', 'date']} title="Reviews" noun="Review" empty="No reviews yet" defaults=${{ st: 'Draft', rev: P.uid, date: dkey() }} />`}
-      ${tab === 'cfg' && html`<${HRSettings} cfg=${cfg} />`}
+      ${tab === 'cfg' && (cfgDoc.loading ? html`<${Spinner} />` : html`<${HRSettings} key=${(cfgDoc.data && cfgDoc.data.u) || 0} cfg=${cfg} />`)}
     </div>`;
 }
 function HREmployees({ staff, cfg }) {
@@ -137,6 +138,10 @@ function HREmployees({ staff, cfg }) {
   const save = async v => {
     const { mgrId, ...rec } = v;
     delete rec.id;
+    // v83: pin the exit date so HR reports do not move an exit to the month of the latest edit
+    const prev = recs[edit.id] || {};
+    if (rec.st === 'Exited' && !rec.exit) rec.exit = prev.st === 'Exited' && prev.u ? dkey(new Date(prev.u)) : dkey();
+    if (rec.st !== 'Exited' && prev.st === 'Exited' && rec.exit === prev.exit) delete rec.exit;
     await dbSet(`hrms/emp/${edit.id}/rec`, { ...rec, u: Date.now(), by: P.uid });
     const m = staff.find(x => x.id === edit.id);
     if (((m.r && m.r.mgrId) || '') !== (mgrId || '')) await dbMerge(`r/${edit.id}`, { mgrId: mgrId || null });

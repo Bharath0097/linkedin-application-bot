@@ -97,7 +97,8 @@ function crContacts(string $cid): array
     $out = [];
     foreach (array_keys($ids) as $uid) {
         $row = userRow($uid);
-        if ($row && (string) $row['status'] === 'active' && in_array($cid, myCids($uid), true)) {
+        // v83: the company's contacts only, not a consultant placed there or StratEdge staff with the workspace
+        if ($row && (string) $row['status'] === 'active' && in_array($cid, clientCids($uid), true) && !crStaff($row)) {
             $out[$uid] = ['id' => $uid, 'n' => (string) $row['name'], 'e' => (string) $row['email']];
         }
     }
@@ -201,7 +202,7 @@ function crReqRow(string $id): ?array
 function crReqFor(string $id, array $u): array
 {
     $r = crReqRow($id);
-    if (!$r || !(crStaff($u) || in_array((string) $r['cid'], myCids($u['id']), true)) || ((string) $r['st'] === 'draft' && (string) $r['by_uid'] !== $u['id'])) {
+    if (!$r || !(crStaff($u) || in_array((string) $r['cid'], clientCids($u['id']), true)) || ((string) $r['st'] === 'draft' && (string) $r['by_uid'] !== $u['id'])) {
         fail(404, 'not_found', 'No such request.');
     }
     // v64: a contact's role and business units (a request outside them does not exist for them)
@@ -234,7 +235,7 @@ function crMayEdit(array $q, array $u, bool $staff): bool
     if ($staff) {
         return in_array($st, ['review', 'questions', 'returned', 'approved', 'active', 'hold'], true) || ($st === 'draft' && (string) $q['by_uid'] === $u['id']);
     }
-    return in_array((string) $q['cid'], myCids($u['id']), true) && in_array($st, ['draft', 'questions', 'returned', 'approved', 'active', 'hold'], true);
+    return in_array((string) $q['cid'], clientCids($u['id']), true) && in_array($st, ['draft', 'questions', 'returned', 'approved', 'active', 'hold'], true);
 }
 /** Version 1, made when a draft first leaves its author. */
 function crVerOne(array $q, array $u): void
@@ -510,7 +511,7 @@ function crPropFor(string $id, array $u): array
 {
     $r = crPropRow($id);
     $staff = crStaff($u);
-    if (!$r || !($staff || (in_array((string) $r['cid'], myCids($u['id']), true) && (int) $r['ver'] > 0))) {
+    if (!$r || !($staff || (in_array((string) $r['cid'], clientCids($u['id']), true) && (int) $r['ver'] > 0))) {
         fail(404, 'not_found', 'No such proposal.');
     }
     // v64: a contact whose role has no proposals does not see them
@@ -537,7 +538,7 @@ function crRoute(string $r, array $b): never
 {
     $u = requireUser();
     $staff = crStaff($u);
-    $myC = myCids($u['id']);
+    $myC = clientCids($u['id']); // v83: client contacts, not consultants placed at the client
     if (!$staff && !$myC) {
         fail(403, 'forbidden', 'Talent requests and proposals are for client companies and the StratEdge people who work with them.');
     }

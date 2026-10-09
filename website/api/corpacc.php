@@ -79,7 +79,8 @@ function caAccess(array $u, string $cid): array
     $d = caData($cid);
     $uid = (string) $u['id'];
     $me = $d['people'][$uid] ?? null;
-    $out = ['cid' => $cid, 'role' => $me ? $me['role'] : 'full', 'units' => $me ? $me['units'] : [], 'set' => (bool) $me, 'deleg' => []];
+    // v83: the default full role is for the company's contacts; someone merely placed there gets no client areas
+    $out = ['cid' => $cid, 'role' => $me ? $me['role'] : (in_array($cid, clientCids($uid), true) ? 'full' : ''), 'units' => $me ? $me['units'] : [], 'set' => (bool) $me, 'deleg' => []];
     foreach (caActiveDelegations($cid) as $x) {
         if ((string) ($x['to'] ?? '') === $uid) {
             $out['deleg'][] = ['from' => (string) $x['from'], 'end' => (int) $x['end'], 'id' => (string) $x['id']];
@@ -143,7 +144,7 @@ function caMine(array $u): array
         return [];
     }
     $out = [];
-    foreach (myCids((string) $u['id']) as $cid) {
+    foreach (clientCids((string) $u['id']) as $cid) {
         $acc = caAccess($u, $cid);
         $areas = [];
         foreach (array_keys(CA_AREAS) as $a) {

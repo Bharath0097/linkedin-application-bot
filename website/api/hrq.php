@@ -285,6 +285,9 @@ function hrqApply(string $uid, array $vals, array $keys, array $me): array
             // the one-line emergency contact the HR record shows, kept in step
             $rec->emg = trim((string) ($rec->ecn ?? '') . ((string) ($rec->ecr ?? '') !== '' ? ' (' . $rec->ecr . ')' : '') . ((string) ($rec->ecp ?? '') !== '' ? ', ' . $rec->ecp : ''));
         }
+        if ((string) ($rec->st ?? '') === 'Exited' && empty($rec->exit) && !empty($rec->u)) {
+            $rec->exit = date('Y-m-d', (int) ($rec->u / 1000)); // pin the exit month before u moves (HR reports)
+        }
         $rec->u = now();
         $rec->by = (string) $me['id'];
         docSet("hrms/emp/$uid/rec", $rec);
@@ -323,7 +326,8 @@ function hrqKeepFile(string $uid, string $rid, string $fid, stdClass $meta, arra
 }
 function hrqDropFile(string $rid, string $fid): void
 {
-    if (!preg_match('/^[a-f0-9]{32}$/', $fid)) {
+    // v83: only a file that belongs to this request; files_dir is shared by every upload in the workspace
+    if (!preg_match('/^[a-f0-9]{32}$/', $fid) || !docGet("hrms/main/hrq/$rid/f/$fid")) {
         return;
     }
     docDelete("hrms/main/hrq/$rid/f/$fid");
@@ -725,7 +729,12 @@ function hrqRoute(string $r, string $method, array $b): never
             if (!$q || (string) $q->uid !== $u['id'] || !in_array((string) ($q->st ?? ''), ['open', 'returned'], true)) {
                 fail(404, 'not_found', 'That file can no longer be removed.');
             }
-            hrqDropFile($id, (string) ($b['fid'] ?? ''));
+            $fid = (string) ($b['fid'] ?? '');
+            // v83: the file must be one of this request's own uploads, not any file id in the workspace
+            if (!preg_match('/^[a-f0-9]{32}$/', $fid) || !docGet("hrms/main/hrq/$id/f/$fid")) {
+                fail(404, 'not_found', 'That file can no longer be removed.');
+            }
+            hrqDropFile($id, $fid);
             ok(['ok' => true]);
         }
         case 'hrq_submit': {

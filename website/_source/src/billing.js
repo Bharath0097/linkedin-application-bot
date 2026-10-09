@@ -132,7 +132,7 @@ function BillingPage({ q }) {
     if (q && q.paid) {
       try {
         const r = await api('bill_confirm', { session: q.paid });
-        toast(r.paid ? 'Payment received. Thank you!' : 'Stripe has not confirmed this payment yet; it shows here as soon as it does.');
+        toast(r.held ? 'This payment was for a different plan or amount than your current plan, so it was not applied. StratEdge has been told and will sort it out with you.' : r.paid ? 'Payment received. Thank you!' : 'Stripe has not confirmed this payment yet; it shows here as soon as it does.', !!r.held);
       } catch (e) {
         toast(errText(e), true);
       }

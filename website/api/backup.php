@@ -3,7 +3,8 @@ declare(strict_types=1);
 /*
  * v34 encrypted backups (Security center > Backups).
  *
- *   - Every night (cron) a backup of the database, the encryption key and config.php; once a week (optional) a full one
+ *   - Every night (cron) a backup of the database, the encryption key and config.php (config.php on StratEdge's own site
+ *     only: a company workspace's backup never carries the shared provider file); once a week (optional) a full one
  *     with every uploaded file. Each backup is a zip, encrypted with a fresh random key (XChaCha20-Poly1305 in 1 MB
  *     chunks), and that key is sealed to the RECOVERY KEY's public half (libsodium sealed box). The server keeps only the
  *     public half: it can make backups but can never open one, so a stolen server or a stolen backup reveals nothing.
@@ -201,8 +202,10 @@ function bkRun(bool $full = false, string $why = 'scheduled'): array
         if (is_file($keyFile)) {
             $z->addFile($keyFile, 'keys/mail.key');
         }
+        // v83: config.php is StratEdge's own (provider) file, shared by every workspace (its admin login, database, mail
+        // and assistant secrets): only StratEdge's own backups carry it, never a company workspace's (whose admin holds the key)
         $cfgFile = __DIR__ . '/config.php';
-        if (is_file($cfgFile)) {
+        if (wsCurrent() === null && is_file($cfgFile)) {
             $z->addFile($cfgFile, 'config.php');
         }
         $n = 0;

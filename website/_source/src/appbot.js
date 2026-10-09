@@ -147,7 +147,8 @@ function abBridge(action, payload) {
 }
 function abExt(action, payload) {
   const rt = window.chrome && window.chrome.runtime;
-  if (!rt || typeof rt.sendMessage !== 'function') return action === 'ACK' ? Promise.resolve(null) : abBridge(action, payload);
+  // v83: ACK goes through the page bridge too, or the companion keeps every report and the poll replays them over statuses set by hand
+  if (!rt || typeof rt.sendMessage !== 'function') return abBridge(action, payload);
   return new Promise((res, rej) => {
     let done = false;
     const t = setTimeout(() => {
@@ -169,7 +170,7 @@ function abExt(action, payload) {
       clearTimeout(t);
       rej(new Error('not-connected'));
     }
-  }).catch(e => (e.message === 'not-connected' && action !== 'ACK' ? abBridge(action, payload) : Promise.reject(e)));
+  }).catch(e => (e.message === 'not-connected' ? abBridge(action, payload) : Promise.reject(e)));
 }
 
 /* ---- the page ---- */
@@ -193,6 +194,7 @@ function ApplicationBotPage() {
   const dRef = useRef(null);
   dRef.current = d;
   const synced = useRef(false);
+  const abSeen = useRef(new Set()); // companion reports already saved during this visit (an older companion without ACK keeps sending them)
   // opened as #/portal/appbot?run=<job> (the "Apply with bot" button on Matched jobs): that job runs once the companion answers
   const runOf = () => (location.hash.split('?')[1] || '').match(/(?:^|&)run=([a-f0-9]{8,24})/);
   const runParam = useRef(runOf());
@@ -240,12 +242,15 @@ function ApplicationBotPage() {
         for (const u of st.updates || []) {
           const j = mine.get(u.id);
           if (!j) continue;
+          const key = u.id + '|' + (u.updatedAt || '');
+          if (abSeen.current.has(key)) continue;
           if (j.status !== u.status || j.note !== (u.note || '')) {
             const r = await api('ab_job_status', { id: u.id, status: u.status, note: u.note || '' });
             setD(x => (x ? { ...x, today: r.today, jobs: x.jobs.map(y => (y.id === u.id ? r.job : y)) } : x));
           }
           saved.push(u.id);
           at[u.id] = u.updatedAt;
+          abSeen.current.add(key);
         }
         if (saved.length) abExt('ACK', { ids: saved, at }).catch(() => {});
       } catch (e) {

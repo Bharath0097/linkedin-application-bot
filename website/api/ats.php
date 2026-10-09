@@ -84,7 +84,8 @@ function atsStaff(bool $write = false): array
 function atsOnPanel(array $u, stdClass $c): bool
 {
     foreach ((array) ($c->intvs ?? []) as $iv) {
-        if ($iv instanceof stdClass && in_array($u['id'], array_map('strval', (array) ($iv->who ?? [])), true)) {
+        // v83: a cancelled interview no longer puts its panel on the candidate (as in ats_my_interviews)
+        if ($iv instanceof stdClass && empty($iv->cancelled) && in_array($u['id'], array_map('strval', (array) ($iv->who ?? [])), true)) {
             return true;
         }
     }
@@ -523,6 +524,10 @@ function atsReport(string $from, string $to): array
 function atsHire(string $id, stdClass $c, array $opt, array $me): array
 {
     $job = atsJob((string) ($c->job ?? ''));
+    // v83: one hire per candidate: a second call would add another placement and count the opening twice
+    if (atsStageKind($job, (string) ($c->st ?? '')) === 'hired') {
+        fail(409, 'conflict', 'This candidate is already hired.');
+    }
     $pub = atsPublicJob((string) ($c->job ?? ''));
     $offer = $c->offer instanceof stdClass ? $c->offer : new stdClass();
     $kind = in_array((string) ($opt['kind'] ?? ''), ['employee', 'consultant'], true) ? (string) $opt['kind'] : 'employee';
@@ -1046,7 +1051,8 @@ function atsRoute(string $r, string $method, array $b): never
             if (!$c) {
                 fail(404, 'not_found', 'No such candidate.');
             }
-            if (!can('ats/x', 'r') && !atsOnPanel($u, $c)) {
+            $staff = can('ats/x', 'r');
+            if (!$staff && !atsOnPanel($u, $c)) {
                 fail(403, 'forbidden', 'Scorecards come from the interview panel.');
             }
             $in = is_array($b['card'] ?? null) ? $b['card'] : [];
@@ -1080,7 +1086,8 @@ function atsRoute(string $r, string $method, array $b): never
             $labels = ['strong_yes' => 'Strong yes', 'yes' => 'Yes', 'no' => 'No', 'strong_no' => 'Strong no'];
             atsLog($c, (string) $u['name'], 'Scorecard submitted' . ($rec !== '' ? ': ' . $labels[$rec] : ''));
             docSet('ats/' . $id, $c);
-            ok(['card' => $card, 'c' => $c]);
+            // v83: a panelist gets their own scorecard back, not the whole record (other cards, offer, notes)
+            ok($staff ? ['card' => $card, 'c' => $c] : ['card' => $card]);
         case 'ats_match':
             // fit score (and an optional written summary) for one candidate or every active one on a job
             atsStaff(true);

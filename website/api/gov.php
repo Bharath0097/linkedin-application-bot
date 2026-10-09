@@ -198,7 +198,7 @@ function govNotices(array $inc): array
     }
     foreach ($where as $st) {
         if (!isset($states[$st])) {
-            if (strlen($st) === 2 && ctype_upper($st)) {
+            if (strlen($st) === 2 && ctype_upper($st) && !in_array($st, ['EU', 'UK'], true)) { // EU/UK have their own gdpr/uk notices
                 $out[] = ['k' => 'st-' . $st, 'to' => 'Residents of ' . $st, 'due' => 0, 'rule' => 'Without unreasonable delay; check the state\'s law for regulator notice.'];
             }
             continue;
@@ -214,7 +214,7 @@ function govNotices(array $inc): array
     }
     $done = (array) ($inc['done'] ?? []);
     foreach ($out as &$n) {
-        $n['done'] = (int) ($done[$n['k']] ?? 0);
+        $n['done'] = (int) ($done[strtolower($n['k'])] ?? 0); // gov_inc_save stores keys lower-cased ('st-NJ' -> 'st-nj')
     }
     return $out;
 }
@@ -674,7 +674,11 @@ function govRoute(string $r, array $b): never
             if (!preg_match('/^[a-z0-9_-]{2,40}$/', $id)) {
                 fail(400, 'invalid_argument', 'Give the policy a short id (letters, numbers, dashes).');
             }
-            $p = docGet('sec/gov/pol/' . $id) ?? (object) ['ver' => 0, 'st' => 'draft', 'hist' => []];
+            $p = docGet('sec/gov/pol/' . $id);
+            if ($p && !empty($b['isNew'])) { // "New policy" must not overwrite an existing one
+                fail(409, 'invalid_argument', 'A policy with that short id already exists. Pick another id.');
+            }
+            $p = $p ?? (object) ['ver' => 0, 'st' => 'draft', 'hist' => []];
             $p->t = mb_substr(trim(str($b, 't', 160)), 0, 160) ?: ($p->t ?? 'Untitled policy');
             $p->sum = str($b, 'sum', 400);
             $p->aud = array_values(array_intersect(['staff', 'consultants', 'admins'], (array) ($b['aud'] ?? ['staff'])));
@@ -882,7 +886,12 @@ function govRoute(string $r, array $b): never
             audit('policy', 'Risk assessment reviewed', 'risks', [], $me);
             ok(['ok' => true]);
         case 'gov_risk_delete':
-            docDelete('sec/gov/risk/' . str($b, 'id', 20));
+            $id = str($b, 'id', 20);
+            $prev = docGet('sec/gov/risk/' . $id);
+            docDelete('sec/gov/risk/' . $id);
+            if ($prev) { // v83: register deletions are audited like adds and updates
+                audit('policy', 'Risk deleted', $id, ['t' => (string) ($prev->t ?? ''), 'st' => (string) ($prev->st ?? '')], $me);
+            }
             ok(['ok' => true]);
         case 'gov_vendors':
             $added = govVendorsDetect();
@@ -915,7 +924,12 @@ function govRoute(string $r, array $b): never
             audit('policy', $prev ? 'Vendor updated' : 'Vendor added', $id, ['n' => $x['n'], 'tier' => $x['tier']], $me);
             ok(['id' => $id]);
         case 'gov_vendor_delete':
-            docDelete('sec/gov/vend/' . str($b, 'id', 20));
+            $id = str($b, 'id', 20);
+            $prev = docGet('sec/gov/vend/' . $id);
+            docDelete('sec/gov/vend/' . $id);
+            if ($prev) { // v83: audited
+                audit('policy', 'Vendor deleted', $id, ['n' => (string) ($prev->n ?? ''), 'tier' => (string) ($prev->tier ?? '')], $me);
+            }
             ok(['ok' => true]);
 
         /* --- incidents --- */
@@ -988,7 +1002,12 @@ function govRoute(string $r, array $b): never
             audit('incident', 'Incident updated', $id, ['st' => (string) ($prev->st ?? ''), 'sev' => (string) ($prev->sev ?? ''), 'breach' => !empty($prev->breach)], $me);
             ok(['id' => $id]);
         case 'gov_inc_delete':
-            docDelete('sec/gov/inc/' . str($b, 'id', 20));
+            $id = str($b, 'id', 20);
+            $prev = docGet('sec/gov/inc/' . $id);
+            docDelete('sec/gov/inc/' . $id);
+            if ($prev) { // v83: deleting incident evidence leaves a trace in the audit chain
+                audit('incident', 'Incident deleted', $id, ['t' => (string) ($prev->t ?? ''), 'st' => (string) ($prev->st ?? ''), 'sev' => (string) ($prev->sev ?? ''), 'breach' => !empty($prev->breach)], $me);
+            }
             ok(['ok' => true]);
 
         /* --- training --- */

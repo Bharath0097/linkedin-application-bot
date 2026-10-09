@@ -41,7 +41,7 @@ function mktEmployer(array $u, string $cidWanted = ''): ?array
         $v = docGet('vms/vendor/items/' . $vid);
         return ['kind' => 'vendor', 'id' => $vid, 'n' => (string) ($v->n ?? ($r->cl ?? 'Vendor'))];
     }
-    $cids = myCids($u['id']);
+    $cids = clientCids($u['id']); // v83: client contacts, not consultants placed at a client
     if (!$cids) {
         return null;
     }
@@ -664,7 +664,7 @@ function mktRoute(string $r, string $method, array $b): never
             }
             foreach (db()->query("SELECT id, email, name, status, access FROM users WHERE status = 'active'")->fetchAll() as $usr) {
                 $rr = myR($usr['id']);
-                if ((string) ($rr->role ?? '') !== 'employer' && !myCids($usr['id'])) {
+                if ((string) ($rr->role ?? '') !== 'employer' && !clientCids($usr['id'])) {
                     continue;
                 }
                 $emp = mktEmployer($usr);

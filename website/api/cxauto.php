@@ -1605,7 +1605,8 @@ function cxImportRec(?array $u, array $row, string $reqTitle = ''): array
     docSet('rec/cand/items/' . $id, $doc);
     $resume = false;
     if (($x['resume'] ?? '') !== '') {
-        [$h] = cxAuth('dice', $api);
+        // v83: the Dice sign-in goes only to the Dice API host; a resume link elsewhere is fetched without it
+        [$h] = cxApiHostOf($api, (string) $x['resume']) ? cxAuth('dice', $api) : [[]];
         [$code, $body, $rh] = cxHttp('GET', (string) $x['resume'], $h, null, 30);
         $ct = strtolower((string) ($rh['content-type'] ?? ''));
         $ext = str_contains($ct, 'pdf') || str_starts_with($body, '%PDF') ? 'pdf' : (str_contains($ct, 'word') || str_starts_with($body, "PK\x03\x04") ? 'docx' : '');

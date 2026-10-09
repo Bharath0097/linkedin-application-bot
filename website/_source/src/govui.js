@@ -255,7 +255,7 @@ function GovPolicyModal({ p, onClose, onChanged }) {
     }
     setBusy('');
   };
-  const save = () => act('save', 'gov_pol_save', f, p.isNew ? 'Policy created as a draft.' : d && d.st === 'published' ? 'Changes saved as a draft: publish them as a new version when ready.' : 'Saved.', !!p.isNew);
+  const save = () => act('save', 'gov_pol_save', p.isNew ? { ...f, isNew: true } : f, p.isNew ? 'Policy created as a draft.' : d && d.st === 'published' ? 'Changes saved as a draft: publish them as a new version when ready.' : 'Saved.', !!p.isNew);
   if (!p.isNew && (!d || !f)) return html`<${Modal} title=${p.t} onClose=${onClose}><${Spinner} /><//>`;
   const pub = d && d.st === 'published';
   const hasDraft = d && d.draft != null;
@@ -339,7 +339,7 @@ function GovReviews({ reload }) {
   const decide = async (it, d) => {
     try {
       await api('gov_rev_decide', { id: cur.id, uid: it.uid, d, note: it.note || '' });
-      setCur({ ...cur, items: cur.items.map(x => (x.uid === it.uid ? { ...x, d } : x)) });
+      setCur(c => (c && c.id === cur.id ? { ...c, items: c.items.map(x => (x.uid === it.uid ? { ...x, d } : x)) } : c)); // functional update: quick clicks on two rows both stick
     } catch (e) {
       toast(errText(e), true);
     }
@@ -395,7 +395,7 @@ function GovReviews({ reload }) {
         list.filter(x => x.st === 'done').length > 0 &&
         html`<section className="panel stack" style=${{ gap: 8 }}>
           <h2 className="ph" style=${{ margin: 0 }}>Completed reviews</h2>
-          <ul className="list seclist">${list.filter(x => x.st === 'done').map(r => html`<li key=${r.id}><div className="t"><span>${r.id}</span><span className="muted small">Completed ${fmtDay(r.doneAt)} · ${r.n} accounts · ${r.removed} removed</span></div><div className="actions"><button className="btn ghost sm" onClick=${() => api('gov_rev_get', { id: r.id }).then(setView)}>Open</button></div></li>`)}</ul>
+          <ul className="list seclist">${list.filter(x => x.st === 'done').map(r => html`<li key=${r.id}><div className="t"><span>${r.id}</span><span className="muted small">Completed ${fmtDay(r.doneAt)} · ${r.n} accounts · ${r.removed} removed</span></div><div className="actions"><button className="btn ghost sm" onClick=${() => api('gov_rev_get', { id: r.id }).then(setView, e => toast(errText(e), true))}>Open</button></div></li>`)}</ul>
         </section>`
       }
       ${
@@ -465,7 +465,7 @@ function GovRisks({ people, reload }) {
       </section>
       ${
         ed &&
-        html`<${Modal} title=${ed.id ? 'Risk' : 'New risk'} onClose=${() => setEd(null)} foot=${html`${ed.id && html`<button className="btn ghost danger" onClick=${() => window.confirm('Delete this risk?') && api('gov_risk_delete', { id: ed.id }).then(() => { setEd(null); load(); reload(); })}>Delete</button>`}<button className="btn ghost" onClick=${() => setEd(null)}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>Save</button>`}>
+        html`<${Modal} title=${ed.id ? 'Risk' : 'New risk'} onClose=${() => setEd(null)} foot=${html`${ed.id && html`<button className="btn ghost danger" onClick=${() => window.confirm('Delete this risk?') && api('gov_risk_delete', { id: ed.id }).then(() => { setEd(null); load(); reload(); }, e => toast(errText(e), true))}>Delete</button>`}<button className="btn ghost" onClick=${() => setEd(null)}>Cancel</button><button className="btn" disabled=${busy} onClick=${save}>Save</button>`}>
           <div className="form">
             <${Field} label="Risk"><input value=${ed.t} onInput=${e => setEd({ ...ed, t: e.target.value })} placeholder="What could go wrong" /><//>
             <div className="row2">
@@ -541,7 +541,7 @@ function GovVendors({ people, reload }) {
       </section>
       ${
         ed &&
-        html`<${Modal} title=${ed.id ? ed.n : 'New vendor'} onClose=${() => setEd(null)} foot=${html`${ed.id && html`<button className="btn ghost danger" onClick=${() => window.confirm('Remove this vendor from the register?') && api('gov_vendor_delete', { id: ed.id }).then(() => { setEd(null); load(); })}>Delete</button>`}<button className="btn ghost" onClick=${() => setEd(null)}>Cancel</button>${ed.id && html`<button className="btn ghost" disabled=${busy} onClick=${() => save({ reviewedNow: true })}>Save as reviewed today</button>`}<button className="btn" disabled=${busy} onClick=${() => save()}>Save</button>`}>
+        html`<${Modal} title=${ed.id ? ed.n : 'New vendor'} onClose=${() => setEd(null)} foot=${html`${ed.id && html`<button className="btn ghost danger" onClick=${() => window.confirm('Remove this vendor from the register?') && api('gov_vendor_delete', { id: ed.id }).then(() => { setEd(null); load(); reload(); }, e => toast(errText(e), true))}>Delete</button>`}<button className="btn ghost" onClick=${() => setEd(null)}>Cancel</button>${ed.id && html`<button className="btn ghost" disabled=${busy} onClick=${() => save({ reviewedNow: true })}>Save as reviewed today</button>`}<button className="btn" disabled=${busy} onClick=${() => save()}>Save</button>`}>
           <div className="form">
             <div className="row2">
               <${Field} label="Vendor"><input value=${ed.n} onInput=${e => setEd({ ...ed, n: e.target.value })} /><//>

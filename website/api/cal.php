@@ -386,7 +386,21 @@ function calLinkDrop(string $atsId, string $ivId): void
  */
 function calInterview(array $u, string $atsId, stdClass $c, stdClass $iv, ?stdClass $prevCal, bool $cancel, bool $meet): array
 {
-    $orgUid = $prevCal ? (string) ($prevCal->by ?? '') : (string) $u['id'];
+    if ($prevCal) {
+        // v83: whose calendar and which event come from what the portal itself recorded when it made the event
+        // (cal_links), never from the interview kept on the candidate (staff can edit that record)
+        $s = calDb()->prepare('SELECT uid, provider, eid FROM cal_links WHERE k = ?');
+        $s->execute([$atsId . ':' . (string) $iv->id]);
+        $link = $s->fetch();
+        if (!$link) {
+            return ['cal' => $prevCal, 'err' => 'This interview is not linked to a calendar event, so the calendar invitation could not be ' . ($cancel ? 'cancelled' : 'changed') . '.', 'made' => false];
+        }
+        $prevCal = clone $prevCal;
+        $prevCal->by = (string) $link['uid'];
+        $prevCal->p = (string) $link['provider'];
+        $prevCal->eid = (string) $link['eid'];
+    }
+    $orgUid = $prevCal ? (string) $prevCal->by : (string) $u['id'];
     $a = calAcct($orgUid);
     if (!$a) {
         $who = $orgUid === $u['id'] ? 'Your calendar is' : ((string) ($prevCal->byn ?? 'The organiser') . '\'s calendar is');

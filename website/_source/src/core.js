@@ -3002,12 +3002,14 @@ function buildStub(m, mk, calc, prof, taxSet, prior, extras) {
       },
       { gross: 0, tax: 0, net: 0, ficaW: 0, fitW: 0, ben: {} }
     );
-  const ben = country === 'US' ? payBenefits(calc.gross, period, extras.plans, rec, ytd) : { pre: { fit: 0, fica: 0, state: 0 }, preLines: [], postLines: [], erLines: [] };
+  // v83: one-off positive adjustments (a bonus) are wages: paid, taxed and counted in YTD; negative ones are deductions below
+  const gross = r2(calc.gross + calc.adj.filter(a => a.v > 0).reduce((s, a) => s + a.v, 0));
+  const ben = country === 'US' ? payBenefits(gross, period, extras.plans, rec, ytd) : { pre: { fit: 0, fica: 0, state: 0 }, preLines: [], postLines: [], erLines: [] };
   const t =
     country === 'IN'
-      ? inTaxes(calc.gross, ytd, prof, taxSet && taxSet.in)
-      : usTaxes(calc.gross, ytd, prof, taxSet && taxSet.us, calc.ppy || 12, ben.pre);
-  const garn = country === 'US' ? payGarnishments(calc.gross, t.total, period, rec, calc.ppy || 12) : [];
+      ? inTaxes(gross, ytd, prof, taxSet && taxSet.in)
+      : usTaxes(gross, ytd, prof, taxSet && taxSet.us, calc.ppy || 12, ben.pre);
+  const garn = country === 'US' ? payGarnishments(gross, t.total, period, rec, calc.ppy || 12) : [];
   const pto = payPto(calc, extras.pto, rec, calc.ppy || 12);
   const regH = r2(calc.reg / 60),
     otH = r2(calc.ot / 60);
@@ -3031,7 +3033,7 @@ function buildStub(m, mk, calc, prof, taxSet, prior, extras) {
     ...calc.adj.filter(a => a.v < 0).map(a => ({ n: a.n, v: -a.v })),
   ];
   const otherT = r2(other.reduce((a, x) => a + x.v, 0));
-  const net = r2(calc.gross - t.total - otherT);
+  const net = r2(gross - t.total - otherT);
   const employerAll = [...t.employer, ...ben.erLines];
   const employerT = r2(employerAll.reduce((a, x) => a + x.v, 0));
   return {
@@ -3048,7 +3050,7 @@ function buildStub(m, mk, calc, prof, taxSet, prior, extras) {
     reg: regH,
     ot: otH,
     earnings,
-    gross: calc.gross,
+    gross,
     taxes: t.items,
     taxT: t.total,
     other,
@@ -3056,8 +3058,8 @@ function buildStub(m, mk, calc, prof, taxSet, prior, extras) {
     net,
     employer: employerAll,
     employerT,
-    cost: r2(calc.gross + employerT),
-    ytd: { gross: r2(ytd.gross + calc.gross), tax: r2(ytd.tax + t.total), net: r2(ytd.net + net) },
+    cost: r2(gross + employerT),
+    ytd: { gross: r2(ytd.gross + gross), tax: r2(ytd.tax + t.total), net: r2(ytd.net + net) },
     wages: t.wages || null,
     wtype: t.wtype || (country === 'US' ? 'w2' : ''),
     state: t.state || '',

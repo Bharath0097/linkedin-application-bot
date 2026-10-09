@@ -546,6 +546,26 @@ function billSessionDone(string $uid, array $s): bool
         return false;
     }
     $item = (string) ($s['metadata']['item'] ?? '');
+    // v83: the session must match this enrollment. A plan payment must be for the current plan, and any payment must be for the
+    // item's amount in the site's currency: a session opened for a cheaper plan and paid after a swap must not pay for the new one.
+    $it = null;
+    foreach ($a['items'] as $x) {
+        if (($x['id'] ?? '') === $item) {
+            $it = $x;
+        }
+    }
+    if (!$it || (($it['k'] ?? '') === 'plan' && (string) ($s['metadata']['plan'] ?? '') !== (string) ($a['plan'] ?? '')) || (int) ($s['amount_total'] ?? -1) !== (int) ($it['amt'] ?? 0) || strtolower((string) ($s['currency'] ?? '')) !== billCfg()['cur']) {
+        $sub = is_array($s['subscription'] ?? null) ? (string) ($s['subscription']['id'] ?? '') : (string) ($s['subscription'] ?? '');
+        if ($sub !== '' && billStripeOn()) {
+            billStripe('DELETE', '/v1/subscriptions/' . rawurlencode($sub)); // stop further charges for a plan they no longer have
+        }
+        $a['refs'] = array_slice(array_merge((array) ($a['refs'] ?? []), [$sid]), -60);
+        $a['held'] = array_slice(array_merge((array) ($a['held'] ?? []), [$sid]), -20);
+        billSave($uid, $a);
+        $who = userRow($uid);
+        billNotifyStaff('Payment to check: ' . ($who['name'] ?? $uid), ($who['name'] ?? $uid) . ' (' . ($who['email'] ?? '') . ') paid ' . billMoney((int) ($s['amount_total'] ?? 0), strtolower((string) ($s['currency'] ?? ''))) . ' on Stripe (session ' . $sid . ') for plan "' . ($s['metadata']['plan'] ?? '') . '" item ' . $item . ', which does not match their current plan "' . ($a['pt'] ?? '') . '". It was not recorded. Refund it in Stripe, or mark the right payment received under Admin > Plans & payments.');
+        return false;
+    }
     $changed = billPaid($a, $item, 'stripe', $sid);
     $a['stripe'] = (array) ($a['stripe'] ?? []);
     if (!empty($s['customer'])) {
@@ -595,6 +615,20 @@ function billSyncSub(string $uid): int
         $next = billNextPlanItem($a);
         if ($next === '' && !empty($a['open'])) {
             $next = billAddMonth($a);
+        }
+        // v83: an invoice smaller than the installment does not pay it (e.g. a subscription left from another plan). '<' and not
+        // '!==': an installment subscription charges the first amount every time while the last item is the smaller remainder.
+        $want = 0;
+        foreach ($a['items'] as $x) {
+            if ($x['id'] === $next) {
+                $want = (int) ($x['amt'] ?? 0);
+            }
+        }
+        if ($next !== '' && (int) ($i['amount_paid'] ?? -1) < $want) {
+            $a['refs'] = array_slice(array_merge((array) ($a['refs'] ?? []), [$id]), -60);
+            $who = userRow($uid);
+            billNotifyStaff('Payment to check: ' . ($who['name'] ?? $uid), ($who['name'] ?? $uid) . ' (' . ($who['email'] ?? '') . ') was charged ' . billMoney((int) ($i['amount_paid'] ?? 0), strtolower((string) ($i['currency'] ?? ''))) . ' by Stripe (invoice ' . $id . '), less than their next payment of ' . billMoney($want) . ' for "' . ($a['pt'] ?? '') . '". It was not recorded. Check the subscription in Stripe, or mark the payment received under Admin > Plans & payments.');
+            continue;
         }
         if ($next !== '' && billPaid($a, $next, 'stripe', $id)) {
             $n++;
@@ -929,7 +963,7 @@ function billRoute(string $r, array $b): never
                 fail(502, 'unavailable', 'Stripe: ' . $s['_error']);
             }
             $done = billSessionDone($u['id'], $s);
-            ok(['paid' => in_array($s['payment_status'] ?? '', ['paid', 'no_payment_required'], true), 'recorded' => $done] + billMeOut($u['id']));
+            ok(['paid' => in_array($s['payment_status'] ?? '', ['paid', 'no_payment_required'], true), 'recorded' => $done, 'held' => in_array($sid, (array) (billDoc($u['id'])['held'] ?? []), true)] + billMeOut($u['id']));
 
         case 'bill_manual':
             // "I paid another way": staff are told and confirm it
@@ -1081,6 +1115,11 @@ function billRoute(string $r, array $b): never
 
         case 'bill_settings_save':
             $u = requireAdmin();
+            // v83: the Stripe keys, webhook secret and payment instructions are administrator settings (like the Plaid and
+            // QuickBooks keys); HR and accounting keep the rest of Plans & payments
+            if (!hasRole($u, 'admin')) {
+                fail(403, 'forbidden', 'Only an administrator can change the payment settings.');
+            }
             $d = docGet('sec/x/bill') ?? new stdClass();
             $sk = trim((string) ($b['sk'] ?? ''));
             if (!empty($b['clear'])) {
@@ -1125,7 +1164,11 @@ function billRoute(string $r, array $b): never
 
         case 'bill_test':
             // the key works: the account's name and mode
-            requireAdmin();
+            $u = requireAdmin();
+            // v83: administrators only (it records the checked account in the payment settings)
+            if (!hasRole($u, 'admin')) {
+                fail(403, 'forbidden', 'Only an administrator can test the payment settings.');
+            }
             if (!billStripeOn()) {
                 fail(400, 'invalid_argument', 'Add the Stripe secret key first.');
             }
