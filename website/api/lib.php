@@ -1164,6 +1164,11 @@ function can(string $path, string $mode): bool
     $u = currentUser();
     $lvl = userLevel($u);
     $uid = $u['id'] ?? null;
+    // v83: the Books audit log is written by the server only (auditLog), and the close date only through books_close
+    // and books_settings_save: nobody, administrators included, changes or deletes them through the record routes
+    if ($mode === 'w' && ($path === 'org/acct/audit' || str_starts_with($path, 'org/acct/audit/') || $path === 'org/acct/x/books' || str_starts_with($path, 'org/acct/x/books/'))) {
+        return false;
+    }
     if ($lvl < 2 && str_starts_with($path, 'sig')) {
         // signature requests: a signer may read their own; writes go through the signing endpoints
         if ($mode === 'w' || $uid === null) {
@@ -2508,16 +2513,32 @@ function tokenAllows(string $path, string $tok): bool
         if (!$d) {
             return false;
         }
-        if (($d->tok ?? '') !== '' && ($d->tok ?? '') === $tok) {
+        // v83: a case token is no bearer secret: it works only next to the session that may see the case (HR and
+        // administrators now, the person the case is for, or the attorney who confirmed their emailed code in this browser)
+        $me = currentUser();
+        $staff = $me && (hasRole($me, 'admin') || hasRole($me, 'hr') || grantOf((string) $me['id'], 'hr'));
+        if ($staff && ($d->tok ?? '') !== '' && hash_equals((string) $d->tok, $tok)) {
             return true;
         }
-        if (($d->ptok ?? '') !== '' && ($d->ptok ?? '') === $tok) {
+        if ($me && ($staff || (string) ($d->uid ?? '') === (string) $me['id']) && ($d->ptok ?? '') !== '' && hash_equals((string) $d->ptok, $tok)) {
             $f = docGet("im/{$segs[1]}/f/{$segs[3]}");
             return $f && ($f->w ?? '') === 'p';
         }
         // v45.1: the attorney's token (given after their emailed code) opens what HR shares with the attorney, while the link lives
+        // (v83: and only while this browser holds the attorney's confirmed code for that link, as imxSignedIn: 8 hours)
         foreach ((array) ($d->grants ?? []) as $g) {
             if (($g->atok ?? '') !== '' && hash_equals((string) $g->atok, $tok) && empty($g->rev) && (int) ($g->exp ?? 0) > now()) {
+                $signed = false;
+                foreach ((array) ($_SESSION['imx'] ?? []) as $k => $until) {
+                    $x = (int) $until > now() && preg_match('/^[a-f0-9]{64}$/', (string) $k) ? docGet('imx/' . $k) : null;
+                    if ($x && (string) ($x->case ?? '') === (string) $segs[1] && (string) ($x->grant ?? '') === (string) $g->id) {
+                        $signed = true;
+                        break;
+                    }
+                }
+                if (!$signed) {
+                    return false;
+                }
                 $f = docGet("im/{$segs[1]}/f/{$segs[3]}");
                 return $f && in_array((string) ($f->w ?? ''), ['a', 'p'], true);
             }

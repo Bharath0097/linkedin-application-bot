@@ -56,6 +56,7 @@ const GUARD_HOOKS = ['unsub', 'mail_webhook', 'mail_inbound', 'mail_postal_hook'
 const GUARD_POW_MAX = ['normal' => 60000, 'strong' => 300000];
 // v35: actions that need "Confirm it's you" (a password, passkey or code from the last few minutes): access and
 // roles, keys and connections to outside services, bank accounts and payroll files, bulk exports, data deletion
+// (v83: atc_save too: the Ceipal/Oorwin addresses decide where the stored ATS credentials are sent)
 const GUARD_REAUTH_ROUTES = [
     'admin_access', 'admin_feature_access', 'admin_role', 'admin_member_role', 'admin_manager', 'admin_status', 'admin_reset', 'admin_books_access',
     'mail_settings_save', 'plaid_settings_save', 'qbo_settings_save', 'sso_settings_save', 'ai_settings_save', 'bill_settings_save', 'cx_save', 'src_save', 'src_dice_feed_mode', 'oorwin_login', 'oorwin_disconnect', 'atc_save', 'oorwin_import', 'vms_settings_save', 'vms_agent_run', 'vms_agent_retry', 'sec_save',
