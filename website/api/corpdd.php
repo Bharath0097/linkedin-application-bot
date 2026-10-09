@@ -277,16 +277,26 @@ function ddEscalate(string $cid): int
         $o = ddOwnerNow($cid);
         $co = crCompanyName($cid);
         if ($level === 0) {
+            // v83: the scheduled run and a desk page load can overlap: claim the level before anyone is told
+            $cl = ddDb()->prepare('UPDATE cr_issue SET esc = 1, u = ? WHERE id = ? AND esc = 0');
+            $cl->execute([now(), (string) $r['id']]);
+            if ($cl->rowCount() !== 1) {
+                continue;
+            }
             $to = array_values(array_unique(array_filter([$o['acting'], $o['backup']])));
             if (!$to) {
                 $to = ddStaffToTell($cid);
             }
             crMail($to, 'Unacknowledged ' . ($r['kind'] === 'question' ? 'question' : 'issue') . ' at ' . $co . ': ' . $r['ti'], [$co . ' raised this ' . ($t['ackH'] === 1 ? 'more than one working hour' : 'more than ' . $t['ackH'] . ' working hours') . ' ago (' . DD_IMPACT[$r['impact']] . ') and nobody has acknowledged it. The target to acknowledge was ' . ddFmt($t['ackBy'], $dd['hours']) . '.', 'Acknowledge it on the delivery desk: name the owner, the planned action and the target.'], 'issue', (string) $r['id']);
-            ddIssueSet((string) $r['id'], ['esc' => 1]);
             crEv('iss', (string) $r['id'], ['id' => '', 'name' => 'Delivery desk'], 'staff', 'escalated', 'Not acknowledged within the target: escalated to ' . implode(', ', array_filter(array_map(fn($x) => (string) (userRow($x)['name'] ?? ''), $to))) . '.');
             $n++;
         } elseif ($level === 1 && $late > ($t['ackBy'] - (int) $r['at'])) {
             // still nothing after twice the target: HR and administrators
+            $cl = ddDb()->prepare('UPDATE cr_issue SET esc = 2, u = ? WHERE id = ? AND esc = 1');
+            $cl->execute([now(), (string) $r['id']]);
+            if ($cl->rowCount() !== 1) {
+                continue;
+            }
             $to = [];
             foreach (db()->query("SELECT id, email, name, role, status, access FROM users WHERE status = 'active'")->fetchAll() as $row) {
                 if (hasRole($row, 'hr') || hasRole($row, 'admin')) {
@@ -297,7 +307,6 @@ function ddEscalate(string $cid): int
                 }
             }
             crMail($to, 'Escalation: ' . $co . ' is waiting on "' . $r['ti'] . '"', ['The owner and the backup were told and the ' . ($r['kind'] === 'question' ? 'question' : 'issue') . ' is still unacknowledged after twice the target (' . $t['ackH'] . ' working hours). ' . DD_IMPACT[$r['impact']] . '.', 'Please acknowledge it on the delivery desk, or name another owner for ' . $co . '.'], 'issue', (string) $r['id']);
-            ddIssueSet((string) $r['id'], ['esc' => 2]);
             crEv('iss', (string) $r['id'], ['id' => '', 'name' => 'Delivery desk'], 'staff', 'escalated', 'Still unacknowledged after twice the target: escalated to HR and administrators.');
             $n++;
         }

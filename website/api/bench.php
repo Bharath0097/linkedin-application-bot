@@ -280,10 +280,26 @@ function bdFirst(string $n): string
 /** Consultant records that belong to a portal account (linked to it, or under the same email). */
 function bdMine(array $u): array
 {
-    $email = mb_strtolower((string) $u['email']);
+    // v83: only records linked to this account (uid, set by bd_my_link once a code sent to the email was entered); the
+    // email alone is not proof, since anyone can sign up with a consultant's address
     $out = [];
     foreach (colAll('rec/cand/items') as [$id, $c]) {
-        if ((string) ($c->uid ?? '') === (string) $u['id'] || ($email !== '' && mb_strtolower(trim((string) ($c->e ?? ''))) === $email)) {
+        if ((string) ($c->uid ?? '') === (string) $u['id']) {
+            $out[(string) $id] = $c;
+        }
+    }
+    return $out;
+}
+/** v83: recruiting records under the account's email that are not linked to it yet (bd_my_link links them). */
+function bdClaimable(array $u): array
+{
+    $email = mb_strtolower(trim((string) $u['email']));
+    $out = [];
+    if ($email === '') {
+        return $out;
+    }
+    foreach (colAll('rec/cand/items') as [$id, $c]) {
+        if (mb_strtolower(trim((string) ($c->e ?? ''))) === $email && (string) ($c->uid ?? '') !== (string) $u['id']) {
             $out[(string) $id] = $c;
         }
     }
@@ -367,7 +383,7 @@ function bdRoute(string $r, array $b): never
         bdPublic($r, $b);
     }
     // the consultant's own page
-    if (in_array($r, ['bd_my', 'bd_my_rtr', 'bd_my_confirm'], true)) {
+    if (in_array($r, ['bd_my', 'bd_my_rtr', 'bd_my_confirm', 'bd_my_link'], true)) {
         bdSelf($r, $b, requireUser());
     }
     $u = bdStaff();
@@ -998,7 +1014,46 @@ function bdSelf(string $r, array $b, array $u): never
             $cid = (string) array_key_first($mine);
             $details = bdDetailsView($mine[$cid], []) + ['cid' => $cid];
         }
-        ok(['subs' => $subs, 'pending' => $pending, 'details' => $details, 'linked' => count($mine) > 0]);
+        ok(['subs' => $subs, 'pending' => $pending, 'details' => $details, 'linked' => count($mine) > 0, 'claim' => !$mine && (bool) bdClaimable($u)]);
+    }
+    if ($r === 'bd_my_link') {
+        // v83: the recruiting record under the account's email links only after a one-time code sent to that email
+        $cl = bdClaimable($u);
+        if (!$cl) {
+            fail(404, 'not_found', 'There is no recruiting record under your email.');
+        }
+        $code = (string) preg_replace('/\D/', '', (string) ($b['code'] ?? ''));
+        $hash = fn(string $c) => hash('sha256', $u['id'] . '|' . mb_strtolower((string) $u['email']) . '|' . $c);
+        if ($code === '') {
+            // a fresh code to the account's email (at most 5 an hour)
+            if (throttleHit('bdlink:' . $u['id'], 5, 3600)) {
+                fail(429, 'slow_down', 'Several codes were sent already. Wait a little, then try again.');
+            }
+            $code = (string) random_int(100000, 999999);
+            $_SESSION['bdlink'] = ['h' => $hash($code), 'exp' => now() + 10 * 60000, 'tries' => 0];
+            try {
+                sendMail((string) $u['email'], (string) $u['name'], 'Your code to link your recruiting record', "Your one-time code is $code. It works for 10 minutes.", emailHtml('Your code to link your recruiting record', ['Your one-time code is ' . $code . '.', 'It works for 10 minutes. If you did not ask for it, you can ignore this email.']));
+            } catch (Throwable $e) {
+                fail(503, 'unavailable', 'The code could not be emailed. Try again in a minute.');
+            }
+            ok(['sent' => true]);
+        }
+        $x = $_SESSION['bdlink'] ?? null;
+        if (!is_array($x) || (int) ($x['tries'] ?? 0) >= 5 || (int) ($x['exp'] ?? 0) < now()) {
+            fail(403, 'expired', 'That code has expired. Ask for a new one.');
+        }
+        if (!hash_equals((string) ($x['h'] ?? ''), $hash($code))) {
+            $_SESSION['bdlink']['tries'] = (int) ($x['tries'] ?? 0) + 1;
+            fail(400, 'invalid_argument', 'That code is not right.');
+        }
+        unset($_SESSION['bdlink']);
+        foreach ($cl as $cid => $c) {
+            $c->uid = (string) $u['id'];
+            $c->u = now();
+            docSet('rec/cand/items/' . $cid, $c);
+        }
+        audit('access', 'Consultant linked their recruiting record', (string) $u['email'], ['cids' => array_keys($cl)], $u);
+        ok(['ok' => true]);
     }
     if ($r === 'bd_my_rtr') {
         $sid = str($b, 'sid', 40);

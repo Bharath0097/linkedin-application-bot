@@ -931,6 +931,23 @@ function agEvaluate(string $id, stdClass $c, array $cfg, bool $withAi = true): v
     $ag['risk'] = agRiskScore($flags);
     $ag['evAt'] = now();
     $ag['evAi'] = $withAi && aiReady('agent');
+    // v83: the assistant can take a minute: the checks' results go onto the record as saved now, so a recruiter's
+    // edit or stage move in the meantime is kept, and nothing is done when a recruiter decided, new answers came in
+    // or another run evaluated it meanwhile
+    $now = docGet('ats/' . $id);
+    $nag = $now instanceof stdClass ? agOf($now) : [];
+    if (!$now instanceof stdClass || (string) ($nag['st'] ?? '') !== 'answered' || !empty($nag['evAt']) || (int) ($nag['ansAt'] ?? 0) !== (int) ($ag['ansAt'] ?? 0)) {
+        return;
+    }
+    foreach (['qa', 'quiz', 'risk', 'evAt', 'evAi'] as $k) {
+        if (array_key_exists($k, $ag)) {
+            $nag[$k] = $ag[$k];
+        } else {
+            unset($nag[$k]);
+        }
+    }
+    $ag = $nag;
+    $c = $now;
     // the answers fill gaps on the candidate's record
     foreach (['ph' => 'ph', 'loc' => 'loc', 'li' => 'li', 'rate' => 'rate'] as $from => $to) {
         if (trim((string) ($ans[$from] ?? '')) !== '' && trim((string) ($c->$to ?? '')) === '') {

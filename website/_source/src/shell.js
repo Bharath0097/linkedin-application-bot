@@ -286,7 +286,7 @@ const FEATURE_PARENT = {
 const featureModeClient = k => (Cap.fa && (Cap.fa[k] || (FEATURE_PARENT[k] && Cap.fa[FEATURE_PARENT[k]]))) || 'default';
 // Single features an administrator can switch on for anyone (Roles & access), on top of their role.
 const GRANTS = [
-  ['hr', 'HR pages', 'Onboarding, document checks, policies and HRMS'],
+  ['hr', 'HR pages', 'Policies, HRMS records, compliance, immigration cases, learning and tests'],
   ['hrms', 'HRMS', 'Employee records, org chart, leave balances, assets and reviews'],
   ['crm', 'CRM', 'Accounts, contacts, deals pipeline and follow-ups'],
   ['ads', 'Ads', 'Website ads and social job posts'],
@@ -296,7 +296,8 @@ const GRANTS = [
   // v39: a 4th value: administrators do not have it automatically (calls cost money and ring the browser)
   ['phone', 'Phone & texts', 'Calls from the browser, incoming calls, voicemail and texts with the company numbers (Admin › Phone setup)', 'own'],
 ];
-const GRANT_PAGES = { hr: ['onboarding', 'verify', 'policies', 'hrms', 'compliance', 'immig', 'learning', 'exams', 'practice'], hrms: ['hrms'], crm: ['crm'], ads: ['ads'], esign: ['esign'], esignAll: ['esign'] };
+// v83: Onboarding and Document checks stay with HR and administrators (they read and write everyone's r/ and u/ records)
+const GRANT_PAGES = { hr: ['policies', 'hrms', 'compliance', 'immig', 'learning', 'exams', 'practice'], hrms: ['hrms'], crm: ['crm'], ads: ['ads'], esign: ['esign'], esignAll: ['esign'] };
 
 const PAYROLL_PAGES = ['payruns', 'paysetup', 'paytax', 'payplans', 'taxes'];
 const REPORTS_ONLY_PAGES = ['books', 'acctreports'];

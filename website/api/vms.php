@@ -709,7 +709,7 @@ function vmsSubmit(array $me, array $b): array
             'Regards,' . "\n" . $byn . "\n" . 'StratEdge IT Consulting',
         ];
         try {
-            $mailed = sendMail($to, (string) ($r['cn'] ?? ''), $subject, implode("\n\n", array_filter($lines)), emailHtml($subject, array_map('nl2br', array_map('htmlspecialchars', array_filter($lines)))), $atts, (string) $me['email']);
+            $mailed = sendMail($to, (string) ($r['cn'] ?? ''), $subject, implode("\n\n", array_filter($lines)), emailHtml($subject, array_values(array_filter($lines))), $atts, (string) $me['email']);
         } catch (Throwable $e) {
             $mailed = false;
         }
@@ -1057,7 +1057,7 @@ function vmsRoute(string $r, string $method, array $b): void
             try {
                 $to = (string) cfg('apply_emails') ?: (string) cfg('mail_from');
                 foreach (array_filter(array_map('trim', explode(',', $to))) as $addr) {
-                    sendMail($addr, 'StratEdge', 'New requirement: ' . $f['ti'], 'A requirement was posted through the website link.' . "\n\n" . 'Role: ' . $f['ti'] . "\n" . 'From: ' . ($f['vn'] !== '' ? $f['vn'] : 'unknown') . ($f['cn'] !== '' ? ' · ' . $f['cn'] : '') . ($f['ce'] !== '' ? ' · ' . $f['ce'] : '') . "\n" . 'Location: ' . $f['loc'] . ' (' . $f['md'] . ')' . "\n" . 'Rate: ' . $f['rate'] . "\n\n" . 'Open it under Requirements desk > Inbox.', emailHtml('New requirement: ' . htmlspecialchars($f['ti']), ['A requirement was posted through the website link.', '<b>From:</b> ' . htmlspecialchars(($f['vn'] !== '' ? $f['vn'] : 'unknown') . ($f['cn'] !== '' ? ' · ' . $f['cn'] : '')) . '<br><b>Location:</b> ' . htmlspecialchars($f['loc'] . ' (' . $f['md'] . ')') . '<br><b>Rate:</b> ' . htmlspecialchars($f['rate']), 'Open it under Requirements desk › Inbox.'], ['Open the desk', siteUrl() . '#/portal/admin/vreqs']));
+                    sendMail($addr, 'StratEdge', 'New requirement: ' . $f['ti'], 'A requirement was posted through the website link.' . "\n\n" . 'Role: ' . $f['ti'] . "\n" . 'From: ' . ($f['vn'] !== '' ? $f['vn'] : 'unknown') . ($f['cn'] !== '' ? ' · ' . $f['cn'] : '') . ($f['ce'] !== '' ? ' · ' . $f['ce'] : '') . "\n" . 'Location: ' . $f['loc'] . ' (' . $f['md'] . ')' . "\n" . 'Rate: ' . $f['rate'] . "\n\n" . 'Open it under Requirements desk > Inbox.', emailHtml('New requirement: ' . $f['ti'], ['A requirement was posted through the website link.', 'From: ' . ($f['vn'] !== '' ? $f['vn'] : 'unknown') . ($f['cn'] !== '' ? ' · ' . $f['cn'] : '') . "\n" . 'Location: ' . $f['loc'] . ' (' . $f['md'] . ')' . "\n" . 'Rate: ' . $f['rate'], 'Open it under Requirements desk › Inbox.'], ['Open the desk', siteUrl() . '#/portal/admin/vreqs']));
                 }
             } catch (Throwable $e) {
                 // the requirement is saved either way

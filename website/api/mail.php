@@ -490,7 +490,12 @@ function mailgunVerify(string $timestamp, string $token, string $signature, stri
     if (abs(time() - (int) $timestamp) > 900) {
         return false;
     }
-    return hash_equals(hash_hmac('sha256', $timestamp . $token, $key), strtolower($signature));
+    if (!hash_equals(hash_hmac('sha256', $timestamp . $token, $key), strtolower($signature))) {
+        return false;
+    }
+    // v83: each signed Mailgun delivery is accepted once, so a captured request cannot be replayed inside the
+    // freshness window (1800 s covers the 900 s either side); only a valid signature uses up its token
+    return !throttleHit('mgtok:' . hash('sha256', $token), 1, 1800);
 }
 
 /** Plain-language advice for a failed send, shown next to the server's own message. */
@@ -2750,15 +2755,19 @@ function mailRoute(string $r, string $method, array $b): never
                     "UPDATE mail_campaigns SET status = 'cancelled', finished = ? WHERE id = ?",
                 )->execute([now(), $c['id']]);
                 mailCampaignTally($c['id']);
-            } elseif ($act === 'retry') {
+            } elseif ($act === 'retry' && in_array($c['status'], ['queued', 'sending', 'paused', 'done'], true)) {
+                // v83: a cancelled campaign stays cancelled, and a paused one stays paused (its failed addresses
+                // wait in the queue for Resume, which also resets the bounce guard)
                 $n = $pdo->prepare(
                     "UPDATE mail_queue SET status = 'queued', err = '' WHERE campaign = ? AND status = 'failed'",
                 );
                 $n->execute([$c['id']]);
                 if ($n->rowCount() > 0) {
-                    $pdo->prepare(
-                        "UPDATE mail_campaigns SET status = 'sending', finished = 0 WHERE id = ?",
-                    )->execute([$c['id']]);
+                    if ($c['status'] !== 'paused') {
+                        $pdo->prepare(
+                            "UPDATE mail_campaigns SET status = 'sending', finished = 0 WHERE id = ?",
+                        )->execute([$c['id']]);
+                    }
                     mailCampaignTally($c['id']);
                 }
             } elseif ($act === 'wake') {

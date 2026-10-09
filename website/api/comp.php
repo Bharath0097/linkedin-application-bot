@@ -27,7 +27,9 @@ const COMP_REVIEWED = '2026-10-06';
 function compStaff(bool $write = false): array
 {
     $u = requireUser();
-    if (!can('comp/x/rules', $write ? 'w' : 'r') || userLevel($u) < 2) {
+    // HR and administrators, and (v83) a person given the "HR pages" or "USCIS compliance" feature, as the comp scope says
+    $granted = grantOf((string) $u['id'], 'hr') || grantOf((string) $u['id'], 'compliance');
+    if (!can('comp/x/rules', $write ? 'w' : 'r') || (userLevel($u) < 2 && !$granted)) {
         fail(403, 'invalid_argument', 'Compliance pages are for HR and administrators.');
     }
     return $u;

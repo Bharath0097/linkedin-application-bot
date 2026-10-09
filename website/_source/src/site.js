@@ -2623,19 +2623,22 @@ function RequestTalent({ q }) {
       return null;
     }
   }, [q && q.plan]);
+  // the plan comes from the address: only the shape the team planner sends is used (a malformed link must not crash)
+  const roles = plan && Array.isArray(plan.roles) ? plan.roles.filter(r => typeof r === 'string').slice(0, 50) : null;
+  const pstr = k => (plan && typeof plan[k] === 'string' ? plan[k] : '');
   const [f, setF] = useState({
     co: '',
     n: '',
     e: '',
     ph: '',
-    jt: plan && plan.roles ? plan.roles.join(', ') : '',
-    cnt: plan && plan.roles ? String(plan.roles.reduce((a, r) => a + (parseInt(r, 10) || 1), 0)) : '1',
-    loc: (plan && plan.loc) || '',
-    ty: (plan && plan.ty) || 'C2C',
-    md: (plan && plan.md) || 'Onsite',
-    sd: (plan && plan.sd) || '',
+    jt: roles ? roles.join(', ') : '',
+    cnt: roles ? String(roles.reduce((a, r) => a + (parseInt(r, 10) || 1), 0)) : '1',
+    loc: pstr('loc'),
+    ty: pstr('ty') || 'C2C',
+    md: pstr('md') || 'Onsite',
+    sd: pstr('sd'),
     sk: '',
-    msg: plan && plan.roles ? 'Team plan from the website:\n' + plan.roles.join('\n') : '',
+    msg: roles ? 'Team plan from the website:\n' + roles.join('\n') : '',
   });
   const [st, setSt] = useState('idle');
   const [err, setErr] = useState('');

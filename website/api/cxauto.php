@@ -1464,7 +1464,8 @@ function cxVerify(string $prov): array
         }
         $steps[] = ['ok' => $ok, 'op' => $op, 'text' => CX_OPS[$prov][$op] . ($ok ? ': answered ' . $r['code'] . ($op !== 'profile' ? ' with ' . count($items) . ' record' . (count($items) === 1 ? '' : 's') : '') . ($alt !== '' ? ' (for “' . $alt . '”; “' . $vars['q'] . '” found none)' : '') . ' — switched on' : ': ' . ($r['err'] ?: 'answered ' . $r['code']))];
     }
-    if ($changed) {
+    // v83: never saved in a workspace running on StratEdge's inherited setup (that would copy StratEdge's document in)
+    if ($changed && !cxInherited()) {
         $s = cxStore();
         $s[$prov]['api'] = $api;
         docSet('sec/x/src', (object) json_decode((string) json_encode($s)));
@@ -1991,6 +1992,10 @@ function cxAnswerShape(array $r): array
 /** Saves a path found in an answer as the operation's field path (the same as typing it under "Which field is which"). */
 function cxLearnPath(string $op, string $field, string $path): void
 {
+    // v83: nothing is saved in a workspace running on StratEdge's inherited setup (see cxInherited)
+    if (cxInherited()) {
+        return;
+    }
     $s = cxStore();
     if (!isset($s['dice']['api']['ops'][$op]) || !is_array($s['dice']['api']['ops'][$op])) {
         return;
@@ -2147,9 +2152,12 @@ function cxAutoRun(string $by = 'schedule', int $budget = 50, bool $forceSearch 
     // can be cleaned up and the IDs entered before anything else is sent.
     $prev = secKv('cx_dice_auto');
     if ($a['jobs'] && $api['ops']['post']['on'] && is_array($prev) && str_contains((string) ($prev['err'] ?? ''), 'answer had no posting ID')) {
-        $s = cxStore();
-        $s['dice']['api']['auto']['jobs'] = false;
-        docSet('sec/x/src', (object) json_decode((string) json_encode($s)));
+        // v83: the switch is saved only where the setup is the site's own (never copied into a workspace)
+        if (!cxInherited()) {
+            $s = cxStore();
+            $s['dice']['api']['auto']['jobs'] = false;
+            docSet('sec/x/src', (object) json_decode((string) json_encode($s)));
+        }
         $a['jobs'] = false;
         $res['paused'] = true;
         $res['err'] = 'Posting to Dice was paused once after the upgrade: earlier runs sent jobs that Dice took without saying their IDs, so some may be on Dice more than once. Check your Dice postings, remove any doubles, enter each job\'s Dice ID under Jobs on Dice ("Already on Dice?"), then switch "Keep Dice in step" back on.';
@@ -2206,6 +2214,10 @@ function cxAutoRun(string $by = 'schedule', int $budget = 50, bool $forceSearch 
 function cxAutoCron(): array
 {
     $api = cxApi('dice');
+    // v83: a workspace running on StratEdge's inherited setup never searches or posts through StratEdge's Dice account
+    if (cxInherited()) {
+        return ['ran' => false];
+    }
     if (($api['auto']['search'] <= 0 || !$api['ops']['search']['on']) && (!$api['auto']['jobs'] || !$api['ops']['post']['on'])) {
         return ['ran' => false];
     }

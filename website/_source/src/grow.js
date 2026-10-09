@@ -425,7 +425,7 @@ function QuizItemView({ item, value, onChange, result }) {
     case 'match': {
       const v = value || {};
       body = html`<div className="matchgrid">
-          ${item.l.map((l, i) => html`<${Fragment} key=${i}><span className="mleft">${l}</span><select disabled=${dis} value=${v[i] == null ? '' : v[i]} onChange=${e => onChange({ ...v, [i]: e.target.value === '' ? null : Number(e.target.value) })}><option value="">Choose…</option>${item.r.map(r => html`<option key=${r.k} value=${r.k}>${r.t}</option>`)}</select><//>`)}
+          ${item.l.map((l, i) => html`<${Fragment} key=${i}><span className="mleft">${l}</span><select disabled=${dis} value=${v[i] == null ? '' : v[i]} onChange=${e => onChange({ ...v, [i]: e.target.value === '' ? null : e.target.value })}><option value="">Choose…</option>${item.r.map(r => html`<option key=${r.k} value=${r.k}>${r.t}</option>`)}</select><//>`)}
         </div>`;
       break;
     }

@@ -14,6 +14,9 @@ require_once __DIR__ . '/mail.php';
 function cronAll(bool $cli): array
 {
     $t0 = microtime(true);
+    // v83: scheduled work never runs on StratEdge's inherited recruiting setup (connectors.php cxStore), however it
+    // was started: cron.php (--ws), the provider's ws_cron call, or a workspace's own jobs_cron link
+    $GLOBALS['SE_WS_CRON'] = true;
     // one run at a time (a command-line run collecting jobs can take up to 14 minutes)
     $lock = secKv('cron_lock');
     if (is_array($lock) && (int) $lock['at'] > now() - 15 * 60000) {
@@ -168,7 +171,7 @@ function cronAll(bool $cli): array
         // v33: the screening agent: new candidates, reminders, emailed resumes and replies
         require_once __DIR__ . '/agent.php';
         $ag = $cli ? agSweep(240, 25) : agSweep(60, 8);
-        if ($ag['queued'] || $ag['screened'] || $ag['reminded'] || $ag['inbox'] || $ag['evaluated']) {
+        if ($ag['queued'] || $ag['screened'] || $ag['reminded'] || $ag['inbox'] || $ag['evaluated'] || $ag['docs']) {
             $log[] = ' screening agent: ' . json_encode($ag);
         }
         // v33: talent search: the index follows what changed; saved searches with alerts email their new matches
@@ -213,6 +216,7 @@ function cronAll(bool $cli): array
             }
             // v79: trim the web application firewall log to the kept days and drop long-idle address scores
             try {
+                require_once __DIR__ . '/firewall.php'; // v83: wafCronPrune reads fwSettings(), not loaded by cron.php
                 require_once __DIR__ . '/waf.php';
                 $wp = wafCronPrune();
                 if (!empty($wp['logs']) || !empty($wp['addresses']) || !empty($wp['err'])) {
@@ -270,6 +274,21 @@ function cronAll(bool $cli): array
             }
         } catch (Throwable $e) {
             $log[] = ' service desk task failed: ' . $e->getMessage();
+        }
+        // v83: client delivery desk: issues nobody acknowledged within the target are escalated (owner and backup, then
+        // HR and administrators), on the schedule rather than only when someone opens that company's desk
+        try {
+            require_once __DIR__ . '/corp.php';
+            require_once __DIR__ . '/corpdd.php';
+            $dde = 0;
+            foreach (ddDb()->query("SELECT DISTINCT cid FROM cr_issue WHERE st IN ('open', 'reopened') AND ack_at = 0 AND esc < 2")->fetchAll(PDO::FETCH_COLUMN) as $c) {
+                $dde += ddEscalate((string) $c);
+            }
+            if ($dde) {
+                $log[] = ' delivery desk escalations: ' . $dde;
+            }
+        } catch (Throwable $e) {
+            $log[] = ' delivery desk escalations failed: ' . $e->getMessage();
         }
         // v35: team messaging: emails for unread direct messages and mentions, and the retention rule
         try {

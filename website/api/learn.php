@@ -14,7 +14,10 @@ const LEARN_QUIZ_TYPES = ['mc', 'multi', 'tf', 'fill', 'num', 'order', 'match', 
 function learnStaff(bool $write = false): array
 {
     $u = requireUser();
-    if (!can('learn/x/courses', $write ? 'w' : 'r') || userLevel($u) < 2) {
+    // HR and administrators, and (v83) a person given the "HR pages" or "Learning" feature (not every manager, although
+    // the learn scope lets managers read)
+    $granted = grantOf((string) $u['id'], 'hr') || grantOf((string) $u['id'], 'learning');
+    if (!can('learn/x/courses', $write ? 'w' : 'r') || (userLevel($u) < 2 && !$granted)) {
         fail(403, 'invalid_argument', 'Learning administration is for HR and administrators.');
     }
     return $u;
@@ -116,6 +119,24 @@ function learnShape(array $c): array
     }
     return ['lessons' => $ls, 'quizzes' => $qs, 'modules' => count((array) ($c['mods'] ?? []))];
 }
+/** v83: the opaque key the browser gets for option $k of an order or match item, so the original position (the
+ *  answer) never leaves the server; stable per item, so a resumed exam (ex_attempt renders the attempt again) keeps
+ *  the same keys. The 'o' prefix keeps it from being a numeric string. */
+function learnOptKey(array $q, int $k): string
+{
+    return 'o' . substr(hash_hmac('sha256', ($q['ty'] ?? '') . '|' . ($q['q'] ?? '') . '|' . $k, secSubKey('quiz')), 0, 12);
+}
+/** v83: maps a submitted option key back to the original position (-1 when it is not one of this item's keys; plain
+ *  numbers are not accepted, they would give the answer away again). */
+function learnOptIdx(array $q, int $n, $v): int
+{
+    for ($k = 0; $k < $n; $k++) {
+        if (is_string($v) && hash_equals(learnOptKey($q, $k), $v)) {
+            return $k;
+        }
+    }
+    return -1;
+}
 /** One quiz item as the learner sees it: no answers; order/match options shuffled, scrambles scrambled (v32: shared
  *  by course quizzes, certification exams and the daily and weekly tests). */
 function learnPublicItem(array $q, int $i): array
@@ -130,11 +151,11 @@ function learnPublicItem(array $q, int $i): array
         if ($keys === array_keys($o) && count($keys) > 1) {
             $keys = array_reverse($keys);
         }
-        $p['o'] = array_map(fn($k) => ['k' => $k, 't' => $o[$k]], $keys);
+        $p['o'] = array_map(fn($k) => ['k' => learnOptKey($q, $k), 't' => $o[$k]], $keys);
     } elseif ($q['ty'] === 'match') {
         $pairs = array_values((array) $q['pairs']);
         $p['l'] = array_map(fn($x) => $x[0], $pairs);
-        $r = array_map(fn($k, $x) => ['k' => $k, 't' => $x[1]], array_keys($pairs), $pairs);
+        $r = array_map(fn($k, $x) => ['k' => learnOptKey($q, $k), 't' => $x[1]], array_keys($pairs), $pairs);
         shuffle($r);
         $p['r'] = $r;
     } elseif ($q['ty'] === 'scramble') {
@@ -208,7 +229,8 @@ function learnGrade(array $items, array $answers): array
                 $show = (string) $q['a'];
                 break;
             case 'order':
-                $got = array_map('intval', (array) $a);
+                $n = count((array) $q['o']);
+                $got = array_map(fn($v) => learnOptIdx($q, $n, $v), array_values((array) $a));
                 $right = $got === array_keys(array_values((array) $q['o']));
                 $show = implode(' → ', array_values((array) $q['o']));
                 break;
@@ -216,7 +238,7 @@ function learnGrade(array $items, array $answers): array
                 $pairs = array_values((array) $q['pairs']);
                 $right = is_array($a) && count($pairs) > 0;
                 foreach ($pairs as $k => $pr) {
-                    if (!isset($a[$k]) || (int) $a[$k] !== $k) {
+                    if (!isset($a[$k]) || learnOptIdx($q, count($pairs), $a[$k]) !== $k) {
                         $right = false;
                     }
                 }

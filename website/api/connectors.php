@@ -74,9 +74,10 @@ function cxStore(): array
     $GLOBALS['CX_STORE_MAINKEY'] = null;
     // v82: a StratEdge-managed workspace with no recruiting integrations of its own inherits StratEdge's central
     // setup on demand (credentials unsealed with StratEdge's key, see cxCreds). Skipped under scheduled work
-    // (SE_WS_FORCE): automated searches and pulls stay on StratEdge's own cron, so a workspace never multiplies
-    // API calls against StratEdge's Dice/iLabor accounts.
-    if (!$s && empty($GLOBALS['SE_WS_FORCE']) && function_exists('wsSlug') && wsSlug() !== '') {
+    // (SE_WS_FORCE, or SE_WS_CRON set by cronAll for runs started over HTTP: ws_cron, ws_run, a jobs_cron link):
+    // automated searches and pulls stay on StratEdge's own cron, so a workspace never multiplies API calls against
+    // StratEdge's Dice/iLabor accounts.
+    if (!$s && empty($GLOBALS['SE_WS_FORCE']) && empty($GLOBALS['SE_WS_CRON']) && function_exists('wsSlug') && wsSlug() !== '') {
         $m = wsMainDoc('sec/x/src');
         if (is_array($m) && $m) {
             $s = $m;
@@ -85,6 +86,16 @@ function cxStore(): array
         }
     }
     return $s;
+}
+/** v83: true in a company workspace with no recruiting setup of its own (it runs on StratEdge's, see cxStore). Pulls
+ *  and automation never run there, and nothing is saved: saving would copy StratEdge's document into the workspace. */
+function cxInherited(): bool
+{
+    if (!function_exists('wsSlug') || wsSlug() === '') {
+        return false;
+    }
+    $d = docGet('sec/x/src');
+    return !($d ? (json_decode(json_encode($d), true) ?: []) : []);
 }
 function cxApi(string $prov): array
 {
@@ -164,8 +175,11 @@ function cxUrlProblem(string $url): string
         return 'Use a full address starting with https://';
     }
     $here = strtolower((string) preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
-    // a developer's own computer only (this site on localhost calling localhost, or a workspace's <name>.localhost)
-    $devLocal = in_array($here, ['localhost', '127.0.0.1'], true) && (in_array($host, ['localhost', '127.0.0.1'], true) || str_ends_with($host, '.localhost'));
+    // a developer's own computer only (this site on localhost calling localhost, or a workspace's <name>.localhost).
+    // v83: decided by the server (PHP's built-in server, php -S, or the SE_EXT_MOCK stand-in), never by the Host
+    // header alone, which any caller can set on the live site to reach plaintext loopback services
+    $devBox = PHP_SAPI === 'cli-server' || (string) getenv('SE_EXT_MOCK') !== '';
+    $devLocal = $devBox && in_array($here, ['localhost', '127.0.0.1'], true) && (in_array($host, ['localhost', '127.0.0.1'], true) || str_ends_with($host, '.localhost'));
     if ($devLocal) {
         return '';
     }
@@ -775,12 +789,30 @@ function cxIlaborFields(array $m): array
         'cn' => (string) ($m['manager'] ?? ''), 'vn' => 'iLabor360',
     ]);
 }
-function cxIlaborStage(string $ref, array $m, bool $closed): string
+function cxIlaborStage(string $ref, array $m, bool $closed, ?bool &$changed = null): string
 {
     $id = strtolower(preg_replace('/[^A-Za-z0-9_.-]/', '_', $ref));
     if ($id === '') $id = substr(hash('sha256', $ref), 0, 24);
     $old = docGet(CX_IL_IN . '/' . $id);
-    $state = $closed ? 'closed' : ($old ? ((string) ($old->state ?? '') === 'skipped' ? 'updated' : ((string) ($old->state ?? '') === 'imported' ? 'duplicate' : 'updated')) : 'new');
+    // v83: an unchanged requisition keeps its state (a skipped one stays skipped, a new one stays new); only a change
+    // upstream brings it back as 'updated'. $changed tells cxPull whether anything was staged at all.
+    $prev = (string) ($old->state ?? '');
+    $same = $old && json_encode($old->m ?? null) === json_encode((object) $m);
+    if ($closed) {
+        $state = 'closed';
+    } elseif (!$old) {
+        $state = 'new';
+    } elseif ($prev === 'imported' || $prev === 'duplicate') {
+        $state = 'duplicate';
+    } elseif ($same && in_array($prev, ['new', 'updated', 'skipped'], true)) {
+        $state = $prev;
+    } else {
+        $state = 'updated';
+    }
+    $changed = !$old || !$same || $state !== $prev;
+    if (!$changed) {
+        return $id; // nothing new: the row (and its lastAt/skippedAt) stays as it is
+    }
     $x = (object) [
         'ref' => $ref, 'state' => $state, 'firstAt' => (int) ($old->firstAt ?? now()), 'lastAt' => now(),
         'm' => (object) $m, 'importedAt' => (int) ($old->importedAt ?? 0), 'importedId' => (string) ($old->importedId ?? ''),
@@ -817,6 +849,11 @@ function cxIlaborAccept(array $ids, array $u): array
 function cxPull(string $by = 'schedule'): array
 {
     require_once __DIR__ . '/vms.php';
+    if (cxInherited()) {
+        // v83: like cx_pull, pulling requisitions from StratEdge's iLabor360 account happens on StratEdge's own site
+        // only (intel_replay and any other caller inside a workspace end here)
+        return ['ok' => false, 'err' => 'This setup is managed centrally by StratEdge, not inside a company portal.'];
+    }
     $api = cxApi('ilabor');
     $o = $api['ops']['reqs'];
     if (!$o['on']) {
@@ -881,7 +918,9 @@ function cxPull(string $by = 'schedule'): array
             }
             // New requisitions are staged first so recruiters can see, preview and accept them. Closed records
             // that were never imported are retained in the inbox as closed rather than silently disappearing.
-            cxIlaborStage($ref, $m, $closed);
+            $restaged = null;
+            cxIlaborStage($ref, $m, $closed, $restaged);
+            if (!$restaged) continue;
             if (!$closed) $res['staged']++;
             if ($closed) $res['closed']++;
         }
@@ -905,6 +944,10 @@ function cxPull(string $by = 'schedule'): array
 function cxCron(): array
 {
     $api = cxApi('ilabor');
+    // v83: a workspace running on StratEdge's inherited setup never pulls on its own schedule
+    if (cxInherited()) {
+        return ['ran' => false];
+    }
     if ($api['sched'] <= 0 || !$api['ops']['reqs']['on']) {
         return ['ran' => false];
     }

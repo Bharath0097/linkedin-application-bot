@@ -842,7 +842,7 @@ function CampaignModal({ id, onClose }) {
     html`<button className="btn ghost" onClick=${() => {
       if (confirm('Cancel this campaign? Nobody else on the list will get it.')) act('cancel', 'Cancelled.');
     }}>Cancel campaign</button>`
-  }${c && c.failed > 0 && html`<button className="btn ghost" onClick=${() => act('retry', 'Failed addresses are queued again.')}>Retry failed</button>`}
+  }${c && c.failed > 0 && c.status !== 'cancelled' && html`<button className="btn ghost" onClick=${() => act('retry', c.status === 'paused' ? 'Failed addresses are queued again; they go out when you resume.' : 'Failed addresses are queued again.')}>Retry failed</button>`}
     <button className="btn" onClick=${onClose}>Close</button>`}>
       ${
         !d
@@ -2153,8 +2153,12 @@ function MailInbox() {
   const [open, setOpen] = useState(null);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
-  const load = (fd, qq) =>
-    api('mail_inbox', { folder: fd || folder, q: qq == null ? q : qq })
+  // the search last sent, so the 30-second refresh keeps showing the same results (its timer outlives this render)
+  const qRef = useRef('');
+  const load = (fd, qq) => {
+    const qv = qq == null ? q : qq;
+    qRef.current = qv;
+    return api('mail_inbox', { folder: fd || folder, q: qv })
       .then(r => {
         setErr(null);
         setD(r);
@@ -2164,10 +2168,11 @@ function MailInbox() {
         if (d) toast(errText(e), true);
         else setErr(e || { message: 'The inbox could not be read.' });
       });
+  };
   useEffect(() => {
     setOpen(null);
     load(folder);
-    const t = setInterval(() => !document.hidden && load(folder), 30000);
+    const t = setInterval(() => !document.hidden && load(folder, qRef.current), 30000);
     return () => clearInterval(t);
   }, [folder]);
   const act = async (ids, a) => {

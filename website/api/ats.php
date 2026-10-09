@@ -601,6 +601,9 @@ function atsHire(string $id, stdClass $c, array $opt, array $me): array
         if (empty($rec->mgrId) && !empty($job['team']['hm'])) {
             $rec->mgrId = (string) $job['team']['hm'];
         }
+        if ((string) ($rec->st ?? '') === 'Exited' && empty($rec->exit) && !empty($rec->u)) {
+            $rec->exit = date('Y-m-d', (int) ($rec->u / 1000)); // pin the exit month before u moves (HR reports)
+        }
         $rec->u = now();
         $rec->by = $me['id'];
         docSet('hrms/emp/' . $uid . '/rec', $rec);
